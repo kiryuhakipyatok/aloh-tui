@@ -1,0 +1,5 @@
+userdata.json
+*.log
+/keys
+/build_output_d
+/build_output_s

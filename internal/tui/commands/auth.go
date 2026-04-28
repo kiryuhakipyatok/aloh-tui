@@ -1,0 +1,139 @@
+package commands
+
+import (
+	"aloh-tui/internal/auth"
+	"aloh-tui/internal/entities"
+	"aloh-tui/internal/media/audio"
+	"aloh-tui/internal/networking"
+	"aloh-tui/pkg/errs"
+	"aloh-tui/pkg/logger"
+	"encoding/json"
+	"os"
+	"slices"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+type AuthMsg struct {
+	Typee uint
+	Err   error
+}
+
+func AuthCmd(user *entities.User, appLogger *logger.Logger, password []byte) tea.Cmd {
+	return func() tea.Msg {
+		payload, err := auth.Auth(user.Data.Personal.Nickname, user.Paths.KeysPath, auth.DEFAULT, password)
+		if err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		pd := entities.Personal{}
+		if err := json.Unmarshal(payload, &pd); err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		user.Data.Personal = pd
+
+		userData, err := json.Marshal(user.Data)
+		if err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		if err := os.WriteFile(user.Paths.DataFilePath, userData, 0644); err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
+		if err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		audioEngine, err := audio.NewAudioEngine(appLogger, user.Data.Devices.Microphone, false, false)
+		if err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		if err := audioEngine.SetNetworking(netwroking); err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		user.Engines.AudioEngine = audioEngine
+		user.Networking = netwroking
+
+		return AuthMsg{Typee: auth.DEFAULT, Err: nil}
+	}
+}
+
+func RegisterCmd(user *entities.User, appLogger *logger.Logger, password, repPassword []byte) tea.Cmd {
+	return func() tea.Msg {
+		if !slices.Equal(password, repPassword) {
+			return AuthMsg{Typee: auth.REGISTER, Err: errs.ErrPasswordsNotEqual}
+		}
+		if _, err := auth.Auth(user.Data.Personal.Nickname, user.Paths.KeysPath, auth.REGISTER, password); err != nil {
+			return AuthMsg{Typee: auth.REGISTER, Err: err}
+		}
+		userData, err := json.Marshal(user.Data)
+		if err != nil {
+			return AuthMsg{Typee: auth.REGISTER, Err: err}
+		}
+
+		if err := os.WriteFile(user.Paths.DataFilePath, userData, 0644); err != nil {
+			return AuthMsg{Typee: auth.REGISTER, Err: err}
+		}
+		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
+		if err != nil {
+			return AuthMsg{Typee: auth.REGISTER, Err: err}
+		}
+
+		audioEngine, err := audio.NewAudioEngine(appLogger, user.Data.Devices.Microphone, false, false)
+		if err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		if err := audioEngine.SetNetworking(netwroking); err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		user.Engines.AudioEngine = audioEngine
+		user.Networking = netwroking
+
+		return AuthMsg{Typee: auth.REGISTER, Err: nil}
+	}
+}
+
+func LoginCmd(user *entities.User, appLogger *logger.Logger, secret []byte) tea.Cmd {
+	return func() tea.Msg {
+		regTime, err := auth.Auth(user.Data.Personal.Nickname, user.Paths.KeysPath, auth.LOGIN, secret)
+		if err != nil {
+			return AuthMsg{Typee: auth.LOGIN, Err: err}
+		}
+		user.Data.Personal.RegisterTime = string(regTime)
+
+		userData, err := json.Marshal(user.Data)
+		if err != nil {
+			return AuthMsg{Typee: auth.LOGIN, Err: err}
+		}
+
+		if err := os.WriteFile(user.Paths.DataFilePath, userData, 0644); err != nil {
+			return AuthMsg{Typee: auth.LOGIN, Err: err}
+		}
+
+		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
+		if err != nil {
+			return AuthMsg{Typee: auth.LOGIN, Err: err}
+		}
+
+		audioEngine, err := audio.NewAudioEngine(appLogger, user.Data.Devices.Microphone, false, false)
+		if err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		if err := audioEngine.SetNetworking(netwroking); err != nil {
+			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		}
+
+		user.Engines.AudioEngine = audioEngine
+		user.Networking = netwroking
+
+		return AuthMsg{Typee: auth.LOGIN, Err: nil}
+	}
+}
