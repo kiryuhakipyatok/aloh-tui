@@ -227,7 +227,7 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 	deviceConfig.Playback.Channels = 1
 	deviceConfig.SampleRate = 48000
 	deviceConfig.Capture.DeviceID = micId
-	deviceConfig.PeriodSizeInFrames = 960
+	// deviceConfig.PeriodSizeInFrames = 960
 
 	callbacks := ae.dataCallback()
 
@@ -331,7 +331,7 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 	deviceConfig.Playback.Channels = 1
 	deviceConfig.SampleRate = 48000
 	deviceConfig.Capture.DeviceID = deviceID
-	deviceConfig.PeriodSizeInFrames = 960
+	// deviceConfig.PeriodSizeInFrames = 960
 
 	callbacks := ae.dataCallback()
 
