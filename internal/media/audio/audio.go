@@ -476,7 +476,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 							ae.log.Error(0, "failed to denoise frame", logger.Err(err))
 						}
 
-						if vad > 0.40 {
+						if vad > 0.50 {
 							voiceDetected = true
 						}
 					}
