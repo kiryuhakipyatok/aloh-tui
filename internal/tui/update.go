@@ -78,6 +78,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor = 0
 					m.focusInputs()
 					return m, textinput.Blink
+				} else {
+					if m.curWindow == windows.DEF_WINDOW {
+						m.state = states.DEF_STATE
+						m.cursor = 0
+						return m, nil
+					}
 				}
 			}
 

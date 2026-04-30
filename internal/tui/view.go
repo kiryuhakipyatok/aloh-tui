@@ -39,7 +39,7 @@ func (m Model) View() string {
 		title = styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.LITTLE_LOGO)
 	}
 	footerData := "alt+q (quit) | alt+h (help) | esc (back)"
-	if m.state == states.DEF_STATE{
+	if m.curWindow == windows.DEF_WINDOW {
 		footerData = "alt+q (quit) | alt+h (help) | tab (switch panel) | esc (back)"
 	}
 	footer := footerStyle.Width(usableW).MaxWidth(usableW).Render(footerData)
@@ -117,6 +117,7 @@ func (m Model) View() string {
 		ui = m.zone.Mark("start", lipgloss.JoinVertical(lipgloss.Center, title, styledContent, footer))
 
 	case windows.DEF_WINDOW:
+
 		inputW := innerLeftW - 4
 		if inputW < 1 {
 			inputW = 1
@@ -148,7 +149,6 @@ func (m Model) View() string {
 			topContent = lipgloss.JoinVertical(lipgloss.Center, lbl, "", name)
 		} else {
 			lbl := styles.HeaderStyle.Render("registration")
-			// topContent = lipgloss.JoinVertical(lipgloss.Center, lbl, "", m.regTextInputs[0].View(), "", m.regTextInputs[1].View(), "", m.regTextInputs[2].View())
 			topContent = lipgloss.JoinVertical(
 				lipgloss.Center,
 				lbl,
