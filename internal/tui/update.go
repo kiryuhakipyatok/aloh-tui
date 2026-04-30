@@ -321,44 +321,53 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+с", "ctrl+й", "ctrl+Й", "ctrl+С", "ctrl+C", "ctrl+c", "ctrl+q", "ctrl+Q":
+		case "ctrl+с", "alt+й", "alt+Й", "ctrl+С", "ctrl+C", "ctrl+c", "alt+q", "alt+Q":
 			m.Clean()
 			return m, tea.Quit
 
-		case "ctrl+s", "ctrl+ы":
+		case "alt+s", "alt+ы", "alt+S", "alt+Ы":
 			if m.state != states.START_STATE && m.user.Networking != nil {
 				m.prState = m.state
 				m.state = states.SETTINGS_STATE
 				m.curWindow = windows.SETTINGS_WINDOW
 			}
 
-		case "ctrl+d", "ctrl+в":
+		case "alt+d", "alt+в", "alt+D", "alt+В":
 			if m.curWindow == windows.SETTINGS_WINDOW {
 				cmds = append(cmds, commands.OnOffDenoiceCmd(m.user))
 			}
 
-		case "ctrl+a", "ctrl+ф":
+		case "alt+e", "alt+у", "alt+E", "alt+У":
 			if m.curWindow == windows.SETTINGS_WINDOW {
 				cmds = append(cmds, commands.OnOffAECCmd(m.user))
 			}
 
-		case "ctrl+w", "ctrl+ц":
-			m.prState = m.state
-			m.state = states.CONNECTIONS_STATE
-			m.curWindow = windows.CONNECTIONS_WINDOW
-			m.connectionsList.SetSize(m.width/2, m.height-4)
+		case "alt+c", "alt+с", "alt+C", "alt+С":
+			if m.state != states.START_STATE {
+				m.prState = m.state
+				m.state = states.CONNECTIONS_STATE
+				m.curWindow = windows.CONNECTIONS_WINDOW
+				m.connectionsList.SetSize(m.width/2, m.height-4)
+			}
 
-		case "ctrl+b", "ctrl+и":
+		case "alt+v", "alt+М", "alt+V", "alt+м":
 			if m.user.Engines.AudioEngine != nil {
 				cmds = append(cmds, commands.MuteUnmuteMicCmd(m.user.Engines.AudioEngine))
 			}
 
-		case "ctrl+n", "ctrl+т":
+		case "alt+h", "alt+H", "alt+р", "alt+Р":
+			if m.state != states.START_STATE {
+				m.prState = m.state
+				m.state = states.HELP_STATE
+				m.curWindow = windows.HELP_WINDOW
+			}
+
+		case "alt+b", "alt+и", "alt+B", "alt+И":
 			if m.user.Engines.AudioEngine != nil {
 				cmds = append(cmds, commands.MuteUnmuteCmd(m.user.Engines.AudioEngine))
 			}
 
-		case "ctrl+f", "ctrl+а":
+		case "alt+f", "alt+а", "alt+F", "alt+А":
 			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
 				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
 					cmds = append(cmds, commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.nickname)), m.updateConnectionItemList(i.nickname, i.volumeCoefficient, !i.muted))
@@ -394,40 +403,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.focusInputs()
 			return m, textinput.Blink
-
-		case "ctrl+up":
-			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
-				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
-					vc := i.volumeCoefficient
-					if vc >= MAX_VOLUME {
-						return m, nil
-					}
-
-					vc += 0.1
-
-					if vc > MAX_VOLUME {
-						vc = MAX_VOLUME
-					}
-					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
-				}
-
-			}
-		case "ctrl+down":
-			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
-				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
-					vc := i.volumeCoefficient
-					if vc <= MIN_VOLUME {
-						return m, nil
-					}
-					vc -= 0.1
-					if vc < MIN_VOLUME {
-						vc = MIN_VOLUME
-					} else if vc == 0 {
-					}
-					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
-				}
-
-			}
 
 		case "tab":
 			if m.curWindow == windows.DEF_WINDOW {
@@ -494,11 +469,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "up":
-			if m.cursor > 0 && m.state != states.CHAT_STATE {
-				m.cursor--
-				m.focusInputs()
-				return m, textinput.Blink
+			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
+				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
+					vc := i.volumeCoefficient
+					if vc >= MAX_VOLUME {
+						return m, nil
+					}
+
+					vc += 0.1
+
+					if vc > MAX_VOLUME {
+						vc = MAX_VOLUME
+					}
+					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
+				}
+
+			} else {
+				if m.cursor > 0 && m.state != states.CHAT_STATE {
+					m.cursor--
+					m.focusInputs()
+					return m, textinput.Blink
+				}
 			}
+
 		case "down":
 			switch m.state {
 			case states.REG_STATE:
@@ -519,6 +512,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.focusInputs()
 					return m, textinput.Blink
 				}
+			}
+			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
+				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
+					vc := i.volumeCoefficient
+					if vc <= MIN_VOLUME {
+						return m, nil
+					}
+					vc -= 0.1
+					if vc < MIN_VOLUME {
+						vc = MIN_VOLUME
+					} else if vc == 0 {
+					}
+					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
+				}
+
 			}
 
 		case "enter":

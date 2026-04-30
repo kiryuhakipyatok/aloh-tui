@@ -21,31 +21,30 @@ func (m Model) View() string {
 	var ui string
 
 	borderStyle := styles.BorderStyle
+	footerStyle := styles.FooterStyle
 	frameChromeW := lipgloss.Width(borderStyle.Render("X")) - 1
 	frameChromeH := lipgloss.Height(borderStyle.Render("X")) - 1
 
 	usableW := m.width - frameChromeW
 	usableH := m.height - frameChromeH
 
-	if usableW < 33 || usableH < 33 {
+	title := styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.BIG_LOGO)
+
+	if usableW < 69 || usableH < 21 {
 		return "terminal too small"
 	}
-
-	title := styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.LOGO)
-	titleH := lipgloss.Height(title)
-	footerData := "ctrl+q (quit) | tab (switch panel) | enter (confirm/send) | ctrl+s (settings) | ctrl+b (mute micro) | ctrl+n (mute full) | ctrl+w (connections)"
-
-	if m.state == states.ERR_STATE {
-		footerData = "ctrl+q (quit) | esc (back)"
-	} else if m.curWindow == windows.PROFILE_WINDOW {
-		footerData = "ctrl+q (quit) | esc (back)"
-	} else if m.curWindow == windows.CONNECTIONS_WINDOW {
-		footerData = "ctrl+q (quit) | esc (back) | ctrl+up (increasew volume) | ctrl+down (decrease volume) | ctrl+f (mute/unmute user)"
-	} else if m.curWindow == windows.SETTINGS_WINDOW {
-		footerData = "ctrl+q (quit) | esc (back) | up/down+enter (select microphone) | ctrl+d (switch denoise)"
+	if usableW < 69 || usableH < 30 {
+		footerStyle = footerStyle.MarginTop(0)
+		borderStyle = borderStyle.PaddingTop(0)
+		title = styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.LITTLE_LOGO)
 	}
+	footerData := "alt+q (quit) | alt+h (help) | esc (back)"
+	if m.state == states.DEF_STATE{
+		footerData = "alt+q (quit) | alt+h (help) | tab (switch panel) | esc (back)"
+	}
+	footer := footerStyle.Width(usableW).MaxWidth(usableW).Render(footerData)
+	titleH := lipgloss.Height(title)
 
-	footer := styles.FooterStyle.Width(usableW).MaxWidth(usableW).Render(footerData)
 	footerH := lipgloss.Height(footer)
 
 	contentWrapperStyle := styles.ContentStyle
@@ -344,7 +343,7 @@ func (m Model) View() string {
 		denoiseText := fmt.Sprintf("denoise: %t", m.user.Data.Setup.Denoise)
 		aecText := fmt.Sprintf("echo cancelling: %t", m.user.Data.Setup.AEC)
 
-		setupText:=lipgloss.JoinVertical(lipgloss.Left, denoiseText,"", aecText)
+		setupText := lipgloss.JoinVertical(lipgloss.Left, denoiseText, "", aecText)
 
 		setupContent := styles.ContentStyle.
 			Width(innerW).
@@ -389,6 +388,55 @@ func (m Model) View() string {
 			Render(clippedContent)
 
 		content := lipgloss.Place(centerW, centerH, lipgloss.Center, lipgloss.Center, connsBox)
+		styledContent := contentWrapperStyle.Render(content)
+
+		ui = lipgloss.JoinVertical(lipgloss.Center, title, styledContent, footer)
+
+	case windows.HELP_WINDOW:
+		targetBoxWidth := int(float32(centerW) / 1.5)
+		if targetBoxWidth < 40 {
+			targetBoxWidth = 40
+		}
+
+		lbl := styles.HeaderStyle.Width(targetBoxWidth).Align(lipgloss.Center).Render("help & shortcuts")
+
+		catTitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).MarginTop(1)
+		keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Bold(true)
+
+		navTitle := catTitleStyle.Render("navigation & ui:")
+		navKeys := styles.ContentStyle.Render(fmt.Sprintf(
+			"%s : switch panel\n%s : back/close window\n%s : confirm/send\n%s : open settings\n%s : open connections",
+			keyStyle.Render("tab"), keyStyle.Render("esc"), keyStyle.Render("enter"), keyStyle.Render("alt+s"), keyStyle.Render("alt+c"),
+		))
+
+		audioTitle := catTitleStyle.Render("audio controls:")
+		audioKeys := styles.ContentStyle.Render(fmt.Sprintf(
+			"%s : mute/unmute microphone\n%s : deafen (mute all sounds)\n%s : switch denoise (in settings)\n%s : switch echo canceller (in settings)",
+			keyStyle.Render("alt+v"), keyStyle.Render("alt+b"), keyStyle.Render("alt+d"), keyStyle.Render("alt+e"),
+		))
+
+		usersTitle := catTitleStyle.Render("users (in connections):")
+		usersKeys := styles.ContentStyle.Render(fmt.Sprintf(
+			"%s : increase/decrease volume\n%s : mute/unmute user",
+			keyStyle.Render("up/down"), keyStyle.Render("alt+f"),
+		))
+
+		mainContent := lipgloss.JoinVertical(
+			lipgloss.Center,
+			lbl,
+			navTitle, navKeys,
+			audioTitle, audioKeys,
+			usersTitle, usersKeys,
+		)
+
+		clippedHelp := lipgloss.NewStyle().MaxHeight(centerH - boxChromeH).MaxWidth(targetBoxWidth).Render(mainContent)
+
+		helpBox := centerBox.
+			Width(targetBoxWidth).
+			Height(centerH - boxChromeH).
+			Render(clippedHelp)
+
+		content := lipgloss.Place(centerW, centerH, lipgloss.Center, lipgloss.Center, helpBox)
 		styledContent := contentWrapperStyle.Render(content)
 
 		ui = lipgloss.JoinVertical(lipgloss.Center, title, styledContent, footer)

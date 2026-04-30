@@ -462,7 +462,14 @@ func (m Model) getMaxChatOffset() int {
 	usableW := m.width - frameChromeW
 	usableH := m.height - frameChromeH
 
-	titleH := lipgloss.Height(styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.LOGO))
+	title := styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.BIG_LOGO)
+	if usableW < 30 || usableH < 30 {
+		borderStyle = styles.BorderStyle.PaddingTop(0)
+		frameChromeH = lipgloss.Height(borderStyle.Render("X")) - 1
+		title = styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.LITTLE_LOGO)
+	}
+
+	titleH := lipgloss.Height(title)
 	footerH := lipgloss.Height(styles.FooterStyle.Width(usableW).MaxWidth(usableW).Render("X"))
 
 	contentChromeW := lipgloss.Width(styles.ContentStyle.Render("X")) - 1
