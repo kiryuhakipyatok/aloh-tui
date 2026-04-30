@@ -60,6 +60,9 @@ type audioEngine struct {
 	denoiced   atomic.Bool
 	aec        atomic.Bool
 
+	bytesBuffersPool sync.Pool
+	int16BuffersPool sync.Pool
+
 	stopSendVocie chan struct{}
 
 	notificationBytes []byte
@@ -77,8 +80,6 @@ type audioEngine struct {
 	mu          sync.Mutex
 	lifecycleMu sync.Mutex
 	switching   atomic.Bool
-
-	//filter *filter.BiquadFilter
 
 	netw   networking.Networking
 	sounds sounds
@@ -147,8 +148,6 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 		return nil, err
 	}
 
-	// f := filter.NewHighPassFilter(48000, 70.0)
-
 	rnnoise := rnnoise.NewRNNoise()
 
 	echoCanceller := speexdsp.NewEchoCanceller(1, 1, 48000, 960, 4800)
@@ -165,6 +164,19 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 		usersAudio:    make(map[string]*usersAudio, 10),
 		Microphones:   make([]malgo.DeviceInfo, 0, 7),
 
+		bytesBuffersPool: sync.Pool{
+			New: func() any {
+				buf := make([]byte, 1000)
+				return buf
+			},
+		},
+		int16BuffersPool: sync.Pool{
+			New: func() any {
+				buf := make([]int16, 4096)
+				return buf
+			},
+		},
+
 		voiceBuffer:          make([]byte, 1000),
 		denoicedBuffer:       make([]float32, frameLen),
 		float32Buffer:        make([]float32, frameLen),
@@ -180,7 +192,6 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 		echoCanceller: echoCanceller,
 		preprocessor:  preprocessor,
 		opusEncoder:   opusEncoder,
-		//filter:      f,
 		log:         sparseLogger,
 		threshold:   150,
 		rnnoise:     rnnoise,
@@ -523,10 +534,10 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 				if err != nil {
 					ae.log.Error(ae.errLogCount, "failed to encode opus data", logger.Err(err))
 				} else {
-					packetToSend := make([]byte, n)
-					copy(packetToSend, ae.voiceBuffer[:n])
+					packetToSend := ae.bytesBuffersPool.Get().([]byte)
+					copy(packetToSend[:n], ae.voiceBuffer[:n])
 					select {
-					case ae.micDataChan <- packetToSend:
+					case ae.micDataChan <- packetToSend[:n]:
 					default:
 					}
 				}
@@ -751,15 +762,16 @@ func (ae *audioEngine) PlayUserVoice(nickname string, userVoiceByte []byte) {
 	}
 	v := ua.volumeCoefficient
 	ae.mu.Unlock()
-	pcmBuffer := make([]int16, 5760)
+	pcmBuffer := ae.int16BuffersPool.Get().([]int16)
 	n, err := ua.decoder.Decode(userVoiceByte, pcmBuffer)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to decode incoming opus packet", logger.Err(err))
 		return
 	}
-	setupVolume(v, pcmBuffer)
+	setupVolume(v, pcmBuffer[:n])
 	int16ToBytes(pcmBuffer[:n], ua.decodedBuffer[:n*2])
 	ae.mu.Lock()
+	ae.int16BuffersPool.Put(pcmBuffer[:4096])
 	ua.data = append(ua.data, ua.decodedBuffer[:n*2]...)
 
 	if len(ua.data) > 96000 {
@@ -815,8 +827,6 @@ func (ae *audioEngine) start() error {
 func (ae *audioEngine) Stop() {
 	ae.lifecycleMu.Lock()
 	defer ae.lifecycleMu.Unlock()
-	ae.stopSendVocie <- struct{}{}
-	close(ae.stopSendVocie)
 	if ae.playbackDevice != nil {
 		if err := ae.playbackDevice.Stop(); err != nil {
 			ae.log.Error(0, "failed to stop playback device", logger.Err(err))
@@ -861,6 +871,10 @@ func (ae *audioEngine) Stop() {
 			ae.log.Error(0, "failed to close playback resampler", logger.Err(err))
 		}
 	}
+
+	ae.stopSendVocie <- struct{}{}
+	close(ae.stopSendVocie)
+	close(ae.micDataChan)
 
 	ae.log.Info(0, "audio engine stopped")
 }
@@ -931,23 +945,8 @@ func (ae *audioEngine) sendVoice() {
 					ae.log.Error(ae.errLogCount, "failed to send voice data", logger.Err(err))
 				}
 			}
+			ae.bytesBuffersPool.Put(voice[:1000])
 		}
-	}
-}
-
-func mixPCM16(dst, src []byte) {
-	for i := 0; i < len(src)-1 && i < len(dst)-1; i += 2 {
-		s1 := int16(binary.LittleEndian.Uint16(dst[i:]))
-		s2 := int16(binary.LittleEndian.Uint16(src[i:]))
-
-		mixed := int32(s1) + int32(s2)
-		if mixed > math.MaxInt16 {
-			mixed = math.MaxInt16
-		} else if mixed < math.MinInt16 {
-			mixed = math.MinInt16
-		}
-
-		binary.LittleEndian.PutUint16(dst[i:], uint16(int16(mixed)))
 	}
 }
 
@@ -975,20 +974,6 @@ func bytesToInt16(int16s []int16, b []byte) {
 	for i := 0; i < len(int16s) && i*2+1 < len(b); i++ {
 		val := int16(binary.LittleEndian.Uint16(b[i*2 : i*2+2]))
 		int16s[i] = val
-	}
-}
-
-func (ae *audioEngine) bytesToFilteredInt16(int16s []int16, b []byte) {
-	for i := 0; i < len(int16s) && i*2+1 < len(b); i++ {
-		val := int16(binary.LittleEndian.Uint16(b[i*2 : i*2+2]))
-		int16s[i] = val
-	}
-}
-
-func (ae *audioEngine) bytesToFilteredFloat32(float32s []float32, b []byte) {
-	for i := 0; i < len(float32s) && i*2+1 < len(b); i++ {
-		val := int16(binary.LittleEndian.Uint16(b[i*2 : i*2+2]))
-		float32s[i] = float32(val)
 	}
 }
 
