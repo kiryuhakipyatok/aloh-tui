@@ -418,7 +418,7 @@ func (m Model) View() string {
 		usersTitle := catTitleStyle.Render("users (in connections):")
 		usersKeys := styles.ContentStyle.Render(fmt.Sprintf(
 			"%s : increase/decrease volume\n%s : mute/unmute user",
-			keyStyle.Render("up/down"), keyStyle.Render("alt+f"),
+			keyStyle.Render("alt+up/down"), keyStyle.Render("alt+f"),
 		))
 
 		mainContent := lipgloss.JoinVertical(

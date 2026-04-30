@@ -355,6 +355,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, commands.MuteUnmuteMicCmd(m.user.Engines.AudioEngine))
 			}
 
+		case "alt+up":
+			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
+				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
+					vc := i.volumeCoefficient
+					if vc >= MAX_VOLUME {
+						return m, nil
+					}
+
+					vc += 0.1
+
+					if vc > MAX_VOLUME {
+						vc = MAX_VOLUME
+					}
+					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
+				}
+
+			}
+
+		case "alt+down":
+			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
+				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
+					vc := i.volumeCoefficient
+					if vc <= MIN_VOLUME {
+						return m, nil
+					}
+					vc -= 0.1
+					if vc < MIN_VOLUME {
+						vc = MIN_VOLUME
+					} else if vc == 0 {
+					}
+					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
+				}
+			}
+
 		case "alt+h", "alt+H", "alt+р", "alt+Р":
 			if m.state != states.START_STATE {
 				m.prState = m.state
@@ -469,27 +503,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "up":
-			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
-				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
-					vc := i.volumeCoefficient
-					if vc >= MAX_VOLUME {
-						return m, nil
-					}
-
-					vc += 0.1
-
-					if vc > MAX_VOLUME {
-						vc = MAX_VOLUME
-					}
-					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
-				}
-
-			} else {
-				if m.cursor > 0 && m.state != states.CHAT_STATE {
-					m.cursor--
-					m.focusInputs()
-					return m, textinput.Blink
-				}
+			if m.cursor > 0 && m.state != states.CHAT_STATE {
+				m.cursor--
+				m.focusInputs()
+				return m, textinput.Blink
 			}
 
 		case "down":
@@ -512,21 +529,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.focusInputs()
 					return m, textinput.Blink
 				}
-			}
-			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
-				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
-					vc := i.volumeCoefficient
-					if vc <= MIN_VOLUME {
-						return m, nil
-					}
-					vc -= 0.1
-					if vc < MIN_VOLUME {
-						vc = MIN_VOLUME
-					} else if vc == 0 {
-					}
-					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
-				}
-
 			}
 
 		case "enter":
