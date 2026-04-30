@@ -51,18 +51,21 @@ type usersAudio struct {
 }
 
 type audioEngine struct {
-	device   *malgo.Device
-	malgoCtx *malgo.AllocatedContext
+	captureDevice  *malgo.Device
+	playbackDevice *malgo.Device
+	malgoCtx       *malgo.AllocatedContext
 
 	mutedMicro atomic.Bool
 	muted      atomic.Bool
 	denoiced   atomic.Bool
 	aec        atomic.Bool
 
+	stopSendVocie chan struct{}
+
 	notificationBytes []byte
 	usersAudio        map[string]*usersAudio
 
-	voiceHolder int
+	voiceHolder atomic.Int32
 	threshold   float64
 
 	userIsSpeaking atomic.Bool
@@ -82,26 +85,24 @@ type audioEngine struct {
 
 	opusEncoder *opus.Encoder
 
-	microphoneBuffer []byte
-	voiceBuffer      []byte
-	denoicedBuffer   []float32
-	pcmBuffer        []int16
-	float32Buffer    []float32
-	refBuffer        []int16
-	frameBytesInt16s []int16
-	//frameResampledInt16s []int16
+	voiceBuffer          []byte
+	denoicedBuffer       []float32
+	pcmBuffer            []int16
+	float32Buffer        []float32
 	echolessBufferInt16s []int16
-
-	playbackBuffer []byte
-	// echollesBuffer       []byte
-	//monoBuffer       []byte
+	micNativeBuffer      []int16
+	workMic              []int16
+	playbackNativeBuffer []int16
+	workMix              []int16
+	resampledWorkMix     []int16
+	resampledWorkMic     []int16
 
 	connected bool
 
-	echoCanceller *speexdsp.EchoCanceller
-	preprocessor  *speexdsp.Preprocessor
-	//micResampler  *speexdsp.Resampler
-	//headResampler *speexdsp.Resampler
+	echoCanceller     *speexdsp.EchoCanceller
+	preprocessor      *speexdsp.Preprocessor
+	captureResampler  *speexdsp.Resampler
+	playbackResampler *speexdsp.Resampler
 
 	log *logger.SparseLogger
 
@@ -109,7 +110,8 @@ type audioEngine struct {
 
 	micDataChan chan []byte
 
-	callbacks malgo.DeviceCallbacks
+	captureCallback  malgo.DeviceCallbacks
+	playbackCallback malgo.DeviceCallbacks
 
 	logCount uint
 
@@ -149,7 +151,7 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 
 	rnnoise := rnnoise.NewRNNoise()
 
-	echoCanceller := speexdsp.NewEchoCanceller(1, 1, 48000, 960, 9600)
+	echoCanceller := speexdsp.NewEchoCanceller(1, 1, 48000, 960, 4800)
 
 	preprocessor := speexdsp.NewPreprocessor(48000, 960)
 	preprocessor.SetEchoCanceller(echoCanceller)
@@ -159,22 +161,25 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 		sounds: sounds{
 			notification: notificationSound,
 		},
-		usersAudio:       make(map[string]*usersAudio, 10),
-		microphoneBuffer: make([]byte, 0, 4096),
-		playbackBuffer:   make([]byte, 7680),
-		Microphones:      make([]malgo.DeviceInfo, 0, 10),
-		voiceBuffer:      make([]byte, 1000),
-		denoicedBuffer:   make([]float32, frameLen),
-		float32Buffer:    make([]float32, frameLen),
-		pcmBuffer:        make([]int16, frameLen),
-		echoCanceller:    echoCanceller,
-		refBuffer:        make([]int16, frameLen),
-		preprocessor:     preprocessor,
-		// frameResampledInt16s: make([]int16, frameLen),
-		frameBytesInt16s:     make([]int16, frameLen),
+		stopSendVocie: make(chan struct{}, 1),
+		usersAudio:    make(map[string]*usersAudio, 10),
+		Microphones:   make([]malgo.DeviceInfo, 0, 7),
+
+		voiceBuffer:          make([]byte, 1000),
+		denoicedBuffer:       make([]float32, frameLen),
+		float32Buffer:        make([]float32, frameLen),
+		pcmBuffer:            make([]int16, frameLen),
+		playbackNativeBuffer: make([]int16, 0, 4096),
+		micNativeBuffer:      make([]int16, 0, 4096),
 		echolessBufferInt16s: make([]int16, frameLen),
-		//monoBuffer:       make([]byte, 960),
-		opusEncoder: opusEncoder,
+		workMix:              make([]int16, 4096),
+		workMic:              make([]int16, 4096),
+		resampledWorkMix:     make([]int16, 4096),
+		resampledWorkMic:     make([]int16, 4096),
+
+		echoCanceller: echoCanceller,
+		preprocessor:  preprocessor,
+		opusEncoder:   opusEncoder,
 		//filter:      f,
 		log:         sparseLogger,
 		threshold:   150,
@@ -220,42 +225,58 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 		}
 	}
 
-	deviceConfig := malgo.DefaultDeviceConfig(malgo.Duplex)
-	deviceConfig.Capture.Format = malgo.FormatS16
-	deviceConfig.Capture.Channels = 1
-	deviceConfig.Playback.Format = malgo.FormatS16
-	deviceConfig.Playback.Channels = 1
-	deviceConfig.SampleRate = 48000
-	deviceConfig.Capture.DeviceID = micId
-	deviceConfig.PeriodSizeInFrames = 960
+	captureConfig := malgo.DefaultDeviceConfig(malgo.Capture)
+	playbackConfig := malgo.DefaultDeviceConfig(malgo.Playback)
 
-	callbacks := ae.dataCallback()
+	captureConfig.Capture.Format = malgo.FormatS16
+	captureConfig.Capture.Channels = 1
+	captureConfig.SampleRate = 0
+	captureConfig.Capture.DeviceID = micId
+	captureConfig.PeriodSizeInFrames = 960
 
-	ae.callbacks = callbacks
+	playbackConfig.Playback.Format = malgo.FormatS16
+	playbackConfig.Playback.Channels = 1
+	playbackConfig.Playback.Format = malgo.FormatS16
+	playbackConfig.SampleRate = 0
+	playbackConfig.PeriodSizeInFrames = 960
 
-	device, err := malgo.InitDevice(ae.malgoCtx.Context, deviceConfig, callbacks)
+	ae.captureCallback = ae.newCaptureCallback()
+	ae.playbackCallback = ae.newPlaybackCallback()
+
+	captureDevice, err := malgo.InitDevice(ae.malgoCtx.Context, captureConfig, ae.captureCallback)
 	if err != nil {
-		ae.log.Error(ae.errLogCount, "failed to init malgo device", logger.Err(err))
+		ae.log.Error(ae.errLogCount, "failed to init malgo capture device", logger.Err(err))
 		ae.malgoCtx.Free()
 		return nil, err
 	}
 
-	//sr := int(device.SampleRate())
+	playbackDevice, err := malgo.InitDevice(ae.malgoCtx.Context, playbackConfig, ae.playbackCallback)
+	if err != nil {
+		ae.log.Error(ae.errLogCount, "failed to init malgo playback device", logger.Err(err))
+		ae.malgoCtx.Free()
+		return nil, err
+	}
 
-	// micResampler, err := speexdsp.NewResampler(1, sr, 48000, 5)
-	// if err != nil {
-	// 	ae.log.Error(ae.errLogCount, "failed to create new micResampler", logger.Err(err))
-	// 	return nil, err
-	// }
+	ae.captureDevice = captureDevice
+	ae.playbackDevice = playbackDevice
 
-	// headResampler, err := speexdsp.NewResampler(1, 48000, sr, 5)
-	// if err != nil {
-	// 	ae.log.Error(ae.errLogCount, "failed to create new headResampler", logger.Err(err))
-	// 	return nil, err
-	// }
-	// ae.headResampler = headResampler
-	// ae.micResampler = micResampler
-	ae.device = device
+	captureSampleRate := int(ae.captureDevice.SampleRate())
+	playbackSampleRate := int(ae.playbackDevice.SampleRate())
+
+	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 6)
+	if err != nil {
+		ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
+		return nil, err
+	}
+
+	playbackResampler, err := speexdsp.NewResampler(1, 48000, playbackSampleRate, 6)
+	if err != nil {
+		ae.log.Error(ae.errLogCount, "failed to create new playback resampler", logger.Err(err))
+		return nil, err
+	}
+
+	ae.captureResampler = captureResampler
+	ae.playbackResampler = playbackResampler
 
 	if err := ae.start(); err != nil {
 		ae.log.Error(ae.errLogCount, "failed to start audio engine", logger.Err(err))
@@ -295,78 +316,64 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 	ae.switching.Store(true)
 	defer ae.switching.Store(false)
 
-	var deviceID unsafe.Pointer
+	var micId unsafe.Pointer
 	if microphone != "" {
 		id, err := ae.resolveCaptureDeviceByName(microphone)
 		if err != nil {
-			deviceID = nil
+			micId = nil
 		} else {
-			deviceID = id
+			micId = id
 		}
 	}
 
-	if ae.device != nil {
-		ae.device.Stop()
-		ae.device.Uninit()
+	if ae.captureDevice != nil {
+		ae.captureDevice.Stop()
+		ae.captureDevice.Uninit()
 		ae.mu.Lock()
-		ae.device = nil
-		ae.microphoneBuffer = ae.microphoneBuffer[:0]
-		ae.voiceHolder = 0
-
-		// for _, ua := range ae.usersAudio {
-		// 	ua.isSpeaking.Store(false)
-		// 	ua.playing = false
-		// 	ua.framesCount = 0
-		// 	ua.data = nil
-		// }
+		ae.captureDevice = nil
+		ae.voiceHolder.Store(0)
 
 		ae.mu.Unlock()
 
 	}
 
-	deviceConfig := malgo.DefaultDeviceConfig(malgo.Duplex)
-	deviceConfig.Capture.Format = malgo.FormatS16
-	deviceConfig.Capture.Channels = 1
-	deviceConfig.Playback.Format = malgo.FormatS16
-	deviceConfig.Playback.Channels = 1
-	deviceConfig.SampleRate = 48000
-	deviceConfig.Capture.DeviceID = deviceID
-	deviceConfig.PeriodSizeInFrames = 960
+	captureConfig := malgo.DefaultDeviceConfig(malgo.Capture)
+	captureConfig.Capture.Format = malgo.FormatS16
+	captureConfig.Capture.Channels = 1
+	captureConfig.SampleRate = 0
+	captureConfig.Capture.DeviceID = micId
 
-	callbacks := ae.dataCallback()
-
-	dev, err := malgo.InitDevice(ae.malgoCtx.Context, deviceConfig, callbacks)
-	if err != nil && deviceConfig.Capture.DeviceID != nil {
-		deviceConfig.Capture.DeviceID = nil
-		dev, err = malgo.InitDevice(ae.malgoCtx.Context, deviceConfig, callbacks)
+	captureDevice, err := malgo.InitDevice(ae.malgoCtx.Context, captureConfig, ae.captureCallback)
+	if err != nil && captureConfig.Capture.DeviceID != nil {
+		captureConfig.Capture.DeviceID = nil
+		captureDevice, err = malgo.InitDevice(ae.malgoCtx.Context, captureConfig, ae.captureCallback)
 	}
 	if err != nil {
 		return err
 	}
 
-	// if err := ae.micResampler.Close(); err != nil {
-	// 	ae.log.Error(ae.errLogCount, "failed to close old micResampler", logger.Err(err))
-	// 	return err
-	// }
+	if err := ae.captureResampler.Close(); err != nil {
+		ae.log.Error(ae.errLogCount, "failed to close old capture resampler", logger.Err(err))
+		return err
+	}
 
-	// sr := int(dev.SampleRate())
+	captureSampleRate := int(captureDevice.SampleRate())
 
-	// micResampler, err := speexdsp.NewResampler(1, sr, 48000, 5)
-	// if err != nil {
-	// 	ae.log.Error(ae.errLogCount, "failed to create new micResampler", logger.Err(err))
-	// 	return err
-	// }
-
-	// ae.micResampler = micResampler
+	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 6)
+	if err != nil {
+		ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
+		return err
+	}
 
 	ae.mu.Lock()
-	ae.device = dev
-	ae.callbacks = callbacks
+	ae.captureDevice = captureDevice
+	ae.captureResampler = captureResampler
 	ae.mu.Unlock()
+
 	if err := ae.start(); err != nil {
-		ae.device.Uninit()
+		ae.captureDevice.Uninit()
 		ae.mu.Lock()
-		ae.device = nil
+		ae.captureDevice = nil
 		ae.mu.Unlock()
 		return err
 	}
@@ -404,9 +411,8 @@ func (ae *audioEngine) OnOffAEC() bool {
 	return !s
 }
 
-func (ae *audioEngine) dataCallback() malgo.DeviceCallbacks {
+func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 	data := func(pOutputSample, pInputSamples []byte, framecount uint32) {
-
 		if ae.switching.Load() {
 			return
 		}
@@ -416,154 +422,40 @@ func (ae *audioEngine) dataCallback() malgo.DeviceCallbacks {
 		netw := ae.netw
 		ae.mu.Unlock()
 
-		if pOutputSample != nil {
-			for i := range pOutputSample {
-				pOutputSample[i] = 0
-			}
-
-			ae.mu.Lock()
-
-			//monoLen := len(pOutputSample) / 2
-
-			// if cap(ae.monoBuffer) < monoLen {
-			// 	ae.monoBuffer = make([]byte, monoLen)
-			// }
-
-			// ae.monoBuffer = ae.monoBuffer[:monoLen]
-
-			// for i := range ae.monoBuffer {
-			// 	ae.monoBuffer[i] = 0
-			// }
-			// out := make([]byte, len(pOutputSample))
-			if len(ae.usersAudio) > 0 && !ae.muted.Load() {
-				for _, ua := range ae.usersAudio {
-
-					if len(ua.data) == 0 {
-						ua.framesCount++
-						if ua.framesCount > 5 {
-							ua.isSpeaking.Store(false)
-						}
-						ua.playing = false
-						ua.data = nil
-						continue
-					} else {
-						ua.framesCount = 0
-
-					}
-
-					if !ua.playing {
-						if len(ua.data) >= jitterSize {
-							ua.playing = true
-						} else {
-							ua.isSpeaking.Store(false)
-							continue
-						}
-					}
-
-					// logNick := logger.Attr("nickname", nickname)
-					// logReadLen := logger.Attr("len-output-samples", readLen)
-					// logUserDataLen := logger.Attr("user-data", logNick)
-
-					ua.isSpeaking.Store(true)
-
-					uaLen := len(ua.data)
-
-					readLen := len(pOutputSample)
-
-					if uaLen < readLen {
-						readLen = uaLen
-					}
-
-					//ae.log.Info(ae.logCount, "playing users audio", logNick, logReadLen, logUserDataLen)
-
-					chunk := ua.data[:readLen]
-
-					mixPCM16(pOutputSample, chunk)
-
-					ua.data = ua.data[readLen:]
-
-					if len(ua.data) == 0 {
-						ua.data = nil
-						ua.playing = false
-					}
-
-				}
-			}
-
-			if ae.notificationBytes != nil {
-				rem := len(ae.notificationBytes) - ae.notificationPos
-
-				readLen := len(pOutputSample)
-				if rem < readLen {
-					readLen = rem
-				}
-				// logRem := logger.Attr("remain", rem)
-				// logNeed := logger.Attr("need", readLen)
-				// ae.log.Info(ae.logCount, "playing notification sound", logRem, logNeed)
-
-				chunk := ae.notificationBytes[ae.notificationPos : ae.notificationPos+readLen]
-
-				mixPCM16(pOutputSample, chunk)
-
-				ae.notificationPos += readLen
-
-				if ae.notificationPos >= len(ae.notificationBytes) {
-					ae.notificationBytes = nil
-					ae.notificationPos = 0
-				}
-			}
-			ae.mu.Unlock()
-			if ae.aec.Load() {
-				ae.playbackBuffer = append(ae.playbackBuffer, pOutputSample...)
-			}
-
-			//ae.refBuffer = append(ae.refBuffer, pOutputSample...)
-			//bytesToInt16(ae.refBuffer, pOutputSample)
-			//monoToStereo(pOutputSample, ae.monoBuffer)
-			// copy(pOutputSample, out)
-		}
-
 		if pInputSamples != nil && netw != nil && connected && !ae.mutedMicro.Load() && !ae.muted.Load() {
-			// logFramecount := logger.Attr("framecount", framecount)
-			// logLenInputSamples := logger.Attr("len-input-samples", len(pInputSamples))
 
-			// ae.log.Info(ae.logCount, "microphone data processing", logFramecount, logLenInputSamples)
+			nativeSamples := len(pInputSamples) / 2
 
-			ae.microphoneBuffer = append(ae.microphoneBuffer, pInputSamples...)
+			if len(ae.micNativeBuffer) < nativeSamples {
+				ae.micNativeBuffer = make([]int16, nativeSamples)
+			}
 
-			for len(ae.microphoneBuffer) >= frameSize {
+			bytesToInt16(ae.micNativeBuffer[:nativeSamples], pInputSamples)
 
-				frameBytes := ae.microphoneBuffer[:frameSize]
+			outLen := int(float64(nativeSamples)*(48000.0/float64(ae.captureDevice.SampleRate()))) + 100
+			if len(ae.resampledWorkMic) < outLen {
+				ae.resampledWorkMic = make([]int16, outLen)
+			}
 
-				// _, _, err := ae.micResampler.ProcessInt(0, ae.frameBytesInt16s, ae.frameResampledInt16s)
-				// if err != nil {
-				// 	ae.log.Error(0, "failed to resample mic data", logger.Err(err))
-				// 	continue
-				// }
+			_, out, err := ae.captureResampler.ProcessInt(0, ae.micNativeBuffer[:nativeSamples], ae.resampledWorkMic)
+			if err == nil {
+				ae.workMic = append(ae.workMic, ae.resampledWorkMic[:out]...)
+			}
+
+			for len(ae.workMic) >= frameLen {
+				chunk := ae.workMic[:frameLen]
+				copy(ae.pcmBuffer, chunk)
 
 				if ae.aec.Load() {
-					if len(ae.playbackBuffer) >= frameSize {
-						playbackBytes := ae.playbackBuffer[:frameSize]
-						bytesToInt16(ae.refBuffer, playbackBytes)
-						ae.playbackBuffer = ae.playbackBuffer[frameSize:]
-					} else {
-						for i := range ae.refBuffer {
-							ae.refBuffer[i] = 0
-						}
-						ae.playbackBuffer = ae.playbackBuffer[:0]
-					}
-					// //refBytes := ae.refBuffer[:frameSize]
-					bytesToInt16(ae.frameBytesInt16s, frameBytes)
-					ae.echoCanceller.Cancellation(ae.frameBytesInt16s, ae.refBuffer, ae.echolessBufferInt16s)
+					ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
 					ae.preprocessor.Run(ae.echolessBufferInt16s)
-					int16ToBytes(ae.echolessBufferInt16s, frameBytes)
+					copy(ae.pcmBuffer, ae.echolessBufferInt16s)
 				}
-				//frameBytes = clear
 
 				var voiceDetected bool
 
 				if ae.denoiced.Load() {
-					ae.bytesToFilteredFloat32(ae.float32Buffer, frameBytes)
+					int16ToFloat32(ae.pcmBuffer, ae.float32Buffer)
 
 					for i := 0; i+rnnoiseFrameSize <= len(ae.float32Buffer); i += rnnoiseFrameSize {
 						rnnFrame := ae.float32Buffer[i : i+rnnoiseFrameSize]
@@ -580,7 +472,6 @@ func (ae *audioEngine) dataCallback() malgo.DeviceCallbacks {
 
 					float32ToInt16(ae.pcmBuffer, ae.denoicedBuffer)
 				} else {
-					ae.bytesToFilteredInt16(ae.pcmBuffer, frameBytes)
 					var (
 						sum      float64
 						zcr      int
@@ -610,12 +501,12 @@ func (ae *audioEngine) dataCallback() malgo.DeviceCallbacks {
 				if voiceDetected {
 					isVoice = true
 					ae.userIsSpeaking.Store(true)
-					ae.voiceHolder = 30
+					ae.voiceHolder.Store(30)
 				} else {
-					if ae.voiceHolder > 0 {
+					if ae.voiceHolder.Load() > 0 {
 						isVoice = true
 						ae.userIsSpeaking.Store(true)
-						ae.voiceHolder--
+						ae.voiceHolder.Add(-1)
 					} else {
 						isVoice = false
 						ae.userIsSpeaking.Store(false)
@@ -623,7 +514,8 @@ func (ae *audioEngine) dataCallback() malgo.DeviceCallbacks {
 				}
 
 				if !isVoice {
-					ae.microphoneBuffer = ae.microphoneBuffer[frameSize:]
+					copy(ae.workMic, ae.workMic[frameLen:])
+					ae.workMic = ae.workMic[:len(ae.workMic)-frameLen]
 					continue
 				}
 
@@ -636,17 +528,126 @@ func (ae *audioEngine) dataCallback() malgo.DeviceCallbacks {
 					select {
 					case ae.micDataChan <- packetToSend:
 					default:
-						// ae.log.Warn(ae.errLogCount, "dropping audio data")
 					}
 				}
 
-				ae.microphoneBuffer = ae.microphoneBuffer[frameSize:]
+				copy(ae.workMic, ae.workMic[frameLen:])
+				ae.workMic = ae.workMic[:len(ae.workMic)-frameLen]
 			}
-
 		} else {
 			ae.userIsSpeaking.Store(false)
-			ae.playbackBuffer = ae.playbackBuffer[:0]
-			ae.microphoneBuffer = ae.microphoneBuffer[:0]
+			ae.workMic = ae.workMic[:0]
+
+		}
+	}
+	return malgo.DeviceCallbacks{
+		Data: data,
+	}
+}
+
+func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
+	data := func(pOutputSample, pInputSamples []byte, framecount uint32) {
+
+		if pOutputSample != nil {
+			for i := range pOutputSample {
+				pOutputSample[i] = 0
+			}
+
+			nativeSamples := len(pOutputSample) / 2
+
+			for len(ae.playbackNativeBuffer) < nativeSamples {
+				for i := 0; i < frameLen; i++ {
+					ae.workMix[i] = 0
+				}
+				ae.mu.Lock()
+				for _, ua := range ae.usersAudio {
+
+					if len(ua.data) == 0 {
+						ua.framesCount++
+						if ua.framesCount > 5 {
+							ua.isSpeaking.Store(false)
+						}
+						ua.playing = false
+						ua.data = nil
+						continue
+					} else {
+						ua.framesCount = 0
+
+					}
+
+					if !ua.playing {
+						if len(ua.data) >= jitterSize {
+							ua.playing = true
+						} else {
+							ua.isSpeaking.Store(false)
+							continue
+						}
+					}
+
+					ua.isSpeaking.Store(true)
+
+					uaLen := len(ua.data)
+
+					readLen := frameSize
+
+					if uaLen < readLen {
+						readLen = uaLen
+					}
+
+					mixBytesToInt16(ae.workMix, ua.data[:readLen])
+
+					ua.data = ua.data[readLen:]
+
+					if len(ua.data) == 0 {
+						ua.data = nil
+						ua.playing = false
+					}
+
+				}
+
+				if ae.notificationBytes != nil {
+					rem := len(ae.notificationBytes) - ae.notificationPos
+
+					readLen := frameSize
+					if rem < readLen {
+						readLen = rem
+					}
+
+					chunk := ae.notificationBytes[ae.notificationPos : ae.notificationPos+readLen]
+
+					mixBytesToInt16(ae.workMix, chunk)
+					ae.notificationPos += readLen
+
+					if ae.notificationPos >= len(ae.notificationBytes) {
+						ae.notificationBytes = nil
+						ae.notificationPos = 0
+					}
+				}
+
+				ae.mu.Unlock()
+
+				if ae.aec.Load() {
+					ae.echoCanceller.Playback(ae.workMix[:frameLen])
+				}
+
+				outLen := int(float64(frameLen)*(float64(ae.playbackDevice.SampleRate())/48000.0)) + 100
+				if len(ae.resampledWorkMix) < outLen {
+					ae.resampledWorkMix = make([]int16, outLen)
+				}
+
+				_, out, err := ae.playbackResampler.ProcessInt(0, ae.workMix[:frameLen], ae.resampledWorkMix)
+				if err == nil {
+					ae.playbackNativeBuffer = append(ae.playbackNativeBuffer, ae.resampledWorkMix[:out]...)
+				}
+
+			}
+
+			outNativeBuffer := ae.playbackNativeBuffer[:nativeSamples]
+
+			int16ToBytes(outNativeBuffer, pOutputSample)
+
+			copy(ae.playbackNativeBuffer, ae.playbackNativeBuffer[nativeSamples:])
+			ae.playbackNativeBuffer = ae.playbackNativeBuffer[:len(ae.playbackNativeBuffer)-nativeSamples]
 		}
 
 	}
@@ -709,7 +710,7 @@ func (ae *audioEngine) SetMuteState(nickname string, mute bool) {
 			data:              make([]byte, 0, 48000),
 			decoder:           opusDecoder,
 			volumeCoefficient: 1,
-			decodedBuffer:     make([]byte, 1920),
+			decodedBuffer:     make([]byte, 5760),
 		}
 
 		ua.muted.Store(mute)
@@ -739,7 +740,7 @@ func (ae *audioEngine) PlayUserVoice(nickname string, userVoiceByte []byte) {
 			data:              make([]byte, 0, 48000),
 			decoder:           opusDecoder,
 			volumeCoefficient: 1,
-			decodedBuffer:     make([]byte, 1920),
+			decodedBuffer:     make([]byte, 5760),
 		}
 
 		ae.usersAudio[nickname] = ua
@@ -759,7 +760,7 @@ func (ae *audioEngine) PlayUserVoice(nickname string, userVoiceByte []byte) {
 	setupVolume(v, pcmBuffer)
 	int16ToBytes(pcmBuffer[:n], ua.decodedBuffer[:n*2])
 	ae.mu.Lock()
-	ua.data = append(ua.data, ua.decodedBuffer...)
+	ua.data = append(ua.data, ua.decodedBuffer[:n*2]...)
 
 	if len(ua.data) > 96000 {
 		ua.data = ua.data[len(ua.data)-jitterSize:]
@@ -785,7 +786,7 @@ func (ae *audioEngine) SetVolume(nickname string, vc float32) {
 			data:              make([]byte, 0, 48000),
 			decoder:           opusDecoder,
 			volumeCoefficient: vc,
-			decodedBuffer:     make([]byte, 1920),
+			decodedBuffer:     make([]byte, 5760),
 		}
 
 		ae.usersAudio[nickname] = ua
@@ -796,11 +797,17 @@ func (ae *audioEngine) SetVolume(nickname string, vc float32) {
 }
 
 func (ae *audioEngine) start() error {
-	if ae.device != nil {
-		if err := ae.device.Start(); err != nil {
+	if ae.captureDevice != nil {
+		if err := ae.captureDevice.Start(); err != nil {
 			return err
 		}
-		ae.log.Info(0, "audio engine started")
+		ae.log.Info(0, "capture device started")
+	}
+	if ae.playbackDevice != nil {
+		if err := ae.playbackDevice.Start(); err != nil {
+			return err
+		}
+		ae.log.Info(0, "playback device started")
 	}
 	return nil
 }
@@ -808,13 +815,22 @@ func (ae *audioEngine) start() error {
 func (ae *audioEngine) Stop() {
 	ae.lifecycleMu.Lock()
 	defer ae.lifecycleMu.Unlock()
-
-	if ae.device != nil {
-		if err := ae.device.Stop(); err != nil {
-			ae.log.Error(0, "failed to stop malgo device", logger.Err(err))
+	ae.stopSendVocie <- struct{}{}
+	close(ae.stopSendVocie)
+	if ae.playbackDevice != nil {
+		if err := ae.playbackDevice.Stop(); err != nil {
+			ae.log.Error(0, "failed to stop playback device", logger.Err(err))
 		}
-		ae.device.Uninit()
-		ae.device = nil
+		ae.playbackDevice.Uninit()
+		ae.playbackDevice = nil
+	}
+
+	if ae.captureDevice != nil {
+		if err := ae.captureDevice.Stop(); err != nil {
+			ae.log.Error(0, "failed to stop capture device", logger.Err(err))
+		}
+		ae.captureDevice.Uninit()
+		ae.captureDevice = nil
 	}
 
 	if ae.malgoCtx != nil {
@@ -834,17 +850,17 @@ func (ae *audioEngine) Stop() {
 		}
 	}
 
-	// if ae.micResampler != nil {
-	// 	if err := ae.micResampler.Close(); err != nil {
-	// 		ae.log.Error(0, "failed to close mic resampler", logger.Err(err))
-	// 	}
-	// }
+	if ae.captureResampler != nil {
+		if err := ae.captureResampler.Close(); err != nil {
+			ae.log.Error(0, "failed to close capture resampler", logger.Err(err))
+		}
+	}
 
-	// if ae.headResampler != nil {
-	// 	if err := ae.headResampler.Close(); err != nil {
-	// 		ae.log.Error(0, "failed to close head resampler", logger.Err(err))
-	// 	}
-	// }
+	if ae.playbackResampler != nil {
+		if err := ae.playbackResampler.Close(); err != nil {
+			ae.log.Error(0, "failed to close playback resampler", logger.Err(err))
+		}
+	}
 
 	ae.log.Info(0, "audio engine stopped")
 }
@@ -897,18 +913,23 @@ func (ae *audioEngine) SetDisconnected() {
 
 func (ae *audioEngine) sendVoice() {
 	for {
-		voice := <-ae.micDataChan
-		if ae.mutedMicro.Load() {
-			continue
-		}
+		select {
+		case <-ae.stopSendVocie:
+			ae.log.Info(0, "stopping voice sending")
+			return
+		case voice := <-ae.micDataChan:
+			if ae.mutedMicro.Load() {
+				continue
+			}
 
-		ae.mu.Lock()
-		connected := ae.connected
-		netw := ae.netw
-		ae.mu.Unlock()
-		if connected && netw != nil {
-			if err := ae.netw.SendVoiceData(voice); err != nil {
-				ae.log.Error(ae.errLogCount, "failed to send voice data", logger.Err(err))
+			ae.mu.Lock()
+			connected := ae.connected
+			netw := ae.netw
+			ae.mu.Unlock()
+			if connected && netw != nil {
+				if err := ae.netw.SendVoiceData(voice); err != nil {
+					ae.log.Error(ae.errLogCount, "failed to send voice data", logger.Err(err))
+				}
 			}
 		}
 	}
@@ -927,6 +948,20 @@ func mixPCM16(dst, src []byte) {
 		}
 
 		binary.LittleEndian.PutUint16(dst[i:], uint16(int16(mixed)))
+	}
+}
+
+func mixBytesToInt16(int16s []int16, b []byte) {
+	samples := len(b) / 2
+	for i := 0; i < samples && i < len(int16s); i++ {
+		val := int16(binary.LittleEndian.Uint16(b[i*2 : i*2+2]))
+		mixed := int32(int16s[i]) + int32(val)
+		if mixed > math.MaxInt16 {
+			mixed = math.MaxInt16
+		} else if mixed < math.MinInt16 {
+			mixed = math.MinInt16
+		}
+		int16s[i] = int16(mixed)
 	}
 }
 
@@ -966,5 +1001,12 @@ func float32ToInt16(ints16 []int16, floats []float32) {
 			f = math.MinInt16
 		}
 		ints16[i] = int16(f)
+	}
+}
+
+func int16ToFloat32(ints16 []int16, floats []float32) {
+	for i := 0; i < len(floats) && i < len(ints16); i++ {
+		intt := ints16[i]
+		floats[i] = float32(intt)
 	}
 }
