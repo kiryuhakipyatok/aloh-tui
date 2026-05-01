@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"aloh-tui/internal/media/audio/filter"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/notifications"
 	"aloh-tui/pkg/errs"
@@ -37,6 +38,7 @@ type AudioEngine interface {
 	UserIsSpeaking() bool
 	OnOffDenoice() bool
 	OnOffAEC() bool
+	OnOffFilter() bool
 }
 
 type usersAudio struct {
@@ -59,6 +61,7 @@ type audioEngine struct {
 	muted      atomic.Bool
 	denoiced   atomic.Bool
 	aec        atomic.Bool
+	filtered   atomic.Bool
 
 	bytesBuffersPool sync.Pool
 	int16BuffersPool sync.Pool
@@ -74,6 +77,9 @@ type audioEngine struct {
 	userIsSpeaking atomic.Bool
 
 	rnnoise *rnnoise.RNNoise
+
+	lowShelfFilter  *filter.BiquadFilter
+	highShelfFilter *filter.BiquadFilter
 
 	notificationPos int
 
@@ -143,7 +149,7 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 		return nil, err
 	}
 
-	if err = opusEncoder.SetBitrate(64000); err != nil {
+	if err = opusEncoder.SetBitrate(40000); err != nil {
 		log.Error("failed to set bitrate to opus encoder", logger.Err(err))
 		return nil, err
 	}
@@ -155,6 +161,9 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 	preprocessor := speexdsp.NewPreprocessor(48000, 960)
 	preprocessor.SetEchoCanceller(echoCanceller)
 	preprocessor.EnableDenoise(false)
+
+	lowShelfFilter := filter.NewLowShelfFilter(48000, 200, 3)
+	highShelfFilter := filter.NewHighShelfFilter(48000, 3500, 3)
 
 	ae := &audioEngine{
 		sounds: sounds{
@@ -177,6 +186,9 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 			},
 		},
 
+		lowShelfFilter:  lowShelfFilter,
+		highShelfFilter: highShelfFilter,
+
 		voiceBuffer:          make([]byte, 1000),
 		denoicedBuffer:       make([]float32, frameLen),
 		float32Buffer:        make([]float32, frameLen),
@@ -192,10 +204,10 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 		echoCanceller: echoCanceller,
 		preprocessor:  preprocessor,
 		opusEncoder:   opusEncoder,
-		log:         sparseLogger,
-		threshold:   150,
-		rnnoise:     rnnoise,
-		micDataChan: make(chan []byte, 100),
+		log:           sparseLogger,
+		threshold:     150,
+		rnnoise:       rnnoise,
+		micDataChan:   make(chan []byte, 100),
 	}
 
 	ae.denoiced.Store(denoice)
@@ -217,15 +229,6 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 
 	ae.Microphones = microphones
 
-	for _, m := range ae.Microphones {
-		di, err := ctx.DeviceInfo(malgo.Capture, m.ID, malgo.Shared)
-		if err != nil {
-			log.Error("failed to get devices info", logger.Err(err))
-			return nil, err
-		}
-		log.Info("m", di.Name(), di.Formats, di.FormatCount)
-	}
-
 	var micId unsafe.Pointer
 	if microphone != "" {
 		id, err := ae.resolveCaptureDeviceByName(microphone)
@@ -245,7 +248,6 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 	captureConfig.Capture.DeviceID = micId
 	captureConfig.PeriodSizeInFrames = 960
 
-	playbackConfig.Playback.Format = malgo.FormatS16
 	playbackConfig.Playback.Channels = 1
 	playbackConfig.Playback.Format = malgo.FormatS16
 	playbackConfig.SampleRate = 0
@@ -422,6 +424,12 @@ func (ae *audioEngine) OnOffAEC() bool {
 	return !s
 }
 
+func (ae *audioEngine) OnOffFilter() bool {
+	s := ae.filtered.Load()
+	ae.filtered.Store(!s)
+	return !s
+}
+
 func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 	data := func(pOutputSample, pInputSamples []byte, framecount uint32) {
 		if ae.switching.Load() {
@@ -481,7 +489,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 						}
 					}
 
-					float32ToInt16(ae.pcmBuffer, ae.denoicedBuffer)
+					ae.float32ToInt16(ae.pcmBuffer, ae.denoicedBuffer)
 				} else {
 					var (
 						sum      float64
@@ -529,7 +537,9 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 					ae.workMic = ae.workMic[:len(ae.workMic)-frameLen]
 					continue
 				}
-
+				if ae.filtered.Load() {
+					ae.filter(ae.pcmBuffer)
+				}
 				n, err := ae.opusEncoder.Encode(ae.pcmBuffer, ae.voiceBuffer)
 				if err != nil {
 					ae.log.Error(ae.errLogCount, "failed to encode opus data", logger.Err(err))
@@ -977,7 +987,7 @@ func bytesToInt16(int16s []int16, b []byte) {
 	}
 }
 
-func float32ToInt16(ints16 []int16, floats []float32) {
+func (ae *audioEngine) float32ToInt16(ints16 []int16, floats []float32) {
 	for i := 0; i < len(floats) && i < len(ints16); i++ {
 		f := floats[i]
 		if f > math.MaxInt16 {
@@ -993,5 +1003,20 @@ func int16ToFloat32(ints16 []int16, floats []float32) {
 	for i := 0; i < len(floats) && i < len(ints16); i++ {
 		intt := ints16[i]
 		floats[i] = float32(intt)
+	}
+}
+
+func (ae *audioEngine) filter(samples []int16) {
+	for i := 0; i < len(samples); i++ {
+		filtered := ae.lowShelfFilter.Process(float32(samples[i]))
+		filtered = ae.highShelfFilter.Process(filtered)
+
+		if filtered > math.MaxInt16 {
+			filtered = math.MaxInt16
+		} else if filtered < math.MinInt16 {
+			filtered = math.MinInt16
+		}
+
+		samples[i] = int16(filtered)
 	}
 }

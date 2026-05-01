@@ -342,8 +342,9 @@ func (m Model) View() string {
 
 		denoiseText := fmt.Sprintf("denoise: %t", m.user.Data.Setup.Denoise)
 		aecText := fmt.Sprintf("echo cancelling: %t", m.user.Data.Setup.AEC)
+		filterText := fmt.Sprintf("filter: %t", m.user.Data.Setup.Filter)
 
-		setupText := lipgloss.JoinVertical(lipgloss.Left, denoiseText, "", aecText)
+		setupText := lipgloss.JoinVertical(lipgloss.Left, denoiseText, "", aecText, "", filterText)
 
 		setupContent := styles.ContentStyle.
 			Width(innerW).
@@ -411,14 +412,14 @@ func (m Model) View() string {
 
 		audioTitle := catTitleStyle.Render("audio controls:")
 		audioKeys := styles.ContentStyle.Render(fmt.Sprintf(
-			"%s : mute/unmute microphone\n%s : deafen (mute all sounds)\n%s : switch denoise (in settings)\n%s : switch echo canceller (in settings)",
-			keyStyle.Render("alt+v"), keyStyle.Render("alt+b"), keyStyle.Render("alt+d"), keyStyle.Render("alt+e"),
+			"%s : mute/unmute microphone\n%s : deafen (mute all sounds)\n%s : switch denoise (in settings)\n%s : switch echo canceller (in settings)\n%s : switch filter (in settings)",
+			keyStyle.Render("alt+v"), keyStyle.Render("alt+b"), keyStyle.Render("alt+d"), keyStyle.Render("alt+e"), keyStyle.Render("alt+f"),
 		))
 
 		usersTitle := catTitleStyle.Render("users (in connections):")
 		usersKeys := styles.ContentStyle.Render(fmt.Sprintf(
 			"%s : increase/decrease volume\n%s : mute/unmute user",
-			keyStyle.Render("alt+up/down"), keyStyle.Render("alt+f"),
+			keyStyle.Render("alt+up/down"), keyStyle.Render("alt+x"),
 		))
 
 		mainContent := lipgloss.JoinVertical(

@@ -44,7 +44,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.focusInputs()
 					return m, textinput.Blink
 				} else if m.zone.Get("top-left").InBounds(msg) && m.user.Networking != nil {
-					m.state = states.PROFILE_STATE
 					m.curWindow = windows.PROFILE_WINDOW
 					m.cursor = 0
 					m.focusInputs()
@@ -79,7 +78,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.focusInputs()
 					return m, textinput.Blink
 				} else {
-					if m.curWindow == windows.DEF_WINDOW {
+					if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
 						m.state = states.DEF_STATE
 						m.cursor = 0
 						m.focusInputs()
@@ -113,6 +112,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.OnOffDenoiceMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+			m.state = states.ERR_STATE
+			m.curWindow = windows.ERR_WINDOW
+		}
+
+	case commands.OnOffFilterMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
@@ -334,8 +340,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "alt+s", "alt+ы", "alt+S", "alt+Ы":
 			if m.state != states.START_STATE && m.user.Networking != nil {
-				m.prState = m.state
-				m.state = states.SETTINGS_STATE
 				m.curWindow = windows.SETTINGS_WINDOW
 			}
 
@@ -349,10 +353,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, commands.OnOffAECCmd(m.user))
 			}
 
+		case "alt+f", "alt+F", "alt+а", "alt+А":
+			if m.curWindow == windows.SETTINGS_WINDOW {
+				cmds = append(cmds, commands.OnOffFilterCmd(m.user))
+			}
+
 		case "alt+c", "alt+с", "alt+C", "alt+С":
 			if m.state != states.START_STATE {
-				m.prState = m.state
-				m.state = states.CONNECTIONS_STATE
 				m.curWindow = windows.CONNECTIONS_WINDOW
 				m.connectionsList.SetSize(m.width/2, m.height-4)
 			}
@@ -398,8 +405,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "alt+h", "alt+H", "alt+р", "alt+Р":
 			if m.state != states.START_STATE {
-				m.prState = m.state
-				m.state = states.HELP_STATE
 				m.curWindow = windows.HELP_WINDOW
 			}
 
@@ -408,7 +413,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, commands.MuteUnmuteCmd(m.user.Engines.AudioEngine))
 			}
 
-		case "alt+f", "alt+а", "alt+F", "alt+А":
+		case "alt+x", "alt+X", "alt+ч", "alt+Ч":
 			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
 				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
 					cmds = append(cmds, commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.nickname)), m.updateConnectionItemList(i.nickname, i.volumeCoefficient, !i.muted))
@@ -416,31 +421,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "esc":
-
 			if m.curWindow != windows.DEF_WINDOW {
+				prevWindow := m.curWindow
+				m.curWindow = windows.DEF_WINDOW
 
-				if m.curWindow == windows.ERR_WINDOW {
+				if prevWindow == windows.ERR_WINDOW {
 					m.err = nil
 					if m.prState == states.LOAD_STATE {
 						m.state = states.DEF_STATE
 					} else {
 						m.state = m.prState
 					}
-					m.chatTextInput.Reset()
-					for i := range m.regTextInputs {
-						m.regTextInputs[i].Reset()
-					}
-					for i := range m.connTextInputs {
-						m.connTextInputs[i].Reset()
-					}
 				}
-
-				m.curWindow = windows.DEF_WINDOW
-				if m.prState != states.START_STATE {
-					m.state = m.prState
-				}
-
 			}
+
 			m.cursor = 0
 			m.focusInputs()
 			return m, textinput.Blink
@@ -448,7 +442,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab":
 			if m.curWindow == windows.DEF_WINDOW {
 				switch m.state {
-
 				case states.LOAD_STATE:
 					return m, nil
 				case states.REG_STATE:
@@ -539,9 +532,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter":
+			if m.curWindow == windows.SETTINGS_WINDOW {
+				if i, ok := m.microphonesList.SelectedItem().(micItem); ok {
+					cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.name))
+				}
+				break
+			} else if m.curWindow != windows.DEF_WINDOW && m.curWindow != windows.START_WINDOW {
+				break
+			}
 			switch m.state {
 			case states.REG_STATE:
-
 				m.prState = m.state
 				m.state = states.LOAD_STATE
 				for i := range m.regTextInputs {
@@ -579,12 +579,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.logingInput[i].Reset()
 				}
 
-			case states.SETTINGS_STATE:
-				if m.curWindow == windows.SETTINGS_WINDOW {
-					if i, ok := m.microphonesList.SelectedItem().(micItem); ok {
-						cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.name))
-					}
-				}
+			// case states.SETTINGS_STATE:
+			// 	if m.curWindow == windows.SETTINGS_WINDOW {
+			// 		if i, ok := m.microphonesList.SelectedItem().(micItem); ok {
+			// 			cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.name))
+			// 		}
+			// 	}
 
 			case states.CONN_STATE:
 				m.prState = m.state
@@ -631,28 +631,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.curWindow = windows.PROFILE_WINDOW
 			}
 		}
+
 	}
 
-	switch m.state {
-	case states.REG_STATE:
-		for i := range m.regTextInputs {
-			m.regTextInputs[i], cmd = m.regTextInputs[i].Update(msg)
-			cmds = append(cmds, cmd)
-		}
-	case states.CONN_STATE:
-		for i := range m.connTextInputs {
-			m.connTextInputs[i], cmd = m.connTextInputs[i].Update(msg)
-			cmds = append(cmds, cmd)
-		}
+	if m.curWindow == windows.DEF_WINDOW {
+		switch m.state {
+		case states.REG_STATE:
+			for i := range m.regTextInputs {
+				m.regTextInputs[i], cmd = m.regTextInputs[i].Update(msg)
+				cmds = append(cmds, cmd)
+			}
+		case states.CONN_STATE:
+			for i := range m.connTextInputs {
+				m.connTextInputs[i], cmd = m.connTextInputs[i].Update(msg)
+				cmds = append(cmds, cmd)
+			}
 
-	case states.CHAT_STATE:
-		m.chatTextInput, cmd = m.chatTextInput.Update(msg)
-		cmds = append(cmds, cmd)
-
-	case states.LOGIN_STATE:
-		for i := range m.logingInput {
-			m.logingInput[i], cmd = m.logingInput[i].Update(msg)
+		case states.CHAT_STATE:
+			m.chatTextInput, cmd = m.chatTextInput.Update(msg)
 			cmds = append(cmds, cmd)
+
+		case states.LOGIN_STATE:
+			for i := range m.logingInput {
+				m.logingInput[i], cmd = m.logingInput[i].Update(msg)
+				cmds = append(cmds, cmd)
+			}
 		}
 	}
 
