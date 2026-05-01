@@ -396,18 +396,14 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 
 func (ae *audioEngine) MuteUnmuteMicro() bool {
 	s := ae.mutedMicro.Load()
-	if ae.muted.Load() && s {
-		ae.muted.Store(false)
-	}
+	ae.muted.Store(false)
 	ae.mutedMicro.Store(!s)
 	return !s
 }
 
 func (ae *audioEngine) MuteUnmute() bool {
 	s := ae.muted.Load()
-	if ae.mutedMicro.Load() && s {
-		ae.mutedMicro.Store(false)
-	}
+	ae.mutedMicro.Store(false)
 	ae.muted.Store(!s)
 	return !s
 }

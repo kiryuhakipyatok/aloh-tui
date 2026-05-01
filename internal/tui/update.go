@@ -413,7 +413,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, commands.MuteUnmuteCmd(m.user.Engines.AudioEngine))
 			}
 
-		case "alt+x", "alt+X", "alt+ч", "alt+Ч":
+		case "alt+z", "alt+Z", "alt+я", "alt+Я":
 			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
 				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
 					cmds = append(cmds, commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.nickname)), m.updateConnectionItemList(i.nickname, i.volumeCoefficient, !i.muted))
