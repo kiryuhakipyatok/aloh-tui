@@ -163,7 +163,7 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 	preprocessor.EnableDenoise(false)
 
 	lowShelfFilter := filter.NewLowShelfFilter(48000, 200, 3)
-	highShelfFilter := filter.NewHighShelfFilter(48000, 3500, 3)
+	highShelfFilter := filter.NewHighShelfFilter(48000, 3000, 3)
 
 	ae := &audioEngine{
 		sounds: sounds{
