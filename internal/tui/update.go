@@ -9,6 +9,7 @@ import (
 	"aloh-tui/internal/tui/components/windows"
 	"aloh-tui/internal/utils"
 	"aloh-tui/pkg/logger"
+	"math"
 	"slices"
 	"time"
 
@@ -370,14 +371,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "alt+up":
-			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
+			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected && m.user.Engines.AudioEngine != nil {
 				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
 					vc := i.volumeCoefficient
 					if vc >= MAX_VOLUME {
 						return m, nil
 					}
 
-					vc += 0.1
+					vc = float32(math.Round(float64(vc+0.1)*10) / 10)
 
 					if vc > MAX_VOLUME {
 						vc = MAX_VOLUME
@@ -388,13 +389,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "alt+down":
-			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
+			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected && m.user.Engines.AudioEngine != nil {
 				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
 					vc := i.volumeCoefficient
 					if vc <= MIN_VOLUME {
 						return m, nil
 					}
-					vc -= 0.1
+					vc = float32(math.Round(float64(vc-0.1)*10) / 10)
 					if vc < MIN_VOLUME {
 						vc = MIN_VOLUME
 					} else if vc == 0 {
