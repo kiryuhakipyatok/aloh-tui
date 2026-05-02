@@ -188,7 +188,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 				log.Error("failed to create networking", logger.Err(err), logNickname)
 				return nil, err
 			}
-			audioEngine, err := audio.NewAudioEngine(appLogger, user.Data.Devices.Microphone, user.Data.Setup.Denoise, user.Data.Setup.AEC)
+			audioEngine, err := audio.NewAudioEngine(appLogger, user.Data.Devices.Microphone, user.Data.Setup.Denoise, user.Data.Setup.AEC, userData.Setup.Filter)
 			if err != nil {
 				log.Error("failed to create audio engine", logger.Err(err))
 				return nil, err

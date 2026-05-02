@@ -57,6 +57,8 @@ type audioEngine struct {
 	playbackDevice *malgo.Device
 	malgoCtx       *malgo.AllocatedContext
 
+	leftChannel bool
+
 	mutedMicro atomic.Bool
 	muted      atomic.Bool
 	denoiced   atomic.Bool
@@ -103,6 +105,7 @@ type audioEngine struct {
 	workMix              []int16
 	resampledWorkMix     []int16
 	resampledWorkMic     []int16
+	monoCaptureBuffer    []int16
 
 	connected bool
 
@@ -136,7 +139,7 @@ const (
 	rnnoiseFrameSize = 480
 )
 
-func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (AudioEngine, error) {
+func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered bool) (AudioEngine, error) {
 	log := l.AddOp("audioEngine")
 
 	sparseLogger := l.Sparse(20)
@@ -159,7 +162,11 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 	echoCanceller := speexdsp.NewEchoCanceller(1, 1, 48000, 960, 4800)
 
 	preprocessor := speexdsp.NewPreprocessor(48000, 960)
-	preprocessor.SetEchoCanceller(echoCanceller)
+
+	if aec {
+		preprocessor.SetEchoCanceller(echoCanceller)
+	}
+
 	preprocessor.EnableDenoise(false)
 
 	lowShelfFilter := filter.NewLowShelfFilter(48000, 200, 3)
@@ -200,6 +207,7 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 		workMic:              make([]int16, 4096),
 		resampledWorkMix:     make([]int16, 4096),
 		resampledWorkMic:     make([]int16, 4096),
+		monoCaptureBuffer:    make([]int16, 0, 4096),
 
 		echoCanceller: echoCanceller,
 		preprocessor:  preprocessor,
@@ -212,6 +220,7 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 
 	ae.denoiced.Store(denoice)
 	ae.aec.Store(aec)
+	ae.filtered.Store(filtered)
 
 	ctx, err := malgo.InitContext(audioBackends, malgo.ContextConfig{}, nil)
 	if err != nil {
@@ -243,7 +252,7 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec bool) (Aud
 	playbackConfig := malgo.DefaultDeviceConfig(malgo.Playback)
 
 	captureConfig.Capture.Format = malgo.FormatS16
-	captureConfig.Capture.Channels = 1
+	captureConfig.Capture.Channels = 0
 	captureConfig.SampleRate = 0
 	captureConfig.Capture.DeviceID = micId
 	captureConfig.PeriodSizeInFrames = 960
@@ -352,7 +361,7 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 
 	captureConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	captureConfig.Capture.Format = malgo.FormatS16
-	captureConfig.Capture.Channels = 1
+	captureConfig.Capture.Channels = 0
 	captureConfig.SampleRate = 0
 	captureConfig.Capture.DeviceID = micId
 
@@ -417,6 +426,13 @@ func (ae *audioEngine) OnOffDenoice() bool {
 func (ae *audioEngine) OnOffAEC() bool {
 	s := ae.aec.Load()
 	ae.aec.Store(!s)
+	ae.mu.Lock()
+	if s {
+		ae.preprocessor.SetEchoCanceller(nil)
+	} else {
+		ae.preprocessor.SetEchoCanceller(ae.echoCanceller)
+	}
+	ae.mu.Unlock()
 	return !s
 }
 
@@ -447,12 +463,23 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 
 			bytesToInt16(ae.micNativeBuffer[:nativeSamples], pInputSamples)
 
+			usingMicBuffer := ae.micNativeBuffer[:nativeSamples]
+
+			if ae.captureDevice.CaptureChannels() == 2 {
+				monoSamples := nativeSamples / 2
+				if len(ae.monoCaptureBuffer) < monoSamples {
+					ae.monoCaptureBuffer = make([]int16, monoSamples)
+				}
+				ae.stereoToMono(ae.micNativeBuffer[:nativeSamples], ae.monoCaptureBuffer[:monoSamples])
+				usingMicBuffer = ae.monoCaptureBuffer[:monoSamples]
+			}
+
 			outLen := int(float64(nativeSamples)*(48000.0/float64(ae.captureDevice.SampleRate()))) + 100
 			if len(ae.resampledWorkMic) < outLen {
 				ae.resampledWorkMic = make([]int16, outLen)
 			}
 
-			_, out, err := ae.captureResampler.ProcessInt(0, ae.micNativeBuffer[:nativeSamples], ae.resampledWorkMic)
+			_, out, err := ae.captureResampler.ProcessInt(0, usingMicBuffer, ae.resampledWorkMic)
 			if err == nil {
 				ae.workMic = append(ae.workMic, ae.resampledWorkMic[:out]...)
 			}
@@ -461,11 +488,15 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 				chunk := ae.workMic[:frameLen]
 				copy(ae.pcmBuffer, chunk)
 
+				ae.mu.Lock()
 				if ae.aec.Load() {
 					ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
 					ae.preprocessor.Run(ae.echolessBufferInt16s)
 					copy(ae.pcmBuffer, ae.echolessBufferInt16s)
+				} else {
+					ae.preprocessor.Run(ae.pcmBuffer)
 				}
+				ae.mu.Unlock()
 
 				var voiceDetected bool
 
@@ -1015,4 +1046,64 @@ func (ae *audioEngine) filter(samples []int16) {
 
 		samples[i] = int16(filtered)
 	}
+}
+
+func (ae *audioEngine) stereoToMono(s []int16, m []int16) {
+	frames := len(s) / 2
+
+	var (
+		lsum      float64
+		lzcr      int
+		llastSign bool
+
+		rsum      float64
+		rzcr      int
+		rlastSign bool
+	)
+
+	for i := 0; i < frames; i++ {
+		lsample := s[i*2]
+		rsample := s[i*2+1]
+
+		lval := float64(lsample)
+		rval := float64(rsample)
+
+		lsum += lval * lval
+		rsum += rval * rval
+
+		lsign := lsample > 0
+		rsign := rsample > 0
+
+		if i > 0 && lsign != llastSign {
+			lzcr++
+		}
+
+		if i > 0 && rsign != rlastSign {
+			rzcr++
+		}
+
+		llastSign = lsign
+		rlastSign = rsign
+	}
+
+	lrms := math.Sqrt(lsum / float64(len(s)/2))
+	rrms := math.Sqrt(rsum / float64(len(s)/2))
+
+	if lrms > 100 && lzcr > 5 {
+		ae.leftChannel = true
+	} else if rrms > 100 && rzcr > 5 {
+		ae.leftChannel = false
+	}
+
+	switch ae.leftChannel {
+	case true:
+		for i := 0; i < frames && i < len(m); i++ {
+			m[i] = s[i*2]
+		}
+	case false:
+		for i := 0; i < frames && i < len(m); i++ {
+			m[i] = s[i*2+1]
+		}
+	}
+
 }
