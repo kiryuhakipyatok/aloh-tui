@@ -450,7 +450,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "esc":
-			if m.state == states.ERR_STATE {
+			switch m.state {
+			case states.ERR_STATE:
+				m.err = nil
+				m.curWindow = windows.DEF_WINDOW
+				if m.prState == states.LOAD_STATE {
+					m = m.syncTabState()
+				} else {
+					m.state = m.prState
+				}
+			case states.HELP_STATE:
 				m.err = nil
 				m.curWindow = windows.DEF_WINDOW
 				if m.prState == states.LOAD_STATE {

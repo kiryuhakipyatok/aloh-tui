@@ -60,7 +60,7 @@ func (m Model) View() string {
 
 	rightW := lipgloss.Width(rightPart)
 
-	footerData := "ALT+Q: quit   |   TAB/ARROWS: switch tabs   |   ESC: back"
+	footerData := "ALT+Q: quit  |  TAB/ARROWS: switch tabs  |  ESC: back  |  ALT+H: help"
 
 	leftPart := lipgloss.NewStyle().
 		Foreground(cDim).
