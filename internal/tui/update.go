@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/AvraamMavridis/randomcolor"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -24,6 +25,40 @@ const (
 	MAX_VOLUME = 4.0
 	MIN_VOLUME = 0.0
 )
+
+func (m Model) syncTabState() Model {
+	m.curWindow = windows.DEF_WINDOW
+	if !m.isLoggedIn() {
+		switch m.activeTab {
+		case 0:
+			m.state = states.REG_STATE
+		case 1:
+			m.state = states.LOGIN_STATE
+		}
+	} else {
+		switch m.activeTab {
+		case 0:
+			if m.connected {
+				m.state = states.DEF_STATE
+			} else {
+				m.state = states.CONN_STATE
+			}
+		case 1:
+			m.state = states.CHAT_STATE
+		case 2:
+			if m.connected {
+				m.state = states.LEAVE_STATE
+			} else {
+				m.state = states.DEF_STATE
+			}
+		default:
+			m.state = states.DEF_STATE
+		}
+	}
+	m.cursor = 0
+	m.focusInputs()
+	return m
+}
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -37,66 +72,51 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		switch msg.Button {
 		case tea.MouseButtonLeft:
-			if msg.Action == tea.MouseActionPress {
-				if m.zone.Get("top-left").InBounds(msg) && m.user.Networking == nil {
-					m.prState = m.state
-					m.state = states.REG_STATE
-					m.cursor = 0
-					m.focusInputs()
-					return m, textinput.Blink
-				} else if m.zone.Get("top-left").InBounds(msg) && m.user.Networking != nil {
-					m.curWindow = windows.PROFILE_WINDOW
-					m.cursor = 0
-					m.focusInputs()
-					return m, textinput.Blink
-				} else if m.zone.Get("bot-left").InBounds(msg) && m.user.Networking == nil {
-					m.prState = m.state
-					m.state = states.LOGIN_STATE
-					m.cursor = 0
-					m.focusInputs()
-					return m, textinput.Blink
-				} else if m.zone.Get("bot-left").InBounds(msg) && m.user.Networking != nil && m.connected {
-					m.prState = m.state
+			if msg.Action == tea.MouseActionRelease {
+				if m.curWindow == windows.START_WINDOW && m.zone.Get("start").InBounds(msg) {
 					m.state = states.LOAD_STATE
-					m.cursor = 0
-					cmds = append(cmds, commands.LeaveCmd(m.user.Networking, m.user.Engines.AudioEngine))
-				} else if m.zone.Get("bot-left").InBounds(msg) && m.user.Networking != nil {
-					m.prState = m.state
-					m.state = states.CONN_STATE
-					m.cursor = 0
-					m.focusInputs()
-					return m, textinput.Blink
-				} else if m.zone.Get("right").InBounds(msg) && m.user.Networking != nil && m.connected {
-					m.prState = m.state
-					m.state = states.CHAT_STATE
-					m.cursor = 0
-					m.focusInputs()
-					return m, textinput.Blink
-				} else if m.zone.Get("start").InBounds(msg) {
-					m.state = states.DEF_STATE
 					m.curWindow = windows.DEF_WINDOW
-					m.cursor = 0
-					m.focusInputs()
-					return m, textinput.Blink
-				} else {
-					if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
-						m.state = states.DEF_STATE
-						m.cursor = 0
-						m.focusInputs()
-						return m, textinput.Blink
+					if m.user.Data.Personal.Nickname != "" && m.user.Data.Personal.RegisterTime != "" && m.user.Networking == nil {
+						cmds = append(cmds, commands.AuthCmd(m.user, m.log, nil))
+					} else {
+						m = m.syncTabState()
 					}
+					return m, textinput.Blink
+				} else if m.curWindow == windows.DEF_WINDOW {
+					if m.zone.Get("registerT").InBounds(msg) || m.zone.Get("registerW").InBounds(msg) {
+						m.activeTab = 0
+					} else if m.zone.Get("loginT").InBounds(msg) || m.zone.Get("loginW").InBounds(msg) {
+						m.activeTab = 1
+					} else if m.zone.Get("friendsT").InBounds(msg) || m.zone.Get("friendsW").InBounds(msg) {
+						m.activeTab = 0
+					} else if m.zone.Get("chatT").InBounds(msg) || m.zone.Get("chatW").InBounds(msg) {
+						m.activeTab = 1
+					} else if m.zone.Get("voiceT").InBounds(msg) || m.zone.Get("voiceW").InBounds(msg) {
+						m.activeTab = 2
+					} else if m.zone.Get("videoT").InBounds(msg) || m.zone.Get("videoW").InBounds(msg) {
+						m.activeTab = 3
+					} else if m.zone.Get("profileT").InBounds(msg) || m.zone.Get("profileW").InBounds(msg) {
+						m.activeTab = 4
+					} else if m.zone.Get("settingsT").InBounds(msg) || m.zone.Get("settingsW").InBounds(msg) {
+						m.activeTab = 5
+					} else {
+						m.unfocusInputs()
+						return m, nil
+					}
+					m = m.syncTabState()
+					return m, textinput.Blink
 				}
 			}
 
 		case tea.MouseButtonWheelUp:
-			if m.connected && m.state == states.CHAT_STATE && m.user.Networking != nil && m.zone.Get("right").InBounds(msg) {
+			if m.isLoggedIn() && m.activeTab == 1 && m.connected {
 				if m.chatOffset < m.getMaxChatOffset() {
 					m.chatOffset++
 				}
 			}
 
 		case tea.MouseButtonWheelDown:
-			if m.connected && m.state == states.CHAT_STATE && m.user.Networking != nil && m.zone.Get("right").InBounds(msg) {
+			if m.isLoggedIn() && m.activeTab == 1 && m.connected {
 				m.chatOffset--
 				if m.chatOffset < 0 {
 					m.chatOffset = 0
@@ -112,32 +132,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	case commands.OnOffDenoiceMsg:
-		if msg.Err != nil {
-			m.err = msg.Err
-			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
+	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg, commands.MuteUnmuteUserMsg:
+		var err error
+		switch m := msg.(type) {
+		case commands.OnOffDenoiceMsg:
+			err = m.Err
+		case commands.OnOffFilterMsg:
+			err = m.Err
+		case commands.OnOffAECMsg:
+			err = m.Err
+		case commands.UsersVolumeMsg:
+			err = m.Err
+		case commands.MuteUnmuteUserMsg:
+			err = m.Err
 		}
 
-	case commands.OnOffFilterMsg:
-		if msg.Err != nil {
-			m.err = msg.Err
+		if err != nil {
+			m.err = err
 			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
-		}
-
-	case commands.OnOffAECMsg:
-		if msg.Err != nil {
-			m.err = msg.Err
-			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
-		}
-
-	case commands.UsersVolumeMsg:
-		if msg.Err != nil {
-			m.err = msg.Err
-			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
+		} else {
+			m.focusInputs()
+			return m, textinput.Blink
 		}
 
 	case commands.MuteMsg:
@@ -156,52 +171,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case commands.MuteUnmuteUserMsg:
-		if msg.Err != nil {
-			m.err = msg.Err
-			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
-		}
-		m.focusInputs()
-		return m, textinput.Blink
-
 	case commands.ConnectToUserMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
 		} else {
-			m.state = states.CHAT_STATE
 			m.connected = true
-			m.focusInputs()
 			m.user.Engines.AudioEngine.SetConnected()
+			m.activeTab = 1
+			m = m.syncTabState()
 			cmds = append(cmds, textinput.Blink, commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname))
 			return m, tea.Batch(cmds...)
 		}
+
 	case commands.SendInChatMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
 		} else {
-			m.state = states.CHAT_STATE
-			m.focusInputs()
+			m.activeTab = 1
+			m = m.syncTabState()
 			return m, textinput.Blink
 		}
+
 	case commands.LeaveMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
 		} else {
-			m.state = states.CONN_STATE
 			m.connected = false
 			m.user.Engines.AudioEngine.SetDisconnected()
 			m.messages = []commands.ChatMessage{}
 			m.connections = []string{}
 			m.user.Engines.AudioEngine.PlayNotification()
-			m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "System", Text: "you disconnected!"})
-			m.focusInputs()
+			m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: "you disconnected!"})
+
+			m.activeTab = 0
+			m = m.syncTabState()
 			return m, textinput.Blink
 		}
 
@@ -209,15 +215,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
 			if msg.Typee != auth.DEFAULT {
 				m.user.Data = entities.Data{}
 			}
 		} else {
-			m.state = states.DEF_STATE
+			m.activeTab = 0
+			m = m.syncTabState()
+
 			if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
 				m.setupMicrohonesList(m.user.Data.Devices.Microphone)
-
 				m.user.Networking.ChatCallback(func(id string, data []byte) {
 					t := time.Now().Format("15:04:05")
 					msg := string(data)
@@ -237,7 +243,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 				commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 				commands.TickCmd())
-
 		}
 
 	case commands.ChatMessage:
@@ -249,7 +254,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
 		} else {
 			m.online = msg.Online
 		}
@@ -258,23 +262,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
 		}
 
 	case commands.SessionsUpdateMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-			m.curWindow = windows.ERR_WINDOW
 		} else {
-
 			joined := utils.Difference(msg.Sessions, m.connections)
 
 			for _, v := range joined {
 				color := lipgloss.Color(randomcolor.GetRandomColorInHex())
 				nickname := lipgloss.NewStyle().Foreground(color).Render(v)
 				m.connections = append(m.connections, nickname)
-				m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "System", Text: nickname + " joined the chat!"})
+				m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: nickname + " joined the chat!"})
 				m.connected = true
 				m.user.Engines.AudioEngine.SetConnected()
 				cmds = append(cmds, commands.SetupUserVolumeCmd(m.user, v), commands.SetupUserMuteCmd(m.user, v))
@@ -287,7 +288,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.connections = slices.DeleteFunc(m.connections, func(n string) bool {
 					return n == v
 				})
-				m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "System", Text: v + " disconnected!"})
+				m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: v + " disconnected!"})
 				m.user.Engines.AudioEngine.PlayNotification()
 			}
 
@@ -296,7 +297,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.user.Engines.AudioEngine != nil {
 					m.user.Engines.AudioEngine.SetDisconnected()
 				}
-
 			}
 
 			if len(joined) > 0 && !m.updateTick {
@@ -306,28 +306,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			cmds = append(cmds, m.updateConnectionsList())
 
-			if len(joined) > 0 && (m.state == states.CONN_STATE || (m.state == states.LOAD_STATE && m.prState == states.CONN_STATE)) {
-				m.state = states.CHAT_STATE
-				m.focusInputs()
+			if len(joined) > 0 && (m.activeTab == 0 || m.prState == states.CONN_STATE) {
+				m.activeTab = 1
+				m = m.syncTabState()
 			}
-
 		}
+
+	case spinner.TickMsg:
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case commands.TickMsg:
 		if m.state != states.LOAD_STATE {
 			if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" {
-				cmds = append(cmds, commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname))
-			}
-
-			if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" {
-				cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname))
+				cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname), commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname))
 			}
 		}
-
 		cmds = append(cmds, commands.TickCmd())
 
 	case commands.AnimTickMsg:
-
 		if m.curWindow == windows.START_WINDOW {
 			m.animFrame++
 			return m, commands.AnimTickCmd()
@@ -335,61 +332,80 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+с", "alt+й", "alt+Й", "ctrl+С", "ctrl+C", "ctrl+c", "alt+q", "alt+Q":
+		case "ctrl+c", "alt+й", "alt+Й", "ctrl+С", "ctrl+C", "alt+q", "alt+Q":
 			m.Clean()
 			return m, tea.Quit
 
 		case "alt+s", "alt+ы", "alt+S", "alt+Ы":
-			if m.state != states.START_STATE && m.user.Networking != nil {
-				m.curWindow = windows.SETTINGS_WINDOW
+			if m.isLoggedIn() {
+				m.activeTab = 5
+				m = m.syncTabState()
+			}
+		case "alt+c", "alt+с", "alt+C", "alt+С":
+			if m.isLoggedIn() {
+				m.activeTab = 0
+				m = m.syncTabState()
+			}
+		case "alt+a", "alt+A", "alt+ф", "alt+Ф":
+			if m.isLoggedIn() {
+				m.activeTab = 2
+				m = m.syncTabState()
 			}
 
 		case "alt+d", "alt+в", "alt+D", "alt+В":
-			if m.curWindow == windows.SETTINGS_WINDOW {
+			if m.isLoggedIn() && m.activeTab == 5 {
 				cmds = append(cmds, commands.OnOffDenoiceCmd(m.user))
 			}
-
 		case "alt+e", "alt+у", "alt+E", "alt+У":
-			if m.curWindow == windows.SETTINGS_WINDOW {
+			if m.isLoggedIn() && m.activeTab == 5 {
 				cmds = append(cmds, commands.OnOffAECCmd(m.user))
 			}
-
 		case "alt+f", "alt+F", "alt+а", "alt+А":
-			if m.curWindow == windows.SETTINGS_WINDOW {
+			if m.isLoggedIn() && m.activeTab == 5 {
 				cmds = append(cmds, commands.OnOffFilterCmd(m.user))
-			}
-
-		case "alt+c", "alt+с", "alt+C", "alt+С":
-			if m.state != states.START_STATE {
-				m.curWindow = windows.CONNECTIONS_WINDOW
-				m.connectionsList.SetSize(m.width/2, m.height-4)
 			}
 
 		case "alt+v", "alt+М", "alt+V", "alt+м":
 			if m.user.Engines.AudioEngine != nil {
 				cmds = append(cmds, commands.MuteUnmuteMicCmd(m.user.Engines.AudioEngine))
 			}
+		case "alt+b", "alt+и", "alt+B", "alt+И":
+			if m.user.Engines.AudioEngine != nil {
+				cmds = append(cmds, commands.MuteUnmuteCmd(m.user.Engines.AudioEngine))
+			}
+
+		case "alt+h", "alt+H", "alt+р", "alt+Р":
+			if m.curWindow == windows.DEF_WINDOW {
+				if m.state == states.HELP_STATE {
+					m = m.syncTabState()
+					return m, textinput.Blink
+				}
+				m.state = states.HELP_STATE
+			}
+
+		case "alt+z", "alt+Z", "alt+я", "alt+Я":
+			if m.isLoggedIn() && m.activeTab == 2 && m.connected {
+				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
+					cmds = append(cmds, commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.nickname)), m.updateConnectionItemList(i.nickname, i.volumeCoefficient, !i.muted))
+				}
+			}
 
 		case "alt+up":
-			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected && m.user.Engines.AudioEngine != nil {
+			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
 				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
 					vc := i.volumeCoefficient
 					if vc >= MAX_VOLUME {
 						return m, nil
 					}
-
 					vc = float32(math.Round(float64(vc+0.1)*10) / 10)
-
 					if vc > MAX_VOLUME {
 						vc = MAX_VOLUME
 					}
 					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
 				}
-
 			}
-
 		case "alt+down":
-			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected && m.user.Engines.AudioEngine != nil {
+			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
 				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
 					vc := i.volumeCoefficient
 					if vc <= MIN_VOLUME {
@@ -398,276 +414,198 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					vc = float32(math.Round(float64(vc-0.1)*10) / 10)
 					if vc < MIN_VOLUME {
 						vc = MIN_VOLUME
-					} else if vc == 0 {
 					}
 					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
 				}
 			}
 
-		case "alt+h", "alt+H", "alt+р", "alt+Р":
-			if m.state != states.START_STATE {
-				m.curWindow = windows.HELP_WINDOW
-			}
-
-		case "alt+b", "alt+и", "alt+B", "alt+И":
-			if m.user.Engines.AudioEngine != nil {
-				cmds = append(cmds, commands.MuteUnmuteCmd(m.user.Engines.AudioEngine))
-			}
-
-		case "alt+z", "alt+Z", "alt+я", "alt+Я":
-			if m.curWindow == windows.CONNECTIONS_WINDOW && m.connected {
-				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
-					cmds = append(cmds, commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.nickname)), m.updateConnectionItemList(i.nickname, i.volumeCoefficient, !i.muted))
+		case "tab", "right":
+			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
+				maxTabs := 2
+				if m.isLoggedIn() {
+					maxTabs = 6
 				}
-			}
-
-		case "esc":
-			if m.curWindow != windows.DEF_WINDOW {
-				prevWindow := m.curWindow
-				m.curWindow = windows.DEF_WINDOW
-
-				if prevWindow == windows.ERR_WINDOW {
-					m.err = nil
-					if m.prState == states.LOAD_STATE {
-						m.state = states.DEF_STATE
-					} else {
-						m.state = m.prState
-					}
+				if m.activeTab+1 >= maxTabs {
+					m.activeTab = 0
+				} else {
+					m.activeTab++
 				}
-			}
-
-			m.cursor = 0
-			m.focusInputs()
-			return m, textinput.Blink
-
-		case "tab":
-			if m.curWindow == windows.DEF_WINDOW {
-				switch m.state {
-				case states.LOAD_STATE:
-					return m, nil
-				case states.REG_STATE:
-					if m.user.Networking != nil {
-						m.state = states.PROFILE_STATE
-					} else {
-						m.state = states.LOGIN_STATE
-					}
-				case states.CONN_STATE:
-					m.state = states.CHAT_STATE
-
-				case states.CHAT_STATE:
-					if m.user.Networking != nil {
-						m.state = states.PROFILE_STATE
-					} else {
-						m.state = states.REG_STATE
-					}
-
-				case states.LOGIN_STATE:
-					if m.user.Networking != nil {
-						m.state = states.PROFILE_STATE
-					} else {
-						m.state = states.REG_STATE
-					}
-
-				case states.PROFILE_STATE:
-
-					if m.connected {
-						m.state = states.LEAVE_STATE
-					} else {
-						m.state = states.CONN_STATE
-					}
-
-				case states.LEAVE_STATE:
-					m.state = states.CHAT_STATE
-				case states.START_STATE:
-					m.state = states.LOAD_STATE
-					m.curWindow = windows.DEF_WINDOW
-					if m.user.Data.Personal.Nickname != "" && m.user.Data.Personal.RegisterTime != "" && m.user.Networking == nil {
-						cmds = append(cmds, commands.AuthCmd(m.user, m.log, nil))
-					} else {
-						m.state = states.DEF_STATE
-						m.focusInputs()
-					}
-
-				default:
-					if m.user.Networking != nil {
-						m.state = states.PROFILE_STATE
-					} else {
-						m.state = states.REG_STATE
-					}
-
-				}
-
-				m.cursor = 0
-				m.curWindow = windows.DEF_WINDOW
-				m.focusInputs()
+				m = m.syncTabState()
 				return m, textinput.Blink
 			}
 
+		case "shift+tab", "left":
+			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
+				maxTabs := 2
+				if m.isLoggedIn() {
+					maxTabs = 6
+				}
+				if m.activeTab-1 < 0 {
+					m.activeTab = maxTabs - 1
+				} else {
+					m.activeTab--
+				}
+				m = m.syncTabState()
+				return m, textinput.Blink
+			}
+
+		case "esc":
+			if m.state == states.ERR_STATE {
+				m.err = nil
+				m.curWindow = windows.DEF_WINDOW
+				if m.prState == states.LOAD_STATE {
+					m = m.syncTabState()
+				} else {
+					m.state = m.prState
+				}
+			}
+			return m, textinput.Blink
+
 		case "up":
-			if m.cursor > 0 && m.state != states.CHAT_STATE {
+			if m.activeTab != 2 && m.activeTab != 5 && m.cursor > 0 {
 				m.cursor--
 				m.focusInputs()
 				return m, textinput.Blink
 			}
 
 		case "down":
-			switch m.state {
-			case states.REG_STATE:
-				if m.cursor < len(m.regTextInputs)-1 {
-					m.cursor++
-					m.focusInputs()
-					return m, textinput.Blink
+			if m.activeTab != 2 && m.activeTab != 5 {
+				if !m.isLoggedIn() {
+					if m.activeTab == 0 && m.cursor < len(m.regTextInputs)-1 {
+						m.cursor++
+					} else if m.activeTab == 1 && m.cursor < len(m.logingInput)-1 {
+						m.cursor++
+					}
+				} else {
+					if m.activeTab == 0 && m.cursor < len(m.connTextInputs)-1 {
+						m.cursor++
+					}
 				}
-			case states.LOGIN_STATE:
-				if m.cursor < len(m.logingInput)-1 {
-					m.cursor++
-					m.focusInputs()
-					return m, textinput.Blink
-				}
-			case states.CONN_STATE:
-				if m.cursor < len(m.connTextInputs)-1 {
-					m.cursor++
-					m.focusInputs()
-					return m, textinput.Blink
-				}
+				m.focusInputs()
+				return m, textinput.Blink
 			}
 
 		case "enter":
-			if m.curWindow == windows.SETTINGS_WINDOW {
-				if i, ok := m.microphonesList.SelectedItem().(micItem); ok {
-					cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.name))
-				}
-				break
-			} else if m.curWindow != windows.DEF_WINDOW && m.curWindow != windows.START_WINDOW {
-				break
-			}
-			switch m.state {
-			case states.REG_STATE:
-				m.prState = m.state
-				m.state = states.LOAD_STATE
-				for i := range m.regTextInputs {
-					if m.regTextInputs[i].Value() == "" {
-						break
-					}
-				}
 
-				m.user.Data.Personal.Nickname = m.regTextInputs[0].Value()
-				password := m.regTextInputs[1].Value()
-				repPassword := m.regTextInputs[2].Value()
-				m.user.Data.Personal.RegisterTime = time.Now().Format("2006-01-02")
-
-				cmds = append(cmds, commands.RegisterCmd(m.user, m.log, []byte(password), []byte(repPassword)))
-
-				for i := range m.regTextInputs {
-					m.regTextInputs[i].Reset()
-				}
-
-			case states.LOGIN_STATE:
-				m.prState = m.state
-				m.state = states.LOAD_STATE
-				for i := range m.logingInput {
-					if m.logingInput[i].Value() == "" {
-						break
-					}
-				}
-
-				m.user.Data.Personal.Nickname = m.logingInput[0].Value()
-				password := m.logingInput[1].Value()
-
-				cmds = append(cmds, commands.LoginCmd(m.user, m.log, []byte(password)))
-
-				for i := range m.logingInput {
-					m.logingInput[i].Reset()
-				}
-
-			// case states.SETTINGS_STATE:
-			// 	if m.curWindow == windows.SETTINGS_WINDOW {
-			// 		if i, ok := m.microphonesList.SelectedItem().(micItem); ok {
-			// 			cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.name))
-			// 		}
-			// 	}
-
-			case states.CONN_STATE:
-				m.prState = m.state
-				m.state = states.LOAD_STATE
-				for i := range m.connTextInputs {
-					if m.connTextInputs[i].Value() == "" {
-						break
-					}
-				}
-
-				cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, m.connTextInputs[0].Value()))
-
-				for i := range m.connTextInputs {
-					m.connTextInputs[i].Reset()
-				}
-
-			case states.START_STATE:
+			if m.curWindow == windows.START_WINDOW {
 				m.state = states.LOAD_STATE
 				m.curWindow = windows.DEF_WINDOW
 				if m.user.Data.Personal.Nickname != "" && m.user.Data.Personal.RegisterTime != "" && m.user.Networking == nil {
 					cmds = append(cmds, commands.AuthCmd(m.user, m.log, nil))
 				} else {
-					m.state = states.DEF_STATE
-					m.focusInputs()
+					m = m.syncTabState()
 				}
+				m.focusInputs()
+				return m, textinput.Blink
+			}
 
-			case states.LEAVE_STATE:
-				m.prState = m.state
-				m.state = states.LOAD_STATE
-				cmds = append(cmds, commands.LeaveCmd(m.user.Networking, m.user.Engines.AudioEngine))
+			if m.state == states.ERR_STATE {
+				m.curWindow = windows.DEF_WINDOW
+				m = m.syncTabState()
+				m.focusInputs()
+				return m, textinput.Blink
+			}
 
-			case states.CHAT_STATE:
-				m.prState = m.state
-				val := m.chatTextInput.Value()
-				if val != "" && m.user.Networking != nil {
-					cmds = append(cmds, commands.SendInChatCmd(m.user.Networking, val))
-					m.messages = append(m.messages, commands.ChatMessage{
-						Time:     time.Now().Format("15:04:05"),
-						Nickname: lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Personal.Nickname),
-						Text:     val})
-					m.chatTextInput.Reset()
+			if !m.isLoggedIn() {
+				switch m.activeTab {
+				case 0:
+					m.prState = m.state
+					m.state = states.LOAD_STATE
+					for i := range m.regTextInputs {
+						if m.regTextInputs[i].Value() == "" {
+							break
+						}
+					}
+
+					m.user.Data.Personal.Nickname = m.regTextInputs[0].Value()
+					password := m.regTextInputs[1].Value()
+					repPassword := m.regTextInputs[2].Value()
+					m.user.Data.Personal.RegisterTime = time.Now().Format("2006-01-02")
+
+					cmds = append(cmds, commands.RegisterCmd(m.user, m.log, []byte(password), []byte(repPassword)))
+					for i := range m.regTextInputs {
+						m.regTextInputs[i].Reset()
+					}
+
+				case 1:
+					m.prState = m.state
+					m.state = states.LOAD_STATE
+					m.user.Data.Personal.Nickname = m.logingInput[0].Value()
+					password := m.logingInput[1].Value()
+
+					cmds = append(cmds, commands.LoginCmd(m.user, m.log, []byte(password)))
+					for i := range m.logingInput {
+						m.logingInput[i].Reset()
+					}
 				}
-			case states.PROFILE_STATE:
-				m.curWindow = windows.PROFILE_WINDOW
+			} else {
+				switch m.activeTab {
+				case 0:
+					if !m.connected && m.connTextInputs[0].Value() != "" {
+						m.prState = m.state
+						m.state = states.LOAD_STATE
+						cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, m.connTextInputs[0].Value()))
+						for i := range m.connTextInputs {
+							m.connTextInputs[i].Reset()
+						}
+					}
+				case 1:
+					val := m.chatTextInput.Value()
+					if val != "" && m.user.Networking != nil {
+						cmds = append(cmds, commands.SendInChatCmd(m.user.Networking, val))
+						m.messages = append(m.messages, commands.ChatMessage{
+							Time:     time.Now().Format("15:04:05"),
+							Nickname: lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Personal.Nickname),
+							Text:     val})
+						m.chatTextInput.Reset()
+					}
+				case 2:
+					if m.connected {
+						m.prState = m.state
+						m.state = states.LOAD_STATE
+						cmds = append(cmds, commands.LeaveCmd(m.user.Networking, m.user.Engines.AudioEngine))
+					}
+				case 5:
+					if i, ok := m.microphonesList.SelectedItem().(micItem); ok {
+						cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.name))
+					}
+				}
 			}
 		}
-
 	}
 
 	if m.curWindow == windows.DEF_WINDOW {
-		switch m.state {
-		case states.REG_STATE:
-			for i := range m.regTextInputs {
-				m.regTextInputs[i], cmd = m.regTextInputs[i].Update(msg)
-				cmds = append(cmds, cmd)
+		if !m.isLoggedIn() {
+			switch m.activeTab {
+			case 0:
+				for i := range m.regTextInputs {
+					m.regTextInputs[i], cmd = m.regTextInputs[i].Update(msg)
+					cmds = append(cmds, cmd)
+				}
+			case 1:
+				for i := range m.logingInput {
+					m.logingInput[i], cmd = m.logingInput[i].Update(msg)
+					cmds = append(cmds, cmd)
+				}
 			}
-		case states.CONN_STATE:
-			for i := range m.connTextInputs {
-				m.connTextInputs[i], cmd = m.connTextInputs[i].Update(msg)
+		} else {
+			switch m.activeTab {
+			case 0:
+				for i := range m.connTextInputs {
+					m.connTextInputs[i], cmd = m.connTextInputs[i].Update(msg)
+					cmds = append(cmds, cmd)
+				}
+			case 1:
+				m.chatTextInput, cmd = m.chatTextInput.Update(msg)
 				cmds = append(cmds, cmd)
-			}
-
-		case states.CHAT_STATE:
-			m.chatTextInput, cmd = m.chatTextInput.Update(msg)
-			cmds = append(cmds, cmd)
-
-		case states.LOGIN_STATE:
-			for i := range m.logingInput {
-				m.logingInput[i], cmd = m.logingInput[i].Update(msg)
+			case 2:
+				m.connectionsList, cmd = m.connectionsList.Update(msg)
+				cmds = append(cmds, cmd)
+			case 5:
+				m.microphonesList, cmd = m.microphonesList.Update(msg)
 				cmds = append(cmds, cmd)
 			}
 		}
-	}
-
-	switch m.curWindow {
-	case windows.SETTINGS_WINDOW:
-		m.microphonesList, cmd = m.microphonesList.Update(msg)
-		cmds = append(cmds, cmd)
-
-	case windows.CONNECTIONS_WINDOW:
-		m.connectionsList, cmd = m.connectionsList.Update(msg)
-		cmds = append(cmds, cmd)
 	}
 
 	return m, tea.Batch(cmds...)

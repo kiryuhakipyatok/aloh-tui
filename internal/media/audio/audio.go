@@ -27,7 +27,7 @@ type AudioEngine interface {
 	SetConnected()
 	SetDisconnected()
 	ChangeMicrophone(microphone string) error
-	FetchMicrophones() []malgo.DeviceInfo
+	FetchMicrophones() []MicrophoneInfo
 	MuteUnmuteMicro() bool
 	MuteUnmute() bool
 	SetVolume(nickname string, vc float32)
@@ -59,11 +59,13 @@ type audioEngine struct {
 
 	leftChannel bool
 
-	mutedMicro atomic.Bool
-	muted      atomic.Bool
-	denoiced   atomic.Bool
-	aec        atomic.Bool
-	filtered   atomic.Bool
+	mutedMicro    atomic.Bool
+	muted         atomic.Bool
+	denoiced      atomic.Bool
+	aec           atomic.Bool
+	filtered      atomic.Bool
+	captureReady  atomic.Bool
+	playbackReady atomic.Bool
 
 	bytesBuffersPool sync.Pool
 	int16BuffersPool sync.Pool
@@ -116,7 +118,7 @@ type audioEngine struct {
 
 	log *logger.SparseLogger
 
-	Microphones []malgo.DeviceInfo
+	Microphones []MicrophoneInfo
 
 	micDataChan chan []byte
 
@@ -130,6 +132,12 @@ type audioEngine struct {
 
 type sounds struct {
 	notification []byte
+}
+
+type MicrophoneInfo struct {
+	Name       string
+	Channels   uint32
+	SampleRate uint32
 }
 
 const (
@@ -178,7 +186,6 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered 
 		},
 		stopSendVocie: make(chan struct{}, 1),
 		usersAudio:    make(map[string]*usersAudio, 10),
-		Microphones:   make([]malgo.DeviceInfo, 0, 7),
 
 		bytesBuffersPool: sync.Pool{
 			New: func() any {
@@ -236,7 +243,23 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered 
 		return nil, err
 	}
 
-	ae.Microphones = microphones
+	micsInfo := make([]MicrophoneInfo, 0, 7)
+
+	for _, m := range microphones {
+		di, err := ctx.DeviceInfo(malgo.Capture, m.ID, malgo.Shared)
+		if err != nil {
+			log.Error("failed to get devices info", logger.Err(err))
+			return nil, err
+		}
+		format := di.Formats[0]
+		micsInfo = append(micsInfo, MicrophoneInfo{
+			Name:       m.Name(),
+			SampleRate: format.SampleRate,
+			Channels:   format.Channels,
+		})
+	}
+
+	ae.Microphones = micsInfo
 
 	var micId unsafe.Pointer
 	if microphone != "" {
@@ -316,9 +339,6 @@ func (ae *audioEngine) resolveCaptureDeviceByName(name string) (unsafe.Pointer, 
 	if err != nil {
 		return nil, err
 	}
-	ae.mu.Lock()
-	ae.Microphones = devices
-	ae.mu.Unlock()
 	for i := range devices {
 		if devices[i].Name() == name {
 			return devices[i].ID.Pointer(), nil
@@ -327,7 +347,7 @@ func (ae *audioEngine) resolveCaptureDeviceByName(name string) (unsafe.Pointer, 
 	return nil, errors.New("selected microphone not found")
 }
 
-func (ae *audioEngine) FetchMicrophones() []malgo.DeviceInfo {
+func (ae *audioEngine) FetchMicrophones() []MicrophoneInfo {
 	return ae.Microphones
 }
 
@@ -337,6 +357,8 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 
 	ae.switching.Store(true)
 	defer ae.switching.Store(false)
+
+	ae.captureReady.Store(false)
 
 	var micId unsafe.Pointer
 	if microphone != "" {
@@ -354,9 +376,7 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 		ae.mu.Lock()
 		ae.captureDevice = nil
 		ae.voiceHolder.Store(0)
-
 		ae.mu.Unlock()
-
 	}
 
 	captureConfig := malgo.DefaultDeviceConfig(malgo.Capture)
@@ -448,6 +468,8 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 			return
 		}
 
+		ae.captureReady.Store(true)
+
 		ae.mu.Lock()
 		connected := ae.connected
 		netw := ae.netw
@@ -489,7 +511,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 				copy(ae.pcmBuffer, chunk)
 
 				ae.mu.Lock()
-				if ae.aec.Load() {
+				if ae.aec.Load() && ae.playbackReady.Load() {
 					ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
 					ae.preprocessor.Run(ae.echolessBufferInt16s)
 					copy(ae.pcmBuffer, ae.echolessBufferInt16s)
@@ -597,6 +619,7 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 	data := func(pOutputSample, pInputSamples []byte, framecount uint32) {
 
 		if pOutputSample != nil {
+			ae.playbackReady.Store(true)
 			for i := range pOutputSample {
 				pOutputSample[i] = 0
 			}
@@ -674,7 +697,7 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 
 				ae.mu.Unlock()
 
-				if ae.aec.Load() {
+				if ae.aec.Load() && ae.captureReady.Load() {
 					ae.echoCanceller.Playback(ae.workMix[:frameLen])
 				}
 

@@ -23,6 +23,7 @@ import (
 
 	"github.com/AvraamMavridis/randomcolor"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -36,19 +37,31 @@ type connectionItem struct {
 	muted             bool
 }
 
-func (ci connectionItem) Title() string { return ci.nickname }
+func (ci connectionItem) Title() string {
+	return ci.nickname
+}
 func (ci connectionItem) Description() string {
 	return fmt.Sprintf("volume: %.1f, muted: %t", ci.volumeCoefficient, ci.muted)
 }
-func (ci connectionItem) FilterValue() string { return ci.nickname }
-
-type micItem struct {
-	name string
+func (ci connectionItem) FilterValue() string {
+	return ci.nickname
 }
 
-func (mi micItem) Title() string       { return mi.name }
-func (mi micItem) Description() string { return "" }
-func (mi micItem) FilterValue() string { return mi.name }
+type micItem struct {
+	name       string
+	channels   uint32
+	sampleRate uint32
+}
+
+func (mi micItem) Title() string {
+	return mi.name
+}
+func (mi micItem) Description() string {
+	return fmt.Sprintf("channels: %d, sample rate: %d", mi.channels, mi.sampleRate)
+}
+func (mi micItem) FilterValue() string {
+	return mi.name
+}
 
 type connData struct {
 	nickname          string
@@ -60,8 +73,15 @@ type Model struct {
 	width  int
 	height int
 
+	defTabs []string
+	regTabs []string
+
+	activeTab int
+
 	state   uint
 	prState uint
+
+	spinner spinner.Model
 
 	curWindow uint
 
@@ -111,16 +131,24 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	log := appLogger.AddOp(op)
 	log.Info("creating new model...")
 
+	sp:=spinner.New()
+	sp.Spinner = spinner.Dot
+
 	m := &Model{
 		state:   states.START_STATE,
 		prState: states.START_STATE,
 
 		curWindow: windows.START_WINDOW,
 
+		defTabs: []string{"friends", "chat", "voice", "video", "profile", "settings"},
+		regTabs: []string{"registration", "login"},
+
 		regTextInputs:  make([]textinput.Model, 3),
 		connTextInputs: make([]textinput.Model, 1),
 		logingInput:    make([]textinput.Model, 2),
 		messages:       []commands.ChatMessage{},
+
+		spinner: sp,
 
 		usersColors: make(map[string]lipgloss.Color),
 
@@ -134,6 +162,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		msgChan: make(chan commands.ChatMessage, 100),
 	}
+
 
 	user := entities.User{
 		Paths: entities.Paths{
@@ -274,7 +303,7 @@ func (m Model) Init() tea.Cmd {
 		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan),
 			commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 			commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
-			commands.TickCmd(), tea.EnableMouseCellMotion)
+			commands.TickCmd(), tea.EnableMouseCellMotion, m.spinner.Tick)
 		return tea.Batch(cmds...)
 	}
 	return tea.Batch(cmds...)
@@ -291,25 +320,7 @@ func (m *Model) Clean() {
 }
 
 func (m *Model) focusInputs() {
-	for i := range m.regTextInputs {
-		m.regTextInputs[i].Blur()
-		m.regTextInputs[i].PromptStyle = lipgloss.NewStyle()
-		m.regTextInputs[i].TextStyle = lipgloss.NewStyle()
-	}
-	for i := range m.connTextInputs {
-		m.connTextInputs[i].Blur()
-		m.connTextInputs[i].PromptStyle = lipgloss.NewStyle()
-		m.connTextInputs[i].TextStyle = lipgloss.NewStyle()
-	}
-
-	for i := range m.logingInput {
-		m.logingInput[i].Blur()
-		m.logingInput[i].PromptStyle = lipgloss.NewStyle()
-		m.logingInput[i].TextStyle = lipgloss.NewStyle()
-	}
-	m.chatTextInput.Blur()
-	m.chatTextInput.PromptStyle = lipgloss.NewStyle()
-	m.chatTextInput.TextStyle = lipgloss.NewStyle()
+	m.unfocusInputs()
 
 	switch m.state {
 	case states.REG_STATE:
@@ -331,6 +342,34 @@ func (m *Model) focusInputs() {
 	}
 }
 
+func (m *Model) unfocusInputs() {
+	for i := range m.regTextInputs {
+		m.regTextInputs[i].Blur()
+		m.regTextInputs[i].PromptStyle = lipgloss.NewStyle()
+		m.regTextInputs[i].TextStyle = lipgloss.NewStyle()
+	}
+	for i := range m.connTextInputs {
+		m.connTextInputs[i].Blur()
+		m.connTextInputs[i].PromptStyle = lipgloss.NewStyle()
+		m.connTextInputs[i].TextStyle = lipgloss.NewStyle()
+	}
+
+	for i := range m.logingInput {
+		m.logingInput[i].Blur()
+		m.logingInput[i].PromptStyle = lipgloss.NewStyle()
+		m.logingInput[i].TextStyle = lipgloss.NewStyle()
+	}
+
+	m.chatTextInput.Blur()
+	m.chatTextInput.PromptStyle = lipgloss.NewStyle()
+	m.chatTextInput.TextStyle = lipgloss.NewStyle()
+}
+
+const (
+	cDesc  = lipgloss.Color("#8eb838")
+	cTitle = lipgloss.Color("#A6E22E")
+)
+
 func (m *Model) setupMicrohonesList(selected string) {
 	if m.user != nil && m.user.Engines.AudioEngine != nil {
 		ms := m.user.Engines.AudioEngine.FetchMicrophones()
@@ -340,21 +379,22 @@ func (m *Model) setupMicrohonesList(selected string) {
 		selectedIndex := 0
 
 		for i, v := range ms {
-			microphones = append(microphones, micItem{name: v.Name()})
-			if v.Name() == selected {
+			microphones = append(microphones, micItem{name: v.Name, channels: v.Channels, sampleRate: v.SampleRate})
+			if v.Name == selected {
 				selectedIndex = i
 			}
 		}
 
 		delegate := list.NewDefaultDelegate()
-		delegate.ShowDescription = false
-		delegate.SetSpacing(3)
+		delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(cTitle)
+		delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(cDesc)
+		delegate.SetSpacing(2)
 
 		m.microphonesList = list.New(microphones, delegate, m.width/2, m.height-4)
 		m.microphonesList.Title = "select microphone"
 		m.microphonesList.Select(selectedIndex)
 		m.microphonesList.SetShowStatusBar(false)
-		m.microphonesList.SetShowTitle(true)
+		m.microphonesList.SetShowTitle(false)
 		m.microphonesList.SetFilteringEnabled(false)
 		m.microphonesList.SetShowFilter(false)
 		m.microphonesList.SetShowHelp(false)
@@ -365,8 +405,9 @@ func (m *Model) setupConnestionsList() {
 	conns := make([]list.Item, 0)
 
 	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(cDesc)
 	delegate.ShowDescription = true
-	delegate.SetSpacing(3)
+	delegate.SetSpacing(2)
 
 	m.connectionsList = list.New(conns, delegate, m.width/2, m.height-4)
 	m.connectionsList.Title = "connections"

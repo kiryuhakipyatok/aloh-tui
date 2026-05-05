@@ -19,7 +19,7 @@ func TickCmd() tea.Cmd {
 }
 
 func AnimTickCmd() tea.Cmd {
-	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Millisecond*150, func(t time.Time) tea.Msg {
 		return AnimTickMsg(t)
 	})
 }
