@@ -242,7 +242,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				commands.WaitForChatMessageCmd(m.msgChan),
 				commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 				commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
-				commands.TickCmd())
+				commands.TickCmd(), textinput.Blink)
 		}
 
 	case commands.ChatMessage:

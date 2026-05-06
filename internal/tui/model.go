@@ -78,6 +78,8 @@ type Model struct {
 
 	activeTab int
 
+	logoAnim []string
+
 	state   uint
 	prState uint
 
@@ -131,7 +133,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	log := appLogger.AddOp(op)
 	log.Info("creating new model...")
 
-	sp:=spinner.New()
+	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 
 	m := &Model{
@@ -146,6 +148,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		regTextInputs:  make([]textinput.Model, 3),
 		connTextInputs: make([]textinput.Model, 1),
 		logingInput:    make([]textinput.Model, 2),
+		logoAnim:       make([]string, 0, 3),
 		messages:       []commands.ChatMessage{},
 
 		spinner: sp,
@@ -163,6 +166,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		msgChan: make(chan commands.ChatMessage, 100),
 	}
 
+	m.logoAnim = []string{titles.BIG_LOGO1, titles.BIG_LOGO2, titles.BIG_LOGO3, titles.BIG_LOGO2}
 
 	user := entities.User{
 		Paths: entities.Paths{
@@ -298,12 +302,12 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
-	cmds = append(cmds, commands.AnimTickCmd())
+	cmds = append(cmds, commands.AnimTickCmd(), m.spinner.Tick)
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
 		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan),
 			commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 			commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
-			commands.TickCmd(), tea.EnableMouseCellMotion, m.spinner.Tick)
+			commands.TickCmd(), tea.EnableMouseCellMotion)
 		return tea.Batch(cmds...)
 	}
 	return tea.Batch(cmds...)
@@ -503,7 +507,7 @@ func (m Model) getMaxChatOffset() int {
 	usableW := m.width - frameChromeW
 	usableH := m.height - frameChromeH
 
-	title := styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.BIG_LOGO)
+	title := styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.BIG_LOGO1)
 	if usableW < 30 || usableH < 30 {
 		borderStyle = styles.BorderStyle.PaddingTop(0)
 		frameChromeH = lipgloss.Height(borderStyle.Render("X")) - 1

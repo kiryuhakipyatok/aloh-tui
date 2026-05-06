@@ -241,9 +241,8 @@ func (m Model) renderVoiceTab(w, h int) string {
 	rawStatesStr := strings.Join(states, "\n\n\n")
 	rawStatesW := lipgloss.Width(rawStatesStr)
 	m.connectionsList.SetSize(leftW-rawStatesW-4, h-2)
-	connListW := m.connectionsList.Width()
 	connsView := lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render(m.connectionsList.View()),
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate(rawStatesStr, w-connListW-2)))
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(rawStatesStr))
 
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", connsView)
 	leftPanel := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
@@ -258,11 +257,11 @@ func (m Model) renderVoiceTab(w, h int) string {
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left,
 		lblRight, "",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("network status: ")+lipgloss.NewStyle().Foreground(statusColor).Render(statusText),
+		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("network status: ")+lipgloss.NewStyle().Foreground(statusColor).Render(statusText), rightW),
 		"",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("user management:"),
-		lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(cFocus).Render("ALT+UP/DN")+lipgloss.NewStyle().Foreground(cText).Render(" - adjust user volume")),
-		lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(cFocus).Render("ALT+Z")+lipgloss.NewStyle().Foreground(cText).Render("     - mute/mnmute user")),
+		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("user management:"), rightW),
+		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(cFocus).Render("ALT+UP/DN")+lipgloss.NewStyle().Foreground(cText).Render(" - adjust user volume")), rightW),
+		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(cFocus).Render("ALT+Z")+lipgloss.NewStyle().Foreground(cText).Render("     - mute/mnmute user")), rightW),
 		"",
 	)
 	if m.connected {
@@ -278,7 +277,7 @@ func (m Model) renderVoiceTab(w, h int) string {
 }
 
 func (m Model) renderVideoTab(w, h int) string {
-	return m.zone.Mark("videoW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, lipgloss.NewStyle().Foreground(cDim).Render("~ video functionality coming soon ~")))
+	return m.zone.Mark("videoW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, safeTruncate(lipgloss.NewStyle().Foreground(cDim).Render("~ video functionality coming soon ~"), w)))
 }
 
 func (m Model) renderConnectTab(w, h int) string {
@@ -336,8 +335,8 @@ func (m Model) renderSettingsView(w, h int) string {
 	st := lipgloss.NewStyle().Foreground(cFocus)
 	rightBox := lipgloss.JoinVertical(lipgloss.Left,
 		lblRight, "",
-		lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("denoise: %s", st.Render(fmt.Sprintf("%t", m.user.Data.Setup.Denoise)))),
-		lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("echo:    %s", st.Render(fmt.Sprintf("%t", m.user.Data.Setup.AEC)))),
+		lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("denoise:    %s", st.Render(fmt.Sprintf("%t", m.user.Data.Setup.Denoise)))),
+		lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("echo:       %s", st.Render(fmt.Sprintf("%t", m.user.Data.Setup.AEC)))),
 		lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("equalizer:  %s", st.Render(fmt.Sprintf("%t", m.user.Data.Setup.Filter)))),
 	)
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
@@ -362,7 +361,7 @@ func (m Model) renderProfileView(w, h int) string {
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	lblRight := headerActive.Render("► statistics")
-	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("no statistics available"))
+	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate("no statistics available", rightW)))
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
 	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
@@ -474,11 +473,12 @@ func (m Model) renderChatTab(w, h int) string {
 func (m Model) renderStartView(w, h int) string {
 	greenPulse := []string{"#004400", "#006600", "#008800", "#00AA00", "#00CC00", "#33FF33", "#00CC00", "#00AA00", "#008800", "#006600"}
 	currentColor := greenPulse[m.animFrame%len(greenPulse)]
-	titleLogo := titles.BIG_LOGO
+	titleLogo := m.logoAnim[m.animFrame%len(m.logoAnim)]
 	if w < 80 || h < 25 {
 		titleLogo = titles.LITTLE_LOGO
 	}
-	logo := lipgloss.NewStyle().Foreground(cFocus).Width(w).Align(lipgloss.Center).Render(titleLogo)
+
+	logo := lipgloss.NewStyle().Foreground(cFocus).Render(titleLogo)
 	msg := lipgloss.NewStyle().Foreground(lipgloss.Color(currentColor)).Bold(true).Render(titles.START)
 	msgCentered := lipgloss.NewStyle().Width(w).Align(lipgloss.Center).Render(msg)
 	content := lipgloss.JoinVertical(lipgloss.Center, logo, "", "", msgCentered)
@@ -522,7 +522,7 @@ func (m Model) renderHelpView(w, h int) string {
 	renderShortcut := func(keys, desc string) string {
 		k := lipgloss.NewStyle().Foreground(cFocus).Width(18).Render(keys)
 		d := lipgloss.NewStyle().Foreground(cText).Render(desc)
-		return lipgloss.NewStyle().PaddingLeft(2).Render(k + d)
+		return safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(k+d), leftW)
 	}
 	sectionLbl := lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim)
 
@@ -536,7 +536,7 @@ func (m Model) renderHelpView(w, h int) string {
 		sectionLbl.Render("navigation:"),
 		renderShortcut("TAB / RIGHT", "- next tab"),
 		renderShortcut("SHIFT+TAB / LEFT", "- previous tab"),
-		renderShortcut("UP / DOWN", "- move cursor in lists/inputs"),
+		renderShortcut("UP / DN", "- move cursor in lists/inputs"),
 		"",
 		sectionLbl.Render("quick jump:"),
 		renderShortcut("ALT+C", "- go to connect tab"),
@@ -554,7 +554,7 @@ func (m Model) renderHelpView(w, h int) string {
 		renderShortcut("ALT+V", "- toggle mic mute"),
 		renderShortcut("ALT+B", "- toggle full mute"),
 		renderShortcut("ALT+Z", "- toggle user's mute"),
-		renderShortcut("ALT+UP / DN", "- increase / decrease user's volume"),
+		renderShortcut("ALT+UP/DN", "- increase / decrease user's volume"),
 		"",
 		sectionLbl.Render("audio contorls:"),
 		renderShortcut("ALT+D", "- toggle denoise"),
