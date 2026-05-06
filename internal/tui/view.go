@@ -222,8 +222,30 @@ func (m Model) renderVoiceTab(w, h int) string {
 	rightW := w - leftW - 3
 
 	lblLeft := headerActive.Render("► active connections")
-	m.connectionsList.SetSize(leftW-4, h-2)
-	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(m.connectionsList.View()))
+
+	states := make([]string, 0, len(m.connections))
+
+	speakingUsers := m.user.Engines.AudioEngine.FetchSpeakingUsers()
+	mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
+
+	for _, c := range m.connections {
+		state := ""
+		clearNick := ansi.Strip(c)
+		if _, ok := mutedUsers[clearNick]; ok {
+			state = " 🔇"
+		} else if _, ok := speakingUsers[clearNick]; ok {
+			state = " 🔊"
+		}
+		states = append(states, state)
+	}
+	rawStatesStr := strings.Join(states, "\n\n\n")
+	rawStatesW := lipgloss.Width(rawStatesStr)
+	m.connectionsList.SetSize(leftW-rawStatesW-4, h-2)
+	connListW := m.connectionsList.Width()
+	connsView := lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render(m.connectionsList.View()),
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate(rawStatesStr, w-connListW-2)))
+
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", connsView)
 	leftPanel := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	lblRight := headerActive.Render("► details & controls")

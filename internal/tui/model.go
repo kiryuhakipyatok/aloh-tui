@@ -388,7 +388,7 @@ func (m *Model) setupMicrohonesList(selected string) {
 		delegate := list.NewDefaultDelegate()
 		delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(cTitle)
 		delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(cDesc)
-		delegate.SetSpacing(2)
+		delegate.SetSpacing(1)
 
 		m.microphonesList = list.New(microphones, delegate, m.width/2, m.height-4)
 		m.microphonesList.Title = "select microphone"
@@ -407,7 +407,7 @@ func (m *Model) setupConnestionsList() {
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(cDesc)
 	delegate.ShowDescription = true
-	delegate.SetSpacing(2)
+	delegate.SetSpacing(1)
 
 	m.connectionsList = list.New(conns, delegate, m.width/2, m.height-4)
 	m.connectionsList.Title = "connections"
