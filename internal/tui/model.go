@@ -327,7 +327,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	m.chatTextInput = chatInput
 
 	themeColorInput := textinput.New()
-	themeColorInput.Placeholder = "new theme color, enter d to default"
+	themeColorInput.Placeholder = "new theme color in hex, enter d to default"
 	m.themeColorInput = themeColorInput
 
 	log.Info("model created successfully")
