@@ -43,6 +43,7 @@ type Setup struct {
 	AEC        bool                  `json:"aec"`
 	Filter     bool                  `json:"filter"`
 	UsersSetup map[string]UsersSetup `json:"users-setup"`
+	ThemeColor string                `json:"theme-color"`
 }
 
 type UsersSetup struct {

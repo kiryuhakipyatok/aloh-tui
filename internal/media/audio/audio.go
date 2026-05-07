@@ -27,7 +27,7 @@ type AudioEngine interface {
 	SetConnected()
 	SetDisconnected()
 	ChangeMicrophone(microphone string) error
-	FetchMicrophones() []MicrophoneInfo
+	FetchMicrophones() map[string]MicrophoneInfo
 	MuteUnmuteMicro() bool
 	MuteUnmute() bool
 	SetVolume(nickname string, vc float32)
@@ -118,7 +118,7 @@ type audioEngine struct {
 
 	log *logger.SparseLogger
 
-	Microphones []MicrophoneInfo
+	Microphones map[string]MicrophoneInfo
 
 	micDataChan chan []byte
 
@@ -135,6 +135,7 @@ type sounds struct {
 }
 
 type MicrophoneInfo struct {
+	Index      int
 	Name       string
 	Channels   uint32
 	SampleRate uint32
@@ -243,25 +244,36 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered 
 		return nil, err
 	}
 
-	micsInfo := make([]MicrophoneInfo, 0, 7)
+	micsInfo := make(map[string]MicrophoneInfo, 0)
 
-	for _, m := range microphones {
+	var (
+		ch    uint32
+		micId unsafe.Pointer
+	)
+
+	for i, m := range microphones {
 		di, err := ctx.DeviceInfo(malgo.Capture, m.ID, malgo.Shared)
 		if err != nil {
 			log.Error("failed to get devices info", logger.Err(err))
 			return nil, err
 		}
 		format := di.Formats[0]
-		micsInfo = append(micsInfo, MicrophoneInfo{
+		micsInfo[m.Name()] = MicrophoneInfo{
+			Index: i,
 			Name:       m.Name(),
 			SampleRate: format.SampleRate,
 			Channels:   format.Channels,
-		})
+		}
+
+		if microphones[i].Name() == microphone {
+			micId = microphones[i].ID.Pointer()
+			ch = format.Channels
+		}
+
 	}
 
 	ae.Microphones = micsInfo
 
-	var micId unsafe.Pointer
 	if microphone != "" {
 		id, err := ae.resolveCaptureDeviceByName(microphone)
 		if err != nil {
@@ -275,6 +287,12 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered 
 	playbackConfig := malgo.DefaultDeviceConfig(malgo.Playback)
 
 	captureConfig.Capture.Format = malgo.FormatS16
+	captureConfig.Capture.Channels = 0
+	if ch > 2 {
+		captureConfig.Capture.Channels = 2
+	} else {
+		captureConfig.Capture.Channels = 0
+	}
 	captureConfig.Capture.Channels = 0
 	captureConfig.SampleRate = 0
 	captureConfig.Capture.DeviceID = micId
@@ -347,7 +365,7 @@ func (ae *audioEngine) resolveCaptureDeviceByName(name string) (unsafe.Pointer, 
 	return nil, errors.New("selected microphone not found")
 }
 
-func (ae *audioEngine) FetchMicrophones() []MicrophoneInfo {
+func (ae *audioEngine) FetchMicrophones() map[string]MicrophoneInfo {
 	return ae.Microphones
 }
 
@@ -360,7 +378,11 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 
 	ae.captureReady.Store(false)
 
-	var micId unsafe.Pointer
+	var (
+		micId unsafe.Pointer
+		ch    uint32
+	)
+
 	if microphone != "" {
 		id, err := ae.resolveCaptureDeviceByName(microphone)
 		if err != nil {
@@ -368,6 +390,11 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 		} else {
 			micId = id
 		}
+	}
+
+	micInfo, ok := ae.Microphones[microphone]
+	if ok && micId != nil {
+		ch = micInfo.Channels
 	}
 
 	if ae.captureDevice != nil {
@@ -381,7 +408,11 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 
 	captureConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	captureConfig.Capture.Format = malgo.FormatS16
-	captureConfig.Capture.Channels = 0
+	if ch > 2 {
+		captureConfig.Capture.Channels = 2
+	} else {
+		captureConfig.Capture.Channels = 0
+	}
 	captureConfig.SampleRate = 0
 	captureConfig.Capture.DeviceID = micId
 

@@ -13,14 +13,12 @@ import (
 )
 
 var (
-	cFocus   = lipgloss.Color("#A6E22E")
 	cDim     = lipgloss.Color("#75715E")
 	cText    = lipgloss.Color("#F8F8F2")
 	cAccent  = lipgloss.Color("#FD971F")
 	cErr     = lipgloss.Color("#F92672")
 	cSubtext = lipgloss.Color("#66D9EF")
 
-	headerActive   = lipgloss.NewStyle().Foreground(cFocus).Bold(true)
 	headerInactive = lipgloss.NewStyle().Foreground(cDim).Bold(true)
 )
 
@@ -56,7 +54,7 @@ func (m Model) View() string {
 		return lipgloss.NewStyle().Padding(padH, padW).Render(m.zone.Scan(lipgloss.Place(usableW, usableH, lipgloss.Left, lipgloss.Top, finalLayout)))
 	}
 
-	rightPart := lipgloss.NewStyle().Foreground(cFocus).Render(titles.LL)
+	rightPart := lipgloss.NewStyle().Foreground(m.themeColor).Render(titles.LL)
 
 	rightW := lipgloss.Width(rightPart)
 
@@ -71,7 +69,7 @@ func (m Model) View() string {
 	footer := lipgloss.JoinHorizontal(lipgloss.Bottom, leftPart, rightPart)
 	footerH := lipgloss.Height(footer)
 
-	logo := lipgloss.NewStyle().Foreground(cFocus).Render(titles.A)
+	logo := lipgloss.NewStyle().Foreground(m.themeColor).Render(titles.A)
 	logoH := lipgloss.Height(logo)
 
 	var tabs []string
@@ -103,7 +101,7 @@ func (m Model) View() string {
 	activeTabStyle := lipgloss.NewStyle().
 		Border(activeBorder, true).
 		BorderForeground(cDim).
-		Foreground(cFocus).
+		Foreground(m.themeColor).
 		Bold(true).
 		Align(lipgloss.Center)
 
@@ -221,7 +219,7 @@ func (m Model) renderVoiceTab(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblLeft := headerActive.Render("► active connections")
+	lblLeft := m.headerActiveStyle.Render("► active connections")
 
 	states := make([]string, 0, len(m.connections))
 
@@ -247,12 +245,12 @@ func (m Model) renderVoiceTab(w, h int) string {
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", connsView)
 	leftPanel := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
-	lblRight := headerActive.Render("► details & controls")
+	lblRight := m.headerActiveStyle.Render("► details & controls")
 	statusText := "offline"
 	statusColor := cDim
 	if m.connected {
 		statusText = "connected"
-		statusColor = cFocus
+		statusColor = m.themeColor
 	}
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left,
@@ -260,8 +258,8 @@ func (m Model) renderVoiceTab(w, h int) string {
 		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("network status: ")+lipgloss.NewStyle().Foreground(statusColor).Render(statusText), rightW),
 		"",
 		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("user management:"), rightW),
-		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(cFocus).Render("ALT+UP/DN")+lipgloss.NewStyle().Foreground(cText).Render(" - adjust user volume")), rightW),
-		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(cFocus).Render("ALT+Z")+lipgloss.NewStyle().Foreground(cText).Render("     - mute/mnmute user")), rightW),
+		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(m.themeColor).Render("ALT+UP/DN")+lipgloss.NewStyle().Foreground(cText).Render(" - adjust user volume")), rightW),
+		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(m.themeColor).Render("ALT+Z")+lipgloss.NewStyle().Foreground(cText).Render("     - mute/mnmute user")), rightW),
 		"",
 	)
 	if m.connected {
@@ -284,35 +282,27 @@ func (m Model) renderConnectTab(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblLeft := headerActive.Render("► online friends")
-	var onlineList string
-	if len(m.online) > 0 {
-		var msgs []string
-		for i, u := range m.online {
-			if i >= h-2 {
-				break
-			}
-			msgs = append(msgs, u)
-		}
-		onlineList = strings.Join(msgs, "\n")
-	} else {
-		onlineList = lipgloss.NewStyle().Foreground(cDim).Render("zero friends online")
+	lblLeft := m.headerActiveStyle.Render("► online friends")
+	m.onlineList.SetSize(leftW-2, h-2)
+	onlineView := lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render(m.onlineList.View()))
+	if len(m.online) == 0 {
+		onlineView = lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render("zero friends online"))
 	}
 
-	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(onlineList))
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(onlineView))
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
-	lblRight := headerActive.Render("► connect")
+	lblRight := m.headerActiveStyle.Render("► connect")
 	var rightContent string
 	if m.state == states.LOAD_STATE && m.prState == states.CONN_STATE {
 		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(m.spinner.View() + "connecting to friend...")
 	} else if m.connected {
-		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cFocus).Render("you are already connected.\ngo to voice tab to manage")
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(m.themeColor).Render("you are already connected.\ngo to voice tab to manage")
 	} else {
-		m.connTextInputs[0].Width = max(1, rightW-4)
+		m.connTextInputs.Width = max(1, rightW-4)
 		rightContent = lipgloss.JoinVertical(lipgloss.Left,
 			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("enter nickname:"), "",
-			lipgloss.NewStyle().PaddingLeft(2).Render(m.connTextInputs[0].View()),
+			lipgloss.NewStyle().PaddingLeft(2).Render(m.connTextInputs.View()),
 		)
 	}
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", rightContent)
@@ -326,13 +316,13 @@ func (m Model) renderSettingsView(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblLeft := headerActive.Render("► microphones")
+	lblLeft := m.headerActiveStyle.Render("► microphones")
 	m.microphonesList.SetSize(leftW-4, h-2)
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(m.microphonesList.View()))
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
-	lblRight := headerActive.Render("► audio settings")
-	st := lipgloss.NewStyle().Foreground(cFocus)
+	lblRight := m.headerActiveStyle.Render("► audio settings")
+	st := lipgloss.NewStyle().Foreground(m.themeColor)
 	rightBox := lipgloss.JoinVertical(lipgloss.Left,
 		lblRight, "",
 		lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("denoise:    %s", st.Render(fmt.Sprintf("%t", m.user.Data.Setup.Denoise)))),
@@ -349,7 +339,7 @@ func (m Model) renderProfileView(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblLeft := headerActive.Render("► profile info")
+	lblLeft := m.headerActiveStyle.Render("► profile info")
 	leftBox := lipgloss.JoinVertical(lipgloss.Left,
 		lblLeft, "",
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("nickname:"),
@@ -357,10 +347,14 @@ func (m Model) renderProfileView(w, h int) string {
 		"",
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("registered:"),
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(m.user.Data.Personal.RegisterTime),
+		"",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("theme color:"),
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(m.themeColor).Render(m.user.Data.Setup.ThemeColor),
+		lipgloss.NewStyle().PaddingLeft(2).Render(m.themeColorInput.View()),
 	)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
-	lblRight := headerActive.Render("► statistics")
+	lblRight := m.headerActiveStyle.Render("► statistics")
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate("no statistics available", rightW)))
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
@@ -382,7 +376,7 @@ func (m Model) renderRegistrationTab(w, h int) string {
 			m.regTextInputs[1].View(), "",
 			m.regTextInputs[2].View(),
 		)
-		content = lipgloss.JoinVertical(lipgloss.Left, headerActive.Render("► create new account"), "", inputs)
+		content = lipgloss.JoinVertical(lipgloss.Left, m.headerActiveStyle.Render("► create new account"), "", inputs)
 	}
 	return m.zone.Mark("registerW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, inputPad.Render(content)))
 }
@@ -400,7 +394,7 @@ func (m Model) renderLoginTab(w, h int) string {
 			m.logingInput[0].View(), "",
 			m.logingInput[1].View(),
 		)
-		content = lipgloss.JoinVertical(lipgloss.Left, headerActive.Render("► login"), "", inputs)
+		content = lipgloss.JoinVertical(lipgloss.Left, m.headerActiveStyle.Render("► login"), "", inputs)
 	}
 	return m.zone.Mark("loginW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, inputPad.Render(content)))
 }
@@ -430,11 +424,17 @@ func (m Model) renderChatTab(w, h int) string {
 	}
 	connsView := lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate(rawConnStr, w-2))
 
+	var usersAudioState string
+
 	var chatParts []string
-	if m.muteState != "" {
-		chatParts = append(chatParts, lipgloss.NewStyle().PaddingLeft(2).Render(m.muteState))
+	if m.user.Engines.AudioEngine.UserIsSpeaking() {
+		usersAudioState += lipgloss.NewStyle().PaddingLeft(2).Render(m.user.Data.Personal.Nickname + " 🔊")
 	}
-	chatParts = append(chatParts, connsView, "")
+
+	if m.muteState != "" {
+		usersAudioState += lipgloss.NewStyle().PaddingLeft(2).Render(m.muteState)
+	}
+	chatParts = append(chatParts, usersAudioState, connsView, "")
 
 	usedH := 0
 	for _, p := range chatParts {
@@ -471,14 +471,25 @@ func (m Model) renderChatTab(w, h int) string {
 }
 
 func (m Model) renderStartView(w, h int) string {
-	greenPulse := []string{"#004400", "#006600", "#008800", "#00AA00", "#00CC00", "#33FF33", "#00CC00", "#00AA00", "#008800", "#006600"}
-	currentColor := greenPulse[m.animFrame%len(greenPulse)]
+	whitePulse := []string{
+		"#444444",
+		"#666666",
+		"#888888",
+		"#AAAAAA",
+		"#CCCCCC",
+		"#FFFFFF",
+		"#CCCCCC",
+		"#AAAAAA",
+		"#888888",
+		"#666666",
+	}
+	currentColor := whitePulse[m.animFrame%len(whitePulse)]
 	titleLogo := m.logoAnim[m.animFrame%len(m.logoAnim)]
 	if w < 80 || h < 25 {
 		titleLogo = titles.LITTLE_LOGO
 	}
 
-	logo := lipgloss.NewStyle().Foreground(cFocus).Render(titleLogo)
+	logo := lipgloss.NewStyle().Foreground(m.themeColor).Render(titleLogo)
 	msg := lipgloss.NewStyle().Foreground(lipgloss.Color(currentColor)).Bold(true).Render(titles.START)
 	msgCentered := lipgloss.NewStyle().Width(w).Align(lipgloss.Center).Render(msg)
 	content := lipgloss.JoinVertical(lipgloss.Center, logo, "", "", msgCentered)
@@ -516,11 +527,11 @@ func (m Model) renderHelpView(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblLeft := headerActive.Render("► general & navigation")
-	lblRight := headerActive.Render("► audio & voice controls")
+	lblLeft := m.headerActiveStyle.Render("► general & navigation")
+	lblRight := m.headerActiveStyle.Render("► audio & voice controls")
 
 	renderShortcut := func(keys, desc string) string {
-		k := lipgloss.NewStyle().Foreground(cFocus).Width(18).Render(keys)
+		k := lipgloss.NewStyle().Foreground(m.themeColor).Width(18).Render(keys)
 		d := lipgloss.NewStyle().Foreground(cText).Render(desc)
 		return safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(k+d), leftW)
 	}
@@ -534,8 +545,8 @@ func (m Model) renderHelpView(w, h int) string {
 		renderShortcut("ENTER", "- confirm / connect / send msg"),
 		"",
 		sectionLbl.Render("navigation:"),
-		renderShortcut("TAB / RIGHT", "- next tab"),
-		renderShortcut("SHIFT+TAB / LEFT", "- previous tab"),
+		renderShortcut("TAB / ALT+RIGHT", "- next tab"),
+		renderShortcut("SHIFT+TAB / ALT+LEFT", "- previous tab"),
 		renderShortcut("UP / DN", "- move cursor in lists/inputs"),
 		"",
 		sectionLbl.Render("quick jump:"),

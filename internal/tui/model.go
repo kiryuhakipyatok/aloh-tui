@@ -11,6 +11,7 @@ import (
 	"aloh-tui/internal/tui/components/styles"
 	"aloh-tui/internal/tui/components/titles"
 	"aloh-tui/internal/tui/components/windows"
+	"aloh-tui/internal/utils"
 	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
 	"encoding/json"
@@ -63,6 +64,20 @@ func (mi micItem) FilterValue() string {
 	return mi.name
 }
 
+type onlineItem struct {
+	name string
+}
+
+func (oi onlineItem) Title() string {
+	return oi.name
+}
+func (oi onlineItem) Description() string {
+	return "solo"
+}
+func (oi onlineItem) FilterValue() string {
+	return oi.name
+}
+
 type connData struct {
 	nickname          string
 	muted             bool
@@ -88,9 +103,11 @@ type Model struct {
 	curWindow uint
 
 	regTextInputs  []textinput.Model
-	connTextInputs []textinput.Model
+	connTextInputs textinput.Model
 	chatTextInput  textinput.Model
 	logingInput    []textinput.Model
+
+	defaultThemeColor string
 
 	speaking bool
 
@@ -116,6 +133,7 @@ type Model struct {
 
 	microphonesList list.Model
 	connectionsList list.Model
+	onlineList      list.Model
 
 	connected bool
 
@@ -124,6 +142,12 @@ type Model struct {
 	log *logger.Logger
 
 	animFrame int
+
+	headerActiveStyle lipgloss.Style
+	themeColor        lipgloss.Color
+	subThemeColor     lipgloss.Color
+
+	themeColorInput textinput.Model
 
 	err error
 }
@@ -145,11 +169,12 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		defTabs: []string{"friends", "chat", "voice", "video", "profile", "settings"},
 		regTabs: []string{"registration", "login"},
 
-		regTextInputs:  make([]textinput.Model, 3),
-		connTextInputs: make([]textinput.Model, 1),
-		logingInput:    make([]textinput.Model, 2),
-		logoAnim:       make([]string, 0, 3),
-		messages:       []commands.ChatMessage{},
+		regTextInputs: make([]textinput.Model, 3),
+		logingInput:   make([]textinput.Model, 2),
+		logoAnim:      make([]string, 0, 3),
+		messages:      []commands.ChatMessage{},
+
+		defaultThemeColor: "#A6E22E",
 
 		spinner: sp,
 
@@ -187,6 +212,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	userData := entities.Data{
 		Setup: entities.Setup{
 			UsersSetup: make(map[string]entities.UsersSetup, 0),
+			ThemeColor: m.defaultThemeColor,
 		},
 	}
 
@@ -199,6 +225,10 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	}
 
 	user.Data = userData
+
+	m.themeColor = lipgloss.Color(user.Data.Setup.ThemeColor)
+	m.subThemeColor = lipgloss.Color(utils.DarkenHex(user.Data.Setup.ThemeColor, 0.7))
+	m.headerActiveStyle = lipgloss.NewStyle().Foreground(m.themeColor).Bold(true)
 
 	if userData.Personal.Nickname != "" && userData.Personal.RegisterTime != "" {
 
@@ -257,6 +287,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	m.setupMicrohonesList(m.user.Data.Devices.Microphone)
 	m.setupConnestionsList()
+	m.setupOnlineList()
 
 	for i := range m.regTextInputs {
 		ti := textinput.New()
@@ -289,11 +320,15 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	connTextInput := textinput.New()
 	connTextInput.Placeholder = "enter nickname"
-	m.connTextInputs[0] = connTextInput
+	m.connTextInputs = connTextInput
 
 	chatInput := textinput.New()
 	chatInput.Placeholder = "type a message..."
 	m.chatTextInput = chatInput
+
+	themeColorInput := textinput.New()
+	themeColorInput.Placeholder = "new theme color, enter d to default"
+	m.themeColorInput = themeColorInput
 
 	log.Info("model created successfully")
 
@@ -304,7 +339,7 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
 	cmds = append(cmds, commands.AnimTickCmd(), m.spinner.Tick)
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan),
+		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan), m.updateOnlineList(),
 			commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 			commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 			commands.TickCmd(), tea.EnableMouseCellMotion)
@@ -325,24 +360,23 @@ func (m *Model) Clean() {
 
 func (m *Model) focusInputs() {
 	m.unfocusInputs()
-
+	ps := lipgloss.NewStyle().Foreground(lipgloss.Color(m.themeColor))
 	switch m.state {
 	case states.REG_STATE:
 		m.regTextInputs[m.cursor].Focus()
-		m.regTextInputs[m.cursor].PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-		m.regTextInputs[m.cursor].TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	case states.CONN_STATE:
-		m.connTextInputs[m.cursor].Focus()
-		m.connTextInputs[m.cursor].PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-		m.connTextInputs[m.cursor].TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+		m.regTextInputs[m.cursor].PromptStyle = ps
+	// case states.CONN_STATE:
+	// 	m.connTextInputs.Focus()
+	// 	m.connTextInputs.PromptStyle = ps
 	case states.CHAT_STATE:
 		m.chatTextInput.Focus()
-		m.chatTextInput.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-		m.chatTextInput.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+		m.chatTextInput.PromptStyle = ps
 	case states.LOGIN_STATE:
 		m.logingInput[m.cursor].Focus()
-		m.logingInput[m.cursor].PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-		m.logingInput[m.cursor].TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+		m.logingInput[m.cursor].PromptStyle = ps
+	case states.PROFILE_STATE:
+		m.themeColorInput.Focus()
+		m.themeColorInput.PromptStyle = ps
 	}
 }
 
@@ -352,11 +386,10 @@ func (m *Model) unfocusInputs() {
 		m.regTextInputs[i].PromptStyle = lipgloss.NewStyle()
 		m.regTextInputs[i].TextStyle = lipgloss.NewStyle()
 	}
-	for i := range m.connTextInputs {
-		m.connTextInputs[i].Blur()
-		m.connTextInputs[i].PromptStyle = lipgloss.NewStyle()
-		m.connTextInputs[i].TextStyle = lipgloss.NewStyle()
-	}
+
+	m.connTextInputs.Blur()
+	m.connTextInputs.PromptStyle = lipgloss.NewStyle()
+	m.connTextInputs.TextStyle = lipgloss.NewStyle()
 
 	for i := range m.logingInput {
 		m.logingInput[i].Blur()
@@ -367,31 +400,30 @@ func (m *Model) unfocusInputs() {
 	m.chatTextInput.Blur()
 	m.chatTextInput.PromptStyle = lipgloss.NewStyle()
 	m.chatTextInput.TextStyle = lipgloss.NewStyle()
-}
 
-const (
-	cDesc  = lipgloss.Color("#8eb838")
-	cTitle = lipgloss.Color("#A6E22E")
-)
+	m.themeColorInput.Blur()
+	m.themeColorInput.PromptStyle = lipgloss.NewStyle()
+	m.themeColorInput.TextStyle = lipgloss.NewStyle()
+}
 
 func (m *Model) setupMicrohonesList(selected string) {
 	if m.user != nil && m.user.Engines.AudioEngine != nil {
 		ms := m.user.Engines.AudioEngine.FetchMicrophones()
 
-		microphones := make([]list.Item, 0, len(ms))
+		microphones := make([]list.Item, len(ms))
 
 		selectedIndex := 0
 
 		for i, v := range ms {
-			microphones = append(microphones, micItem{name: v.Name, channels: v.Channels, sampleRate: v.SampleRate})
-			if v.Name == selected {
-				selectedIndex = i
+			microphones[v.Index] = micItem{name: v.Name, channels: v.Channels, sampleRate: v.SampleRate}
+			if i == selected {
+				selectedIndex = v.Index
 			}
 		}
 
 		delegate := list.NewDefaultDelegate()
-		delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(cTitle)
-		delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(cDesc)
+		delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+		delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 		delegate.SetSpacing(1)
 
 		m.microphonesList = list.New(microphones, delegate, m.width/2, m.height-4)
@@ -409,17 +441,32 @@ func (m *Model) setupConnestionsList() {
 	conns := make([]list.Item, 0)
 
 	delegate := list.NewDefaultDelegate()
-	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(cDesc)
+	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 	delegate.ShowDescription = true
 	delegate.SetSpacing(1)
 
 	m.connectionsList = list.New(conns, delegate, m.width/2, m.height-4)
-	m.connectionsList.Title = "connections"
 	m.connectionsList.SetShowStatusBar(false)
 	m.connectionsList.SetShowTitle(false)
 	m.connectionsList.SetFilteringEnabled(false)
 	m.connectionsList.SetShowFilter(false)
 	m.connectionsList.SetShowHelp(false)
+}
+
+func (m *Model) setupOnlineList() {
+	online := make([]list.Item, 0)
+
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+	delegate.SetSpacing(0)
+
+	m.onlineList = list.New(online, delegate, m.width/2, m.height-4)
+	m.onlineList.SetShowStatusBar(false)
+	m.onlineList.SetShowTitle(false)
+	m.onlineList.SetFilteringEnabled(false)
+	m.onlineList.SetShowFilter(false)
+	m.onlineList.SetShowHelp(false)
 }
 
 func (m *Model) updateConnectionItemList(nickname string, volume float32, muted bool) tea.Cmd {
@@ -439,6 +486,43 @@ func (m *Model) updateConnectionItemList(nickname string, volume float32, muted 
 	}
 	return tea.Batch(cmds...)
 
+}
+
+func (m *Model) updateOnlineList() tea.Cmd{
+	var cmds []tea.Cmd
+	items := m.onlineList.Items()
+	onlineMap := make(map[string]struct{}, len(m.online))
+	for _, v := range m.online {
+		onlineMap[v] = struct{}{}
+	}
+
+	itemsMap := make(map[string]struct{}, len(items))
+	for _, v := range items {
+		item, ok := v.(onlineItem)
+		if !ok {
+			continue
+		}
+		itemsMap[item.name] = struct{}{}
+	}
+
+	for i := len(items) - 1; i >= 0; i-- {
+		item, ok := items[i].(onlineItem)
+		if !ok {
+			continue
+		}
+		_, ok = onlineMap[item.name]
+		if !ok {
+			m.onlineList.RemoveItem(i)
+		}
+	}
+
+	for _, v := range m.online {
+		if _, ok := itemsMap[v]; !ok {
+			itLenLen := len(m.onlineList.Items())
+			cmds = append(cmds, m.onlineList.InsertItem(itLenLen, onlineItem{name: v}))
+		}
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) updateConnectionsList() tea.Cmd {

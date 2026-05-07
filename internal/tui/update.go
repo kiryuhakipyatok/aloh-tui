@@ -11,9 +11,11 @@ import (
 	"aloh-tui/pkg/logger"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/AvraamMavridis/randomcolor"
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -51,6 +53,8 @@ func (m Model) syncTabState() Model {
 			} else {
 				m.state = states.DEF_STATE
 			}
+		case 4:
+			m.state = states.PROFILE_STATE
 		default:
 			m.state = states.DEF_STATE
 		}
@@ -129,6 +133,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, commands.UpdateTickCmd()
 		} else {
 			m.updateTick = false
+			return m, nil
+		}
+
+	case commands.ChangeThemeMsg:
+		err := msg.Err
+		if err != nil {
+			m.err = err
+			m.state = states.ERR_STATE
+		} else {
+			m.themeColor = lipgloss.Color(m.user.Data.Setup.ThemeColor)
+			m.subThemeColor = lipgloss.Color(utils.DarkenHex(m.user.Data.Setup.ThemeColor, 0.7))
+			m.headerActiveStyle = lipgloss.NewStyle().Foreground(m.themeColor).Bold(true)
+			delegate := list.NewDefaultDelegate()
+			delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+			delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+			delegate.SetSpacing(1)
+			m.microphonesList.SetDelegate(delegate)
+			m.state = m.prState
+			m.unfocusInputs()
 			return m, nil
 		}
 
@@ -304,7 +327,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateTick = true
 			}
 
-			cmds = append(cmds, m.updateConnectionsList())
+			cmds = append(cmds, m.updateConnectionsList(), m.updateOnlineList())
 
 			if len(joined) > 0 && (m.activeTab == 0 || m.prState == states.CONN_STATE) {
 				m.activeTab = 1
@@ -471,31 +494,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, textinput.Blink
 
 		case "up":
-			if m.activeTab != 2 && m.activeTab != 5 && m.cursor > 0 {
+			if !m.isLoggedIn() || (m.activeTab != 0 && m.activeTab != 2 && m.activeTab != 5 && m.cursor > 0) {
 				m.cursor--
 				m.focusInputs()
 				return m, textinput.Blink
 			}
 
 		case "down":
-			if m.activeTab != 2 && m.activeTab != 5 {
-				if !m.isLoggedIn() {
-					if m.activeTab == 0 && m.cursor < len(m.regTextInputs)-1 {
-						m.cursor++
-					} else if m.activeTab == 1 && m.cursor < len(m.logingInput)-1 {
-						m.cursor++
-					}
-				} else {
-					if m.activeTab == 0 && m.cursor < len(m.connTextInputs)-1 {
-						m.cursor++
-					}
+			if !m.isLoggedIn() || (m.activeTab != 0 && m.activeTab != 2 && m.activeTab != 5) {
+				if m.activeTab == 0 && m.cursor < len(m.regTextInputs)-1 {
+					m.cursor++
+				} else if m.activeTab == 1 && m.cursor < len(m.logingInput)-1 {
+					m.cursor++
 				}
+
 				m.focusInputs()
 				return m, textinput.Blink
 			}
 
 		case "enter":
-
 			if m.curWindow == windows.START_WINDOW {
 				m.state = states.LOAD_STATE
 				m.curWindow = windows.DEF_WINDOW
@@ -550,13 +567,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				switch m.activeTab {
 				case 0:
-					if !m.connected && m.connTextInputs[0].Value() != "" {
+					// if !m.connected && m.connTextInputs.Value() != "" {
+					// 	m.prState = m.state
+					// 	m.state = states.LOAD_STATE
+					// 	cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, m.connTextInputs.Value()))
+
+					// 	m.connTextInputs.Reset()
+
+					// }
+					if !m.connected {
 						m.prState = m.state
 						m.state = states.LOAD_STATE
-						cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, m.connTextInputs[0].Value()))
-						for i := range m.connTextInputs {
-							m.connTextInputs[i].Reset()
+						if i, ok := m.onlineList.SelectedItem().(onlineItem); ok {
+							cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, i.name))
 						}
+						m.connTextInputs.Reset()
 					}
 				case 1:
 					val := m.chatTextInput.Value()
@@ -574,6 +599,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.state = states.LOAD_STATE
 						cmds = append(cmds, commands.LeaveCmd(m.user.Networking, m.user.Engines.AudioEngine))
 					}
+				case 4:
+					m.prState = m.state
+					m.state = states.LOAD_STATE
+					newColor := m.themeColorInput.Value()
+					if newColor == "d" {
+						newColor = m.defaultThemeColor
+					} else if !strings.HasPrefix(newColor, "#") {
+						newColor = "#" + newColor
+					}
+					if len(newColor) != 7 {
+						break
+					}
+					cmds = append(cmds, commands.ChangeThemeCmd(m.user, newColor))
+					m.themeColorInput.Reset()
+					m.unfocusInputs()
 				case 5:
 					if i, ok := m.microphonesList.SelectedItem().(micItem); ok {
 						cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.name))
@@ -600,15 +640,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			switch m.activeTab {
 			case 0:
-				for i := range m.connTextInputs {
-					m.connTextInputs[i], cmd = m.connTextInputs[i].Update(msg)
-					cmds = append(cmds, cmd)
-				}
+				m.connTextInputs, cmd = m.connTextInputs.Update(msg)
+				cmds = append(cmds, cmd)
+				m.onlineList, cmd = m.onlineList.Update(msg)
+				cmds = append(cmds, cmd)
 			case 1:
 				m.chatTextInput, cmd = m.chatTextInput.Update(msg)
 				cmds = append(cmds, cmd)
 			case 2:
 				m.connectionsList, cmd = m.connectionsList.Update(msg)
+				cmds = append(cmds, cmd)
+			case 4:
+				m.themeColorInput, cmd = m.themeColorInput.Update(msg)
 				cmds = append(cmds, cmd)
 			case 5:
 				m.microphonesList, cmd = m.microphonesList.Update(msg)
