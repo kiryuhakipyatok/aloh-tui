@@ -17,3 +17,8 @@ const (
 	HELP_STATE
 	ERR_STATE
 )
+
+const (
+	LEFT_STATE = iota
+	RIGHT_STATE
+)

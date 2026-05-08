@@ -58,7 +58,7 @@ func (m Model) View() string {
 
 	rightW := lipgloss.Width(rightPart)
 
-	footerData := "ALT+Q: quit  |  TAB/ARROWS: switch tabs  |  ESC: back  |  ALT+H: help"
+	footerData := "ALT+Q: quit | TAB/ARRS: switch tabs | ESC: back | ALT+H: help"
 
 	leftPart := lipgloss.NewStyle().
 		Foreground(cDim).
@@ -316,19 +316,14 @@ func (m Model) renderSettingsView(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblLeft := m.headerActiveStyle.Render("► microphones")
-	m.microphonesList.SetSize(leftW-4, h-2)
-	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(m.microphonesList.View()))
+	lblLeft := m.headerActiveStyle.Render("► app settings")
+	m.settingsList.SetSize(rightW-2, h-2)
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.View()))
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
-	lblRight := m.headerActiveStyle.Render("► audio settings")
-	st := lipgloss.NewStyle().Foreground(m.themeColor)
-	rightBox := lipgloss.JoinVertical(lipgloss.Left,
-		lblRight, "",
-		lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("denoise:    %s", st.Render(fmt.Sprintf("%t", m.user.Data.Setup.Denoise)))),
-		lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("echo:       %s", st.Render(fmt.Sprintf("%t", m.user.Data.Setup.AEC)))),
-		lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("equalizer:  %s", st.Render(fmt.Sprintf("%t", m.user.Data.Setup.Filter)))),
-	)
+	lblRight := m.headerActiveStyle.Render("► microphones")
+	m.microphonesList.SetSize(leftW-2, h-2)
+	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", lipgloss.NewStyle().PaddingLeft(2).Render(m.microphonesList.View()))
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
 	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
@@ -348,8 +343,7 @@ func (m Model) renderProfileView(w, h int) string {
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("registered:"),
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(m.user.Data.Personal.RegisterTime),
 		"",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("theme color:"),
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(m.themeColor).Render(m.user.Data.Setup.ThemeColor),
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("theme color: " + lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.ThemeColor)),
 		lipgloss.NewStyle().PaddingLeft(2).Render(m.themeColorInput.View()),
 	)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
@@ -424,11 +418,13 @@ func (m Model) renderChatTab(w, h int) string {
 	}
 	connsView := lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate(rawConnStr, w-2))
 
-	var usersAudioState string
+	coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Personal.Nickname)
+
+	usersAudioState := lipgloss.NewStyle().PaddingLeft(2).Render(coloredUserNickname)
 
 	var chatParts []string
 	if m.user.Engines.AudioEngine.UserIsSpeaking() {
-		usersAudioState += lipgloss.NewStyle().PaddingLeft(2).Render(m.user.Data.Personal.Nickname + " 🔊")
+		usersAudioState = lipgloss.NewStyle().PaddingLeft(2).Render(coloredUserNickname + " 🔊")
 	}
 
 	if m.muteState != "" {
@@ -531,7 +527,7 @@ func (m Model) renderHelpView(w, h int) string {
 	lblRight := m.headerActiveStyle.Render("► audio & voice controls")
 
 	renderShortcut := func(keys, desc string) string {
-		k := lipgloss.NewStyle().Foreground(m.themeColor).Width(18).Render(keys)
+		k := lipgloss.NewStyle().Foreground(m.themeColor).Width(22).Render(keys)
 		d := lipgloss.NewStyle().Foreground(cText).Render(desc)
 		return safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(k+d), leftW)
 	}
@@ -566,11 +562,6 @@ func (m Model) renderHelpView(w, h int) string {
 		renderShortcut("ALT+B", "- toggle full mute"),
 		renderShortcut("ALT+Z", "- toggle user's mute"),
 		renderShortcut("ALT+UP/DN", "- increase / decrease user's volume"),
-		"",
-		sectionLbl.Render("audio contorls:"),
-		renderShortcut("ALT+D", "- toggle denoise"),
-		renderShortcut("ALT+E", "- toggle echocancellation"),
-		renderShortcut("ALT+F", "- toggle equalizer"),
 	}
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightRows...)

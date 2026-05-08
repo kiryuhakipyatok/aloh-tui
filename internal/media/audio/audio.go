@@ -28,6 +28,7 @@ type AudioEngine interface {
 	SetDisconnected()
 	ChangeMicrophone(microphone string) error
 	FetchMicrophones() map[string]MicrophoneInfo
+	UpdateMicrophones() error
 	MuteUnmuteMicro() bool
 	MuteUnmute() bool
 	SetVolume(nickname string, vc float32)
@@ -141,6 +142,13 @@ type MicrophoneInfo struct {
 	SampleRate uint32
 }
 
+type AudioSetup struct {
+	Microphone           string
+	Denoice              bool
+	Aec                  bool
+	Filtered             bool
+}
+
 const (
 	frameSize        = 1920
 	frameLen         = 960
@@ -148,7 +156,7 @@ const (
 	rnnoiseFrameSize = 480
 )
 
-func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered bool) (AudioEngine, error) {
+func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 	log := l.AddOp("audioEngine")
 
 	sparseLogger := l.Sparse(20)
@@ -172,7 +180,7 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered 
 
 	preprocessor := speexdsp.NewPreprocessor(48000, 960)
 
-	if aec {
+	if as.Aec {
 		preprocessor.SetEchoCanceller(echoCanceller)
 	}
 
@@ -217,6 +225,8 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered 
 		resampledWorkMic:     make([]int16, 4096),
 		monoCaptureBuffer:    make([]int16, 0, 4096),
 
+		
+
 		echoCanceller: echoCanceller,
 		preprocessor:  preprocessor,
 		opusEncoder:   opusEncoder,
@@ -226,9 +236,9 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered 
 		micDataChan:   make(chan []byte, 100),
 	}
 
-	ae.denoiced.Store(denoice)
-	ae.aec.Store(aec)
-	ae.filtered.Store(filtered)
+	ae.denoiced.Store(as.Denoice)
+	ae.aec.Store(as.Aec)
+	ae.filtered.Store(as.Filtered)
 
 	ctx, err := malgo.InitContext(audioBackends, malgo.ContextConfig{}, nil)
 	if err != nil {
@@ -259,13 +269,13 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered 
 		}
 		format := di.Formats[0]
 		micsInfo[m.Name()] = MicrophoneInfo{
-			Index: i,
+			Index:      i,
 			Name:       m.Name(),
 			SampleRate: format.SampleRate,
 			Channels:   format.Channels,
 		}
 
-		if microphones[i].Name() == microphone {
+		if microphones[i].Name() == as.Microphone {
 			micId = microphones[i].ID.Pointer()
 			ch = format.Channels
 		}
@@ -274,8 +284,8 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered 
 
 	ae.Microphones = micsInfo
 
-	if microphone != "" {
-		id, err := ae.resolveCaptureDeviceByName(microphone)
+	if as.Microphone != "" {
+		id, err := ae.resolveCaptureDeviceByName(as.Microphone)
 		if err != nil {
 			micId = nil
 		} else {
@@ -350,6 +360,33 @@ func NewAudioEngine(l *logger.Logger, microphone string, denoice, aec, filtered 
 	go ae.sendVoice()
 
 	return ae, nil
+}
+
+func (ae *audioEngine) UpdateMicrophones() error {
+	microphones, err := ae.malgoCtx.Devices(malgo.Capture)
+	if err != nil {
+		ae.log.Error(0, "failed to get devices", logger.Err(err))
+		return err
+	}
+
+	micsInfo := make(map[string]MicrophoneInfo, 0)
+
+	for i, m := range microphones {
+		di, err := ae.malgoCtx.DeviceInfo(malgo.Capture, m.ID, malgo.Shared)
+		if err != nil {
+			ae.log.Error(0, "failed to get devices info", logger.Err(err))
+			return err
+		}
+		format := di.Formats[0]
+		micsInfo[m.Name()] = MicrophoneInfo{
+			Index:      i,
+			Name:       m.Name(),
+			SampleRate: format.SampleRate,
+			Channels:   format.Channels,
+		}
+	}
+	ae.Microphones = micsInfo
+	return nil
 }
 
 func (ae *audioEngine) resolveCaptureDeviceByName(name string) (unsafe.Pointer, error) {

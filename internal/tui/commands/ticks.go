@@ -13,7 +13,7 @@ type AnimTickMsg time.Time
 type UpdateTickMsg time.Time
 
 func TickCmd() tea.Cmd {
-	return tea.Tick(time.Millisecond*1500, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Millisecond*1000, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
 }

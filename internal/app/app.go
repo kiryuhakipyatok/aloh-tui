@@ -31,7 +31,6 @@ func Run(env, version string) {
 		l.Fatalf("failed to create model: %v", err)
 	}
 	defer model.Clean()
-
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		l.Fatalf("failed to run model: %v", err)
