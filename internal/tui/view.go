@@ -343,7 +343,7 @@ func (m Model) renderProfileView(w, h int) string {
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("registered:"),
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(m.user.Data.Personal.RegisterTime),
 		"",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("theme color: " + lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.ThemeColor)),
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("theme color: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.ThemeColor)),
 		lipgloss.NewStyle().PaddingLeft(2).Render(m.themeColorInput.View()),
 	)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
@@ -448,8 +448,16 @@ func (m Model) renderChatTab(w, h int) string {
 		for _, msg := range m.messages {
 			t := lipgloss.NewStyle().Foreground(cDim).Render(msg.Time)
 			n := lipgloss.NewStyle().Foreground(cSubtext).Bold(true).Render(msg.Nickname + ":")
-			txt := lipgloss.NewStyle().Foreground(cText).Render(msg.Text)
-			renderedMsg := msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
+
+			var renderedMsg string
+
+			if strings.HasPrefix(msg.Text, "\n") {
+				txt := msg.Text 
+				renderedMsg = lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("%s %s %s", t, n, txt))
+			} else {
+				txt := lipgloss.NewStyle().Foreground(cText).Render(msg.Text)
+				renderedMsg = msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
+			}
 			allMsgsLines = append(allMsgsLines, strings.Split(renderedMsg, "\n")...)
 		}
 

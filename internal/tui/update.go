@@ -8,13 +8,21 @@ import (
 	"aloh-tui/internal/tui/components/states"
 	"aloh-tui/internal/tui/components/windows"
 	"aloh-tui/internal/utils"
-	"aloh-tui/pkg/logger"
+	"bytes"
+	"fmt"
+	"image"
 	"math"
 	"slices"
 	"strings"
 	"time"
 
+	_ "image/jpeg"
+	_ "image/png"
+
+	"golang.design/x/clipboard"
+
 	"github.com/AvraamMavridis/randomcolor"
+	"github.com/blacktop/go-termimg"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -37,6 +45,7 @@ func (m Model) syncTabState() Model {
 		case 1:
 			m.state = states.LOGIN_STATE
 		}
+		m.focusInputs()
 	} else {
 		switch m.activeTab {
 		case 0:
@@ -123,7 +132,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case tea.MouseButtonWheelUp:
 			if m.isLoggedIn() && m.activeTab == 1 && m.connected {
-				if m.chatOffset < m.getMaxChatOffset() {
+				maxOffset, _, _ := m.getChatSizes()
+				if m.chatOffset < maxOffset {
 					m.chatOffset++
 				}
 			}
@@ -258,16 +268,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.setupMicrohonesList(m.user.Data.Devices.Microphone)
 				m.user.Networking.ChatCallback(func(id string, data []byte) {
 					t := time.Now().Format("15:04:05")
-					msg := string(data)
-					m.msgChan <- commands.ChatMessage{Time: t, Nickname: id, Text: msg}
-					if m.user.Data.Setup.AudioNotifications {
-						m.user.Engines.AudioEngine.PlayNotification()
-					}
-					if m.user.Data.Setup.DesktopNotifications {
-						if err := notifications.Notify(t, id, msg); err != nil {
-							m.log.Error("failed to notify", logger.Attr("userId", id), logger.Err(err))
-						}
-					}
+
+					m.rawMsgChan <- commands.RawChatMessage{Time: t, Nickname: id, Data: data}
 
 				})
 				m.user.Networking.VoiceCallback(func(id string, data []byte) {
@@ -276,11 +278,64 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			cmds = append(cmds,
-				commands.WaitForChatMessageCmd(m.msgChan),
+				commands.WaitForChatMessageCmd(m.msgChan), commands.WaitForRawChatMessageCmd(m.rawMsgChan),
 				commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 				commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 				commands.TickCmd(), textinput.Blink)
 		}
+
+	case commands.RawChatMessage:
+		data := msg.Data
+		textMsg := string(msg.Data)
+		textForDesktopNotification := textMsg
+		dataLen := len(data)
+		if dataLen > 3 && slices.Equal(data[:3], []byte{'i', 'm', 'g'}) {
+			img, _, err := image.Decode(bytes.NewReader(data[3:]))
+			if err != nil {
+				m.err = err
+				m.state = states.ERR_STATE
+				return m, commands.WaitForRawChatMessageCmd(m.rawMsgChan)
+			}
+			size := img.Bounds().Size()
+			_, cw, ch := m.getChatSizes()
+			if ch < 1 {
+				ch = 1
+			}
+
+			if size.X > cw {
+				size.X = cw
+				size.Y = ch
+			} else if size.Y > ch {
+				size.X = cw
+				size.Y = ch
+			}
+
+			imageWidget := termimg.NewImageWidgetFromImage(img)
+			imageWidget.SetProtocol(termimg.Auto)
+			imageWidget.SetSizeWithCorrection(int(float32(size.X)*1.4), int(float32(size.Y)*1.4))
+			textMsg, err = imageWidget.Render()
+			if err != nil {
+				m.err = err
+				m.state = states.ERR_STATE
+				return m, commands.WaitForRawChatMessageCmd(m.rawMsgChan)
+			}
+			textForDesktopNotification = fmt.Sprintf("image with len: %d", dataLen)
+			textMsg = fmt.Sprintf("\n%s", textMsg)
+		}
+
+		m.msgChan <- commands.ChatMessage{Nickname: msg.Nickname, Time: msg.Time, Text: textMsg}
+
+		if m.user.Data.Setup.AudioNotifications {
+			m.user.Engines.AudioEngine.PlayNotification()
+		}
+		if m.user.Data.Setup.DesktopNotifications {
+			if err := notifications.Notify(msg.Time, msg.Nickname, textForDesktopNotification); err != nil {
+				m.err = err
+				m.state = states.ERR_STATE
+				return m, commands.WaitForRawChatMessageCmd(m.rawMsgChan)
+			}
+		}
+		return m, commands.WaitForRawChatMessageCmd(m.rawMsgChan)
 
 	case commands.ChatMessage:
 		msg.Nickname = m.coloredNickname(msg.Nickname)
@@ -364,7 +419,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commands.TickMsg:
 		if m.state != states.LOAD_STATE {
 			if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" {
-				cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname), commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname))
+				cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
+					commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname), commands.UpdateMicrophonesCmd(m.user))
 			}
 		}
 		cmds = append(cmds, commands.TickCmd())
@@ -426,6 +482,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, textinput.Blink
 				}
 				m.state = states.HELP_STATE
+			}
+
+		case "ctrl+v", "ctrl+V", "ctrl+М", "ctrl+м":
+			if m.connected && m.activeTab == 1 {
+				imgData := clipboard.Read(clipboard.FmtImage)
+
+				lid := len(imgData)
+
+				if lid > 0 {
+					m.chatTextInput.SetValue(fmt.Sprintf("image with len: %d", lid))
+					m.imageBuffer = imgData
+				}
 			}
 
 		case "alt+z", "alt+Z", "alt+я", "alt+Я":
@@ -624,14 +692,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				switch m.activeTab {
 				case 0:
-					// if !m.connected && m.connTextInputs.Value() != "" {
-					// 	m.prState = m.state
-					// 	m.state = states.LOAD_STATE
-					// 	cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, m.connTextInputs.Value()))
-
-					// 	m.connTextInputs.Reset()
-
-					// }
 					if !m.connected {
 						var nick string
 						switch m.sideState {
@@ -658,8 +718,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				case 1:
 					val := m.chatTextInput.Value()
+					toSend := []byte(val)
+					if m.imageBuffer != nil {
+						img, _, err := image.Decode(bytes.NewReader(m.imageBuffer))
+						if err != nil {
+							m.err = err
+							m.state = states.ERR_STATE
+							m.imageBuffer = nil
+							return m, nil
+						}
+						size := img.Bounds().Size()
+						_, cw, ch := m.getChatSizes()
+						if ch < 1 {
+							ch = 1
+						}
+
+						if size.X > cw {
+							size.X = cw
+							size.Y = ch
+						} else if size.Y > ch {
+							size.X = cw
+							size.Y = ch
+						}
+						imageWidget := termimg.NewImageWidgetFromImage(img)
+						imageWidget.SetProtocol(termimg.Auto)
+
+						toSend = utils.SetThreeFirstByte([]byte{'i', 'm', 'g'}, m.imageBuffer)
+
+						imageWidget.SetSizeWithCorrection(int(float32(size.X)*1.4), int(float32(size.Y)*1.4))
+
+						rendered, err := imageWidget.Render()
+						if err != nil {
+							m.err = err
+							m.state = states.ERR_STATE
+							m.imageBuffer = nil
+							return m, nil
+						}
+
+						val = fmt.Sprintf("\n%s", rendered)
+						m.imageBuffer = nil
+					}
 					if val != "" && m.user.Networking != nil {
-						cmds = append(cmds, commands.SendInChatCmd(m.user.Networking, val))
+						cmds = append(cmds, commands.SendInChatCmd(m.user.Networking, toSend))
 						m.messages = append(m.messages, commands.ChatMessage{
 							Time:     time.Now().Format("15:04:05"),
 							Nickname: lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Personal.Nickname),
@@ -689,11 +789,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.unfocusInputs()
 				case 5:
 					switch m.sideState {
-					case 0:
+					case 1:
 						if i, ok := m.microphonesList.SelectedItem().(micItem); ok {
 							cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.name), m.updateMicrophonesItemList(i.name))
 						}
-					case 1:
+					case 0:
 						if i, ok := m.settingsList.SelectedItem().(settingsItem); ok {
 							switch i.id {
 							case DENOISE:

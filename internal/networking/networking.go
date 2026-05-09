@@ -12,7 +12,7 @@ type Networking interface {
 	VideoCallback(cb func(id string, data []byte))
 	VoiceCallback(cb func(id string, data []byte))
 
-	SendMessageInChat(msg string) error
+	SendMessageInChat(msg []byte) error
 	SendVoiceData(data []byte) error
 	SendVideoData(data []byte) error
 
@@ -66,7 +66,7 @@ func (n *networking) VoiceCallback(cb func(id string, data []byte)) {
 	n.RegisterOnVoice(cb)
 }
 
-func (n *networking) SendMessageInChat(msg string) error {
+func (n *networking) SendMessageInChat(msg []byte) error {
 	if err := n.SendMessage(msg); err != nil {
 		return err
 	}

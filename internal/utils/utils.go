@@ -121,3 +121,10 @@ func DarkenHex(hex string, factor float64) string {
 
 	return fmt.Sprintf("#%02X%02X%02X", darken(r), darken(g), darken(b))
 }
+
+func SetThreeFirstByte(threeFb []byte, data []byte) []byte {
+	new := make([]byte, 0, len(data)+3)
+	new = append(new, threeFb...)
+	new = append(new, data...)
+	return new
+}

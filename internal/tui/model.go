@@ -5,10 +5,8 @@ import (
 	"aloh-tui/internal/entities"
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
-	"aloh-tui/internal/notifications"
 	"aloh-tui/internal/tui/commands"
 	"aloh-tui/internal/tui/components/states"
-	"aloh-tui/internal/tui/components/styles"
 	"aloh-tui/internal/tui/components/titles"
 	"aloh-tui/internal/tui/components/windows"
 	"aloh-tui/internal/utils"
@@ -137,9 +135,13 @@ type Model struct {
 
 	defaultThemeColor string
 
+	imageBuffer []byte
+
 	speaking bool
 
 	chatOffset int
+	chatWidth  int
+	chatHeight int
 
 	updateTick bool
 
@@ -166,7 +168,8 @@ type Model struct {
 
 	connected bool
 
-	msgChan chan commands.ChatMessage
+	msgChan    chan commands.ChatMessage
+	rawMsgChan chan commands.RawChatMessage
 
 	log *logger.Logger
 
@@ -217,7 +220,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		log: appLogger,
 
-		msgChan: make(chan commands.ChatMessage, 100),
+		msgChan:    make(chan commands.ChatMessage, 100),
+		rawMsgChan: make(chan commands.RawChatMessage, 100),
 	}
 
 	m.logoAnim = []string{titles.BIG_LOGO1, titles.BIG_LOGO2, titles.BIG_LOGO3, titles.BIG_LOGO2}
@@ -240,8 +244,10 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	userData := entities.Data{
 		Setup: entities.Setup{
-			UsersSetup: make(map[string]entities.UsersSetup, 0),
-			ThemeColor: m.defaultThemeColor,
+			UsersSetup:           make(map[string]entities.UsersSetup, 0),
+			ThemeColor:           m.defaultThemeColor,
+			AudioNotifications:   true,
+			DesktopNotifications: true,
 		},
 	}
 
@@ -301,16 +307,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			log.Info("setting netwoking callbacks...", logNickname)
 			networking.ChatCallback(func(id string, data []byte) {
 				t := time.Now().Format("15:04:05")
-				msg := string(data)
-				m.msgChan <- commands.ChatMessage{Time: t, Nickname: id, Text: msg}
-				if m.user.Data.Setup.AudioNotifications {
-					m.user.Engines.AudioEngine.PlayNotification()
-				}
-				if m.user.Data.Setup.DesktopNotifications {
-					if err := notifications.Notify(t, id, msg); err != nil {
-						m.log.Error("failed to notify", logger.Attr("userId", id), logger.Err(err))
-					}
-				}
+				m.rawMsgChan <- commands.RawChatMessage{Time: t, Nickname: id, Data: data}
+
 			})
 			networking.VoiceCallback(func(id string, data []byte) {
 				audioEngine.PlayUserVoice(id, data)
@@ -379,7 +377,7 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
 	cmds = append(cmds, commands.AnimTickCmd(), m.spinner.Tick)
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan),
+		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan), commands.WaitForRawChatMessageCmd(m.rawMsgChan),
 			commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 			commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 			commands.TickCmd(), tea.EnableMouseCellMotion)
@@ -453,7 +451,6 @@ func (m *Model) setupMicrohonesList(selected string) {
 		ms := m.user.Engines.AudioEngine.FetchMicrophones()
 
 		microphones := make([]list.Item, len(ms))
-
 
 		for i, v := range ms {
 			mi := micItem{name: v.Name, channels: v.Channels, sampleRate: v.SampleRate, current: ""}
@@ -747,74 +744,78 @@ func (m *Model) coloredNickname(nickname string) string {
 	return nickname
 }
 
-func (m Model) getMaxChatOffset() int {
+func (m Model) getChatSizes() (int, int, int) {
 	if m.width == 0 || m.height == 0 {
-		return 0
+		return 0, 0, 0
 	}
 
-	borderStyle := styles.BorderStyle
-	frameChromeW := lipgloss.Width(borderStyle.Render("X")) - 1
-	frameChromeH := lipgloss.Height(borderStyle.Render("X")) - 1
+	padW, padH := 2, 1
+	usableW := m.width - (padW * 2)
+	usableH := m.height - (padH * 2)
 
-	usableW := m.width - frameChromeW
-	usableH := m.height - frameChromeH
+	footerH := lipgloss.Height("X")
+	logo := lipgloss.NewStyle().Foreground(m.themeColor).Render(titles.A)
+	logoH := lipgloss.Height(logo)
 
-	title := styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.BIG_LOGO1)
-	if usableW < 30 || usableH < 30 {
-		borderStyle = styles.BorderStyle.PaddingTop(0)
-		frameChromeH = lipgloss.Height(borderStyle.Render("X")) - 1
-		title = styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.LITTLE_LOGO)
+	gridH := usableH - footerH - logoH
+	activeBorder := tabBorderWithBottom("┘", " ", "└")
+
+	activeTabStyle := lipgloss.NewStyle().
+		Border(activeBorder, true).
+		BorderForeground(cDim).
+		Foreground(m.themeColor).
+		Bold(true).
+		Align(lipgloss.Center)
+
+	tab := m.defTabs[0]
+	style := activeTabStyle
+	border, _, _, _, _ := style.GetBorder()
+	border.BottomLeft = "│"
+	border.BottomRight = "│"
+	styledT := style.Border(border).Render(tab)
+	tabsRow := lipgloss.JoinHorizontal(lipgloss.Top, styledT)
+	w := usableW - 4
+	h := gridH - lipgloss.Height(tabsRow) - 2
+
+	m.chatTextInput.Width = max(1, w-4)
+	inputView := lipgloss.NewStyle().PaddingLeft(2).Render(m.chatTextInput.View())
+
+	rawConnStr := "X"
+	connsView := lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate(rawConnStr, w-2))
+
+	usersAudioState := "X"
+
+	var chatParts []string
+
+
+
+	chatParts = append(chatParts, usersAudioState, connsView, "")
+
+	usedH := 0
+	for _, p := range chatParts {
+		usedH += lipgloss.Height(p)
+	}
+	usedH += lipgloss.Height(inputView) + 1
+
+	historyMaxH := max(0, h-usedH)
+
+	var maxOffset int
+	if historyMaxH > 0 {
+		var allMsgsLines []string
+		msgStyle := lipgloss.NewStyle().Width(w - 2).MaxWidth(w - 2).PaddingLeft(2)
+
+		for _, msg := range m.messages {
+			t := lipgloss.NewStyle().Foreground(cDim).Render(msg.Time)
+			n := lipgloss.NewStyle().Foreground(cSubtext).Bold(true).Render(msg.Nickname + ":")
+			txt := lipgloss.NewStyle().Foreground(cText).Render(msg.Text)
+			renderedMsg := msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
+			allMsgsLines = append(allMsgsLines, strings.Split(renderedMsg, "\n")...)
+		}
+
+		lenAll := len(allMsgsLines)
+
+		maxOffset = lenAll - historyMaxH
 	}
 
-	titleH := lipgloss.Height(title)
-	footerH := lipgloss.Height(styles.FooterStyle.Width(usableW).MaxWidth(usableW).Render("X"))
-
-	contentChromeW := lipgloss.Width(styles.ContentStyle.Render("X")) - 1
-	contentChromeH := lipgloss.Height(styles.ContentStyle.Render("X")) - 1
-
-	centerW := usableW - contentChromeW
-	centerH := usableH - titleH - footerH - contentChromeH
-
-	baseBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder())
-	boxChromeW := lipgloss.Width(baseBox.Render(""))
-	boxChromeH := lipgloss.Height(baseBox.Render("X")) - 1
-
-	leftTotalW := centerW / 3
-	innerRightW := (centerW - leftTotalW) - boxChromeW
-	innerRightH := centerH - boxChromeH
-
-	if innerRightW < 1 {
-		innerRightW = 1
-	}
-	if innerRightH < 1 {
-		innerRightH = 1
-	}
-
-	chatTitleH := lipgloss.Height(styles.HeaderStyle.Render("chat"))
-	muteStateH := lipgloss.Height(m.muteState)
-
-	activeConnectionsViewH := lipgloss.Height(lipgloss.NewStyle().Width(innerRightW - 2).MaxWidth(innerRightW - 2).Render("X"))
-	inputViewH := lipgloss.Height(lipgloss.NewStyle().Width(innerRightW - 2).Render(m.chatTextInput.View()))
-
-	usedSpaceH := chatTitleH + muteStateH + activeConnectionsViewH + inputViewH + 1
-	historyMaxH := innerRightH - usedSpaceH
-	if historyMaxH < 0 {
-		historyMaxH = 0
-	}
-
-	var totalLines int
-	msgStyle := lipgloss.NewStyle().Width(innerRightW - 2).MaxWidth(innerRightW - 2)
-
-	for _, msg := range m.messages {
-		timeStr := lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Bold(true).Render(msg.Time)
-		renderedMsg := msgStyle.Render(timeStr + "> " + msg.Nickname + ": " + msg.Text)
-		totalLines += len(strings.Split(renderedMsg, "\n"))
-	}
-
-	maxOffset := totalLines - historyMaxH
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-
-	return maxOffset
+	return maxOffset, w, historyMaxH
 }
