@@ -514,11 +514,10 @@ func (m Model) renderErrView(w, h int) string {
 	if m.user.Networking == nil && m.user.Data.Personal.Nickname != "" {
 		m.regTextInputs[1].Width = max(1, rightW-4)
 		rightContent = lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("please re-enter credentials:"), "",
-			lipgloss.NewStyle().PaddingLeft(2).Render(m.regTextInputs[1].View()),
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("please re-enter credentials"),
 		)
 	} else {
-		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("check logs or configuration")
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("check logs")
 	}
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", rightContent)
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)

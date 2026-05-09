@@ -103,7 +103,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m = m.syncTabState()
 					}
 					return m, textinput.Blink
-				} else if m.curWindow == windows.DEF_WINDOW {
+				} else if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
 					if m.zone.Get("registerT").InBounds(msg) || m.zone.Get("registerW").InBounds(msg) {
 						m.activeTab = 0
 					} else if m.zone.Get("loginT").InBounds(msg) || m.zone.Get("loginW").InBounds(msg) {

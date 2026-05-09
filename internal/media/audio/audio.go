@@ -143,10 +143,10 @@ type MicrophoneInfo struct {
 }
 
 type AudioSetup struct {
-	Microphone           string
-	Denoice              bool
-	Aec                  bool
-	Filtered             bool
+	Microphone string
+	Denoice    bool
+	Aec        bool
+	Filtered   bool
 }
 
 const (
@@ -224,8 +224,6 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		resampledWorkMix:     make([]int16, 4096),
 		resampledWorkMic:     make([]int16, 4096),
 		monoCaptureBuffer:    make([]int16, 0, 4096),
-
-		
 
 		echoCanceller: echoCanceller,
 		preprocessor:  preprocessor,
