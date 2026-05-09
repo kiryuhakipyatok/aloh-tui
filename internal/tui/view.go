@@ -569,6 +569,9 @@ func (m Model) renderHelpView(w, h int) string {
 		renderShortcut("ALT+B", "- toggle full mute"),
 		renderShortcut("ALT+Z", "- toggle user's mute"),
 		renderShortcut("ALT+UP/DN", "- increase / decrease user's volume"),
+		"",
+		sectionLbl.Render("chat controls:"),
+		renderShortcut("CTRL+I", "- paste image"),
 	}
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightRows...)
