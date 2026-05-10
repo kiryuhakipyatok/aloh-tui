@@ -161,10 +161,14 @@ type Model struct {
 	connections []string
 	online      []string
 
-	microphonesList list.Model
-	connectionsList list.Model
-	onlineList      list.Model
-	settingsList    list.Model
+	microphonesList     list.Model
+	microphonesDelegate list.DefaultDelegate
+	connectionsList     list.Model
+	connectionsDelegate list.DefaultDelegate
+	onlineList          list.Model
+	onlineDelegate      list.DefaultDelegate
+	settingsList        list.Model
+	settingsDelegate    list.DefaultDelegate
 
 	connected bool
 
@@ -322,7 +326,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	m.user = &user
 
-	m.setupMicrohonesList(m.user.Data.Devices.Microphone)
+	m.setupMicrohonesList()
 	m.setupConnestionsList()
 	m.setupOnlineList()
 	m.setupSettingsList()
@@ -446,7 +450,7 @@ func (m *Model) unfocusInputs() {
 	m.themeColorInput.TextStyle = lipgloss.NewStyle()
 }
 
-func (m *Model) setupMicrohonesList(selected string) {
+func (m *Model) setupMicrohonesList() {
 	if m.user != nil && m.user.Engines.AudioEngine != nil {
 		ms := m.user.Engines.AudioEngine.FetchMicrophones()
 
@@ -455,7 +459,7 @@ func (m *Model) setupMicrohonesList(selected string) {
 		for i, v := range ms {
 			mi := micItem{name: v.Name, channels: v.Channels, sampleRate: v.SampleRate, current: ""}
 
-			if i == selected {
+			if i == m.user.Engines.AudioEngine.GetCurrentMicrophone().Name {
 				mi.current = lipgloss.NewStyle().Foreground(m.themeColor).Render("CURRENT")
 			}
 
@@ -465,8 +469,10 @@ func (m *Model) setupMicrohonesList(selected string) {
 		delegate := list.NewDefaultDelegate()
 		delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 		delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
-		delegate.SetSpacing(1)
 
+		delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+		delegate.SetSpacing(1)
+		m.microphonesDelegate = delegate
 		m.microphonesList = list.New(microphones, delegate, m.width/2, m.height-4)
 		m.microphonesList.DisableQuitKeybindings()
 		m.microphonesList.Title = "select microphone"
@@ -486,7 +492,7 @@ func (m *Model) setupConnestionsList() {
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 	delegate.ShowDescription = true
 	delegate.SetSpacing(1)
-
+	m.connectionsDelegate = delegate
 	m.connectionsList = list.New(conns, delegate, m.width/2, m.height-4)
 	m.connectionsList.DisableQuitKeybindings()
 	m.connectionsList.Select(0)
@@ -503,8 +509,10 @@ func (m *Model) setupOnlineList() {
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
-	delegate.SetSpacing(0)
 
+	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+	delegate.SetSpacing(0)
+	m.onlineDelegate = delegate
 	m.onlineList = list.New(online, delegate, m.width/2, m.height-4)
 	m.onlineList.DisableQuitKeybindings()
 	m.onlineList.SetShowStatusBar(false)
@@ -551,8 +559,10 @@ func (m *Model) setupSettingsList() {
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
-	delegate.SetSpacing(1)
 
+	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+	delegate.SetSpacing(1)
+	m.settingsDelegate = delegate
 	m.settingsList = list.New(settings, delegate, m.width/2, m.height-4)
 	m.settingsList.Select(0)
 	m.settingsList.DisableQuitKeybindings()
@@ -754,7 +764,7 @@ func (m Model) getChatSizes() (int, int, int) {
 	usableH := m.height - (padH * 2)
 
 	footerH := lipgloss.Height("X")
-	logo := lipgloss.NewStyle().Foreground(m.themeColor).Render(titles.A)
+	logo := lipgloss.NewStyle().Render(titles.A)
 	logoH := lipgloss.Height(logo)
 
 	gridH := usableH - footerH - logoH
@@ -762,8 +772,6 @@ func (m Model) getChatSizes() (int, int, int) {
 
 	activeTabStyle := lipgloss.NewStyle().
 		Border(activeBorder, true).
-		BorderForeground(cDim).
-		Foreground(m.themeColor).
 		Bold(true).
 		Align(lipgloss.Center)
 
@@ -781,13 +789,11 @@ func (m Model) getChatSizes() (int, int, int) {
 	inputView := lipgloss.NewStyle().PaddingLeft(2).Render(m.chatTextInput.View())
 
 	rawConnStr := "X"
-	connsView := lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate(rawConnStr, w-2))
+	connsView := lipgloss.NewStyle().PaddingLeft(2).Render(safeTruncate(rawConnStr, w-2))
 
 	usersAudioState := "X"
 
 	var chatParts []string
-
-
 
 	chatParts = append(chatParts, usersAudioState, connsView, "")
 
@@ -805,9 +811,9 @@ func (m Model) getChatSizes() (int, int, int) {
 		msgStyle := lipgloss.NewStyle().Width(w - 2).MaxWidth(w - 2).PaddingLeft(2)
 
 		for _, msg := range m.messages {
-			t := lipgloss.NewStyle().Foreground(cDim).Render(msg.Time)
-			n := lipgloss.NewStyle().Foreground(cSubtext).Bold(true).Render(msg.Nickname + ":")
-			txt := lipgloss.NewStyle().Foreground(cText).Render(msg.Text)
+			t := lipgloss.NewStyle().Render(msg.Time)
+			n := lipgloss.NewStyle().Bold(true).Render(msg.Nickname + ":")
+			txt := lipgloss.NewStyle().Render(msg.Text)
 			renderedMsg := msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
 			allMsgsLines = append(allMsgsLines, strings.Split(renderedMsg, "\n")...)
 		}

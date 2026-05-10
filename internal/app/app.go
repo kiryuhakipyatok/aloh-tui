@@ -9,12 +9,11 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.design/x/clipboard"
 )
 
 func Run(env, version string) {
 	null, _ := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-	defer null.Close()
-
 	os.Stderr = null
 
 	l.SetOutput(io.Discard)
@@ -30,10 +29,15 @@ func Run(env, version string) {
 	if err != nil {
 		l.Fatalf("failed to create model: %v", err)
 	}
-	defer model.Clean()
+	if err := clipboard.Init(); err != nil {
+		l.Fatalf("failed to init clipboard: %v", err)
+	}
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		l.Fatalf("failed to run model: %v", err)
 	}
-
+	model.Clean()
+	if err := null.Close(); err != nil {
+		l.Fatalf("failed to close null: %v", err)
+	}
 }

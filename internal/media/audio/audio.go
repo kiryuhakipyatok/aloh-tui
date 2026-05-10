@@ -36,6 +36,7 @@ type AudioEngine interface {
 	SetMuteState(nickname string, mute bool)
 	FetchUsersMutes() map[string]struct{}
 	FetchSpeakingUsers() map[string]struct{}
+	GetCurrentMicrophone() MicrophoneInfo
 	UserIsSpeaking() bool
 	OnOffDenoice() bool
 	OnOffAEC() bool
@@ -119,7 +120,9 @@ type audioEngine struct {
 
 	log *logger.SparseLogger
 
-	Microphones map[string]MicrophoneInfo
+	Microphones       map[string]MicrophoneInfo
+	CurrentMicrophone MicrophoneInfo
+	CurrentHeadphones MicrophoneInfo
 
 	micDataChan chan []byte
 
@@ -266,30 +269,36 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 			return nil, err
 		}
 		format := di.Formats[0]
-		micsInfo[m.Name()] = MicrophoneInfo{
+		mi := MicrophoneInfo{
 			Index:      i,
 			Name:       m.Name(),
 			SampleRate: format.SampleRate,
 			Channels:   format.Channels,
 		}
+		micsInfo[m.Name()] = mi
 
-		if microphones[i].Name() == as.Microphone {
+		if di.IsDefault == 1 {
+			ae.CurrentMicrophone = mi
+		}
+
+		if as.Microphone != "" && microphones[i].Name() == as.Microphone {
 			micId = microphones[i].ID.Pointer()
 			ch = format.Channels
+			ae.CurrentMicrophone = mi
 		}
 
 	}
 
 	ae.Microphones = micsInfo
 
-	if as.Microphone != "" {
-		id, err := ae.resolveCaptureDeviceByName(as.Microphone)
-		if err != nil {
-			micId = nil
-		} else {
-			micId = id
-		}
-	}
+	// if as.Microphone != "" {
+	// 	id, err := ae.resolveCaptureDeviceByName(as.Microphone)
+	// 	if err != nil {
+	// 		micId = nil
+	// 	} else {
+	// 		micId = id
+	// 	}
+	// }
 
 	captureConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	playbackConfig := malgo.DefaultDeviceConfig(malgo.Playback)
@@ -429,6 +438,7 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 
 	micInfo, ok := ae.Microphones[microphone]
 	if ok && micId != nil {
+		ae.CurrentMicrophone = micInfo
 		ch = micInfo.Channels
 	}
 
@@ -507,6 +517,10 @@ func (ae *audioEngine) OnOffDenoice() bool {
 	s := ae.denoiced.Load()
 	ae.denoiced.Store(!s)
 	return !s
+}
+
+func (ae *audioEngine) GetCurrentMicrophone() MicrophoneInfo {
+	return ae.CurrentMicrophone
 }
 
 func (ae *audioEngine) OnOffAEC() bool {

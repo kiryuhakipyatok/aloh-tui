@@ -265,7 +265,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.syncTabState()
 
 			if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-				m.setupMicrohonesList(m.user.Data.Devices.Microphone)
+				m.setupMicrohonesList()
 				m.user.Networking.ChatCallback(func(id string, data []byte) {
 					t := time.Now().Format("15:04:05")
 
@@ -312,7 +312,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			imageWidget := termimg.NewImageWidgetFromImage(img)
 			imageWidget.SetProtocol(termimg.Auto)
-			imageWidget.SetSizeWithCorrection(int(float32(size.X)*1.2), int(float32(size.Y)*1.2))
+			imageWidget.SetSizeWithCorrection(size.X, size.Y)
 			textMsg, err = imageWidget.Render()
 			if err != nil {
 				m.err = err
@@ -433,7 +433,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "alt+й", "alt+Й", "ctrl+С", "ctrl+C", "alt+q", "alt+Q":
+		case "alt+й", "alt+Й", "alt+q", "alt+Q":
 			m.Clean()
 			return m, tea.Quit
 
@@ -484,8 +484,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = states.HELP_STATE
 			}
 
-		case "ctrl+p", "ctrl+P", "ctrl+З", "ctrl+з":
+		case "ctrl+v", "ctrl+V", "ctrl+м", "ctrl+М":
+			m.log.Info("ctrl+shift+v", msg.String())
 			if m.connected && m.activeTab == 1 {
+				textData := clipboard.Read(clipboard.FmtText)
+				if len(textData) > 0 {
+					m.chatTextInput.SetValue(string(textData))
+					return m, nil
+				}
+
 				imgData := clipboard.Read(clipboard.FmtImage)
 
 				lid := len(imgData)
@@ -493,6 +500,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if lid > 0 {
 					m.chatTextInput.SetValue(fmt.Sprintf("image with len: %d", lid))
 					m.imageBuffer = imgData
+					return m, nil
 				}
 			}
 
@@ -745,7 +753,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 						toSend = utils.SetThreeFirstByte([]byte{'i', 'm', 'g'}, m.imageBuffer)
 
-						imageWidget.SetSizeWithCorrection(int(float32(size.X)*1.2), int(float32(size.Y)*1.2))
+						imageWidget.SetSizeWithCorrection(size.X, size.Y)
 
 						rendered, err := imageWidget.Render()
 						if err != nil {
