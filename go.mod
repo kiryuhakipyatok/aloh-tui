@@ -13,11 +13,12 @@ require (
 	github.com/gen2brain/beeep v0.11.2
 	github.com/gen2brain/malgo v0.11.24
 	github.com/kechako/go-speexdsp v0.2.2
-	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260509122749-54b4eeb2a68a
+	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260510224728-be4b444714a4
 	github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e
 	github.com/lrstanley/bubblezone v1.0.0
 	golang.design/x/clipboard v0.7.1
 	golang.org/x/crypto v0.48.0
+	golang.org/x/image v0.36.0
 	gopkg.in/hraban/opus.v2 v2.0.0-20230925203106-0188a62cb302
 )
 
@@ -80,7 +81,6 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp/shiny v0.0.0-20250606033433-dcc06ee1d476 // indirect
-	golang.org/x/image v0.36.0 // indirect
 	golang.org/x/mobile v0.0.0-20250606033058-a2a15c67f36f // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect

@@ -18,12 +18,12 @@ import (
 
 	_ "image/jpeg"
 	_ "image/png"
+	_ "golang.org/x/image/bmp"
 
 	"golang.design/x/clipboard"
 
 	"github.com/AvraamMavridis/randomcolor"
 	"github.com/blacktop/go-termimg"
-	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -38,6 +38,7 @@ const (
 
 func (m Model) syncTabState() Model {
 	m.curWindow = windows.DEF_WINDOW
+	m.cursor = 0
 	if !m.isLoggedIn() {
 		switch m.activeTab {
 		case 0:
@@ -76,7 +77,7 @@ func (m Model) syncTabState() Model {
 		}
 
 	}
-	m.cursor = 0
+
 	//m.focusInputs()
 	return m
 }
@@ -164,14 +165,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.themeColor = lipgloss.Color(m.user.Data.Setup.ThemeColor)
 			m.subThemeColor = lipgloss.Color(utils.DarkenHex(m.user.Data.Setup.ThemeColor, 0.7))
 			m.headerActiveStyle = lipgloss.NewStyle().Foreground(m.themeColor).Bold(true)
-			delegate := list.NewDefaultDelegate()
-			delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
-			delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
-			delegate.SetSpacing(1)
-			m.microphonesList.SetDelegate(delegate)
+
+			m.microphonesDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+			m.microphonesDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+
+			m.settingsDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+			m.settingsDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+
+			m.connectionsDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+
+			m.onlineDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+			m.onlineDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+
+			m.microphonesList.SetDelegate(m.microphonesDelegate)
+			m.settingsList.SetDelegate(m.settingsDelegate)
+			m.connectionsList.SetDelegate(m.connectionsDelegate)
+			m.onlineList.SetDelegate(m.onlineDelegate)
+
 			m.state = m.prState
 			m.unfocusInputs()
-			return m, nil
+			return m, m.updateMicrophonesItemList(m.user.Data.Devices.Microphone)
 		}
 
 	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg, commands.MuteUnmuteUserMsg:
@@ -484,9 +497,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = states.HELP_STATE
 			}
 
-		case "ctrl+v", "ctrl+V", "ctrl+м", "ctrl+М":
-			m.log.Info("ctrl+shift+v", msg.String())
+		case "ctrl+p", "ctrl+P", "ctrl+З", "ctrl+з":
 			if m.connected && m.activeTab == 1 {
+				m.log.Info("ctrl+p")
 				textData := clipboard.Read(clipboard.FmtText)
 				if len(textData) > 0 {
 					m.chatTextInput.SetValue(string(textData))
@@ -627,7 +640,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, textinput.Blink
 
 		case "up":
-			if !m.isLoggedIn() || (m.activeTab != 0 && m.activeTab != 2 && m.activeTab != 5 && m.cursor > 0) {
+			if (!m.isLoggedIn() || (m.activeTab != 0 && m.activeTab != 2 && m.activeTab != 5)) && m.cursor > 0 {
 				m.cursor--
 				m.focusInputs()
 				return m, textinput.Blink
@@ -792,6 +805,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(newColor) != 7 {
 						break
 					}
+
 					cmds = append(cmds, commands.ChangeThemeCmd(m.user, newColor))
 					m.themeColorInput.Reset()
 					m.unfocusInputs()

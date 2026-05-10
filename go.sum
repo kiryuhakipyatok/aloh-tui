@@ -70,6 +70,8 @@ github.com/kechako/go-speexdsp v0.2.2 h1:XdcGjCl24yOBILwXqaR9R4xCkhFvvLrkytSZSeR
 github.com/kechako/go-speexdsp v0.2.2/go.mod h1:PIRnyHzHExNdQxigNFslk7dOhwLzYXj5bfHSUvi0IB8=
 github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260509122749-54b4eeb2a68a h1:Q61ggwuUssNz2kogfH/v3cT7E7sh8pkX23JgAjROI10=
 github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260509122749-54b4eeb2a68a/go.mod h1:7kN6jdlZuuu5Rc/noh4yA4+n6IZ0P3h8YXUnUDteOYk=
+github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260510224728-be4b444714a4 h1:l5mv7ijWIm2yCcqzZyNdXBeRyQ/oI13xtw0wgkNkxH8=
+github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260510224728-be4b444714a4/go.mod h1:7kN6jdlZuuu5Rc/noh4yA4+n6IZ0P3h8YXUnUDteOYk=
 github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e h1:r140sC6YmBlbwkO1ObcLh/27idiqCuNzTD4eMtmq8nw=
 github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e/go.mod h1:ygGMfWezx/ZqLUUZWbQr7geVOaGYdgUOxbp8KZBuasQ=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=

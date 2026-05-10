@@ -218,7 +218,7 @@ func (m Model) View() string {
 		} else {
 			switch m.activeTab {
 			case 0:
-				uiContent = m.renderConnectTab(windowInnerW, windowInnerH, cText)
+				uiContent = m.renderConnectTab(windowInnerW, windowInnerH)
 			case 1:
 				uiContent = m.renderChatTab(windowInnerW, windowInnerH, cText)
 			case 2:
@@ -228,7 +228,7 @@ func (m Model) View() string {
 			case 4:
 				uiContent = m.renderProfileView(windowInnerW, windowInnerH, cText)
 			case 5:
-				uiContent = m.renderSettingsView(windowInnerW, windowInnerH, cText)
+				uiContent = m.renderSettingsView(windowInnerW, windowInnerH)
 			}
 		}
 	}
@@ -309,14 +309,12 @@ func (m Model) renderVideoTab(w, h int) string {
 	return m.zone.Mark("videoW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, safeTruncate(lipgloss.NewStyle().Foreground(cDim).Render("~ video functionality coming soon ~"), w)))
 }
 
-func (m Model) renderConnectTab(w, h int, cText lipgloss.AdaptiveColor) string {
+func (m Model) renderConnectTab(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
 	lblLeft := m.headerActiveStyle.Render("► online friends")
 	m.onlineList.SetSize(leftW-2, h-2)
-	m.onlineDelegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
-	m.onlineList.SetDelegate(m.onlineDelegate)
 	onlineView := lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render(m.onlineList.View()))
 	if len(m.online) == 0 {
 		onlineView = lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render("zero friends online"))
@@ -345,14 +343,12 @@ func (m Model) renderConnectTab(w, h int, cText lipgloss.AdaptiveColor) string {
 	return m.zone.Mark("friendsW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
 }
 
-func (m Model) renderSettingsView(w, h int, cText lipgloss.AdaptiveColor) string {
+func (m Model) renderSettingsView(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
 	lblLeft := m.headerActiveStyle.Render("► app settings")
-	
-	m.settingsDelegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
-	m.settingsList.SetDelegate(m.settingsDelegate)
+
 	m.settingsList.SetSize(rightW-2, h-2)
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.View()))
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
@@ -599,8 +595,7 @@ func (m Model) renderHelpView(w, h int, cText lipgloss.AdaptiveColor) string {
 		renderShortcut("ALT+Z", "- toggle user's mute"),
 		renderShortcut("ALT+UP/DN", "- increase / decrease user's volume"), "",
 		sectionLbl.Render("chat controls:"),
-		renderShortcut("CTRL+SHIFT+C", "- copy something"),
-		renderShortcut("CTRL+V", "- paste something"),
+		renderShortcut("CTRL+P", "- paste image"),
 	}
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightRows...)

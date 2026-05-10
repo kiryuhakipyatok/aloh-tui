@@ -657,7 +657,7 @@ func (m *Model) updateMicrophonesList() tea.Cmd {
 	for i, v := range ms {
 		if _, ok := itemsMap[i]; !ok {
 			itLenLen := len(m.microphonesList.Items())
-			cmds = append(cmds, m.microphonesList.InsertItem(itLenLen, micItem{name: i, sampleRate: v.SampleRate, channels: v.Channels}))
+			cmds = append(cmds, m.microphonesList.InsertItem(itLenLen, micItem{name: i, sampleRate: v.SampleRate, channels: v.Channels, }))
 		}
 	}
 	return tea.Batch(cmds...)
