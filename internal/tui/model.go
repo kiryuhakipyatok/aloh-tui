@@ -143,7 +143,7 @@ type Model struct {
 	chatWidth  int
 	chatHeight int
 
-	updateTick bool
+	ticked bool
 
 	userColor string
 
@@ -174,6 +174,9 @@ type Model struct {
 
 	msgChan    chan commands.ChatMessage
 	rawMsgChan chan commands.RawChatMessage
+
+	peerConnectionsChan    chan commands.PeerConnectedMsg
+	peerDisconnectionsChan chan commands.PeerDisconnectedMsg
 
 	log *logger.Logger
 
@@ -226,6 +229,9 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		msgChan:    make(chan commands.ChatMessage, 100),
 		rawMsgChan: make(chan commands.RawChatMessage, 100),
+
+		peerConnectionsChan:    make(chan commands.PeerConnectedMsg, 100),
+		peerDisconnectionsChan: make(chan commands.PeerDisconnectedMsg, 100),
 	}
 
 	m.logoAnim = []string{titles.BIG_LOGO1, titles.BIG_LOGO2, titles.BIG_LOGO3, titles.BIG_LOGO2}
@@ -309,13 +315,19 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			}
 
 			log.Info("setting netwoking callbacks...", logNickname)
+			t := time.Now().Format("15:04:05")
 			networking.ChatCallback(func(id string, data []byte) {
-				t := time.Now().Format("15:04:05")
 				m.rawMsgChan <- commands.RawChatMessage{Time: t, Nickname: id, Data: data}
 
 			})
 			networking.VoiceCallback(func(id string, data []byte) {
 				audioEngine.PlayUserVoice(id, data)
+			})
+			networking.PeerConnectedCallback(func(id string) {
+				m.peerConnectionsChan <- commands.PeerConnectedMsg{Nickname: id, Time: t}
+			})
+			networking.PeerDisconnectedCallback(func(id string) {
+				m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
 			})
 
 			user.Engines.AudioEngine = audioEngine
@@ -381,8 +393,10 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
 	cmds = append(cmds, commands.AnimTickCmd(), m.spinner.Tick)
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan), commands.WaitForRawChatMessageCmd(m.rawMsgChan),
-			commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname),
+		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan),
+			commands.WaitForRawChatMessageCmd(m.rawMsgChan),
+			commands.WaitForPeerConnectionCmd(m.peerConnectionsChan),
+			commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan),
 			commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 			commands.TickCmd(), tea.EnableMouseCellMotion)
 		return tea.Batch(cmds...)
@@ -539,7 +553,7 @@ func (m *Model) setupSettingsList() {
 		settingsItem{
 			id:          EQUALIZER,
 			name:        "equalizer",
-			description: "reduce low frequencies and increase high",
+			description: "reduce low freqs and increase high",
 			enabled:     m.user.Data.Setup.Filter,
 		},
 		settingsItem{
@@ -657,7 +671,7 @@ func (m *Model) updateMicrophonesList() tea.Cmd {
 	for i, v := range ms {
 		if _, ok := itemsMap[i]; !ok {
 			itLenLen := len(m.microphonesList.Items())
-			cmds = append(cmds, m.microphonesList.InsertItem(itLenLen, micItem{name: i, sampleRate: v.SampleRate, channels: v.Channels, }))
+			cmds = append(cmds, m.microphonesList.InsertItem(itLenLen, micItem{name: i, sampleRate: v.SampleRate, channels: v.Channels}))
 		}
 	}
 	return tea.Batch(cmds...)

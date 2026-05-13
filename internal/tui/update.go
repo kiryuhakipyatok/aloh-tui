@@ -18,6 +18,7 @@ import (
 
 	_ "image/jpeg"
 	_ "image/png"
+
 	_ "golang.org/x/image/bmp"
 
 	"golang.design/x/clipboard"
@@ -148,13 +149,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case commands.UpdateTickMsg:
-		if m.connected {
-			return m, commands.UpdateTickCmd()
-		} else {
-			m.updateTick = false
-			return m, nil
-		}
+	// case commands.UpdateTickMsg:
+	// 	if m.connected {
+	// 		return m, commands.UpdateTickCmd()
+	// 	} else {
+	// 		//m.updateTick = false
+	// 		return m, nil
+	// 	}
 
 	case commands.ChangeThemeMsg:
 		err := msg.Err
@@ -235,8 +236,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.user.Engines.AudioEngine.SetConnected()
 			m.activeTab = 1
 			m = m.syncTabState()
-			cmds = append(cmds, textinput.Blink, commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname))
-			return m, tea.Batch(cmds...)
+			return m, textinput.Blink
 		}
 
 	case commands.SendInChatMsg:
@@ -279,8 +279,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
 				m.setupMicrohonesList()
+				t := time.Now().Format("15:04:05")
 				m.user.Networking.ChatCallback(func(id string, data []byte) {
-					t := time.Now().Format("15:04:05")
 
 					m.rawMsgChan <- commands.RawChatMessage{Time: t, Nickname: id, Data: data}
 
@@ -288,11 +288,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.user.Networking.VoiceCallback(func(id string, data []byte) {
 					m.user.Engines.AudioEngine.PlayUserVoice(id, data)
 				})
+				m.user.Networking.PeerConnectedCallback(func(id string) {
+					m.peerConnectionsChan <- commands.PeerConnectedMsg{Nickname: id, Time: t}
+				})
+				m.user.Networking.PeerDisconnectedCallback(func(id string) {
+					m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
+				})
 			}
 
 			cmds = append(cmds,
 				commands.WaitForChatMessageCmd(m.msgChan), commands.WaitForRawChatMessageCmd(m.rawMsgChan),
-				commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname),
+				commands.WaitForPeerConnectionCmd(m.peerConnectionsChan),
+				commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan),
 				commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 				commands.TickCmd(), textinput.Blink)
 		}
@@ -361,6 +368,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = states.ERR_STATE
 		} else {
 			m.online = msg.Online
+			return m, m.updateOnlineList()
 		}
 
 	case commands.ChangeMicrophoneMessage:
@@ -377,53 +385,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.updateMicrophonesList()
 		}
 
-	case commands.SessionsUpdateMsg:
-		if msg.Err != nil {
-			m.err = msg.Err
-			m.state = states.ERR_STATE
-		} else {
-			joined := utils.Difference(msg.Sessions, m.connections)
-
-			for _, v := range joined {
-				color := lipgloss.Color(randomcolor.GetRandomColorInHex())
-				nickname := lipgloss.NewStyle().Foreground(color).Render(v)
-				m.connections = append(m.connections, nickname)
-				m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: nickname + " joined the chat!"})
-				m.connected = true
+	case commands.PeerConnectedMsg:
+		color := lipgloss.Color(randomcolor.GetRandomColorInHex())
+		nickname := lipgloss.NewStyle().Foreground(color).Render(msg.Nickname)
+		m.connections = append(m.connections, nickname)
+		m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: nickname + " joined the chat!"})
+		if !m.connected {
+			m.connected = true
+			if m.user.Engines.AudioEngine != nil {
 				m.user.Engines.AudioEngine.SetConnected()
-				cmds = append(cmds, commands.SetupUserVolumeCmd(m.user, v), commands.SetupUserMuteCmd(m.user, v))
-				m.user.Engines.AudioEngine.PlayNotification()
-			}
-
-			left := utils.Difference(m.connections, msg.Sessions)
-
-			for _, v := range left {
-				m.connections = slices.DeleteFunc(m.connections, func(n string) bool {
-					return n == v
-				})
-				m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: v + " disconnected!"})
-				m.user.Engines.AudioEngine.PlayNotification()
-			}
-
-			if len(left) > 0 && len(m.connections) == 0 {
-				m.connected = false
-				if m.user.Engines.AudioEngine != nil {
-					m.user.Engines.AudioEngine.SetDisconnected()
-				}
-			}
-
-			if len(joined) > 0 && !m.updateTick {
-				cmds = append(cmds, commands.UpdateTickCmd())
-				m.updateTick = true
-			}
-
-			cmds = append(cmds, m.updateConnectionsList(), m.updateOnlineList())
-
-			if len(joined) > 0 && (m.activeTab == 0 || m.prState == states.CONN_STATE) {
-				m.activeTab = 1
-				m = m.syncTabState()
 			}
 		}
+
+		cmds = append(cmds, commands.SetupUserVolumeCmd(m.user, msg.Nickname),
+			commands.SetupUserMuteCmd(m.user, msg.Nickname), m.updateConnectionsList(), commands.WaitForPeerConnectionCmd(m.peerConnectionsChan))
+		if m.activeTab == 0 || m.prState == states.CONN_STATE {
+			m.activeTab = 1
+			m = m.syncTabState()
+		}
+		m.user.Engines.AudioEngine.PlayNotification()
+
+	case commands.PeerDisconnectedMsg:
+		var colored string
+		m.connections = slices.DeleteFunc(m.connections, func(n string) bool {
+			if ansi.Strip(n) == msg.Nickname {
+				colored = n
+				return true
+			}
+			return false
+		})
+		if len(m.connections) == 0 {
+			m.connected = false
+			if m.user.Engines.AudioEngine != nil {
+				m.user.Engines.AudioEngine.SetDisconnected()
+			}
+		}
+
+		m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: colored + " disconnected!"})
+		cmds = append(cmds, m.updateConnectionsList(), commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan))
+		m.user.Engines.AudioEngine.PlayNotification()
 
 	case spinner.TickMsg:
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -432,9 +432,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commands.TickMsg:
 		if m.state != states.LOAD_STATE {
 			if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" {
-				cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
-					commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname), commands.UpdateMicrophonesCmd(m.user))
+				cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname))
 			}
+			if m.user.Engines.AudioEngine != nil && m.activeTab == 5 {
+				cmds = append(cmds, commands.UpdateMicrophonesCmd(m.user))
+			}
+
+			// if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" && m.activeTab == 0 {
+			// 	cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname))
+			// }
+			// if m.user.Engines.AudioEngine != nil && m.activeTab == 5 {
+			// 	cmds = append(cmds, commands.UpdateMicrophonesCmd(m.user))
+			// }
 		}
 		cmds = append(cmds, commands.TickCmd())
 
@@ -465,19 +474,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.activeTab = 2
 				m = m.syncTabState()
 			}
-
-		// case "alt+d", "alt+в", "alt+D", "alt+В":
-		// 	if m.isLoggedIn() && m.activeTab == 5 {
-		// 		cmds = append(cmds, commands.OnOffDenoiceCmd(m.user))
-		// 	}
-		// case "alt+e", "alt+у", "alt+E", "alt+У":
-		// 	if m.isLoggedIn() && m.activeTab == 5 {
-		// 		cmds = append(cmds, commands.OnOffAECCmd(m.user))
-		// 	}
-		// case "alt+f", "alt+F", "alt+а", "alt+А":
-		// 	if m.isLoggedIn() && m.activeTab == 5 {
-		// 		cmds = append(cmds, commands.OnOffFilterCmd(m.user))
-		// 	}
 
 		case "alt+v", "alt+М", "alt+V", "alt+м":
 			if m.user.Engines.AudioEngine != nil {
@@ -659,14 +655,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter":
+			if m.state != states.LOAD_STATE {
+				return m, nil
+			}
 			if m.curWindow == windows.START_WINDOW {
 				m.state = states.LOAD_STATE
 				m.curWindow = windows.DEF_WINDOW
-				if m.user.Data.Personal.Nickname != "" && m.user.Data.Personal.RegisterTime != "" && m.user.Networking == nil {
-					cmds = append(cmds, commands.AuthCmd(m.user, m.log, nil))
-				} else {
-					m = m.syncTabState()
-				}
+				m = m.syncTabState()
 				m.focusInputs()
 				return m, textinput.Blink
 			}

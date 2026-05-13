@@ -16,6 +16,7 @@ const (
 	CHAT_ERROR
 	VOICE_ERROR
 	VIDEO_ERROR
+	OFFLINE
 	INTERNAL_ERROR
 )
 
@@ -40,9 +41,11 @@ func CastError(err error) string {
 			resErr = "voice error"
 		case VIDEO_ERROR:
 			resErr = "video error"
+		case OFFLINE:
+			resErr = "offline"
 		}
 	}
-	if errors.Is(err, errs.ErrAuth){
+	if errors.Is(err, errs.ErrAuth) {
 		resErr = err.Error()
 	}
 	return resErr

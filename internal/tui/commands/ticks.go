@@ -24,8 +24,8 @@ func AnimTickCmd() tea.Cmd {
 	})
 }
 
-func UpdateTickCmd() tea.Cmd {
-	return tea.Tick(time.Millisecond*300, func(t time.Time) tea.Msg {
-		return UpdateTickMsg(t)
-	})
-}
+// func UpdateTickCmd() tea.Cmd {
+// 	return tea.Tick(time.Millisecond*300, func(t time.Time) tea.Msg {
+// 		return UpdateTickMsg(t)
+// 	})
+// }

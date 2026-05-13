@@ -316,9 +316,6 @@ func (m Model) renderConnectTab(w, h int) string {
 	lblLeft := m.headerActiveStyle.Render("► online friends")
 	m.onlineList.SetSize(leftW-2, h-2)
 	onlineView := lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render(m.onlineList.View()))
-	if len(m.online) == 0 {
-		onlineView = lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render("zero friends online"))
-	}
 
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(onlineView))
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)

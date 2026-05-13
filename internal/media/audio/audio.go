@@ -304,13 +304,11 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 	playbackConfig := malgo.DefaultDeviceConfig(malgo.Playback)
 
 	captureConfig.Capture.Format = malgo.FormatS16
-	captureConfig.Capture.Channels = 0
 	if ch > 2 {
 		captureConfig.Capture.Channels = 2
 	} else {
 		captureConfig.Capture.Channels = 0
 	}
-	captureConfig.Capture.Channels = 0
 	captureConfig.SampleRate = 0
 	captureConfig.Capture.DeviceID = micId
 	captureConfig.PeriodSizeInFrames = 960
