@@ -2,7 +2,6 @@ package tui
 
 import (
 	"aloh-tui/internal/tui/components/states"
-	"aloh-tui/internal/tui/components/styles"
 	"aloh-tui/internal/tui/components/titles"
 	"aloh-tui/internal/tui/components/windows"
 	"aloh-tui/internal/tui/tuierrs"
@@ -13,418 +12,611 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+var (
+	cDim       = lipgloss.Color("#75715E")
+	
+	cAccent    = lipgloss.Color("#FD971F")
+	cErr       = lipgloss.Color("#F92672")
+	cSubtext   = lipgloss.Color("#66D9EF")
+
+	cText = lipgloss.AdaptiveColor{Light: "#1A1919", Dark: "#F8F8F2"}
+
+	whitePulse = []string{
+		"#444444",
+		"#666666",
+		"#888888",
+		"#AAAAAA",
+		"#CCCCCC",
+		"#FFFFFF",
+		"#CCCCCC",
+		"#AAAAAA",
+		"#888888",
+		"#666666",
+	}
+
+	blackPulse = []string{
+		"#BBBBBB",
+		"#999999",
+		"#777777",
+		"#555555",
+		"#333333",
+		"#000000",
+		"#333333",
+		"#555555",
+		"#777777",
+		"#999999",
+	}
+
+	headerInactive = lipgloss.NewStyle().Foreground(cDim).Bold(true)
+)
+
+func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
+	border := lipgloss.RoundedBorder()
+	border.BottomLeft = left
+	border.Bottom = middle
+	border.BottomRight = right
+	return border
+}
+
+func (m Model) isLoggedIn() bool {
+	return m.user != nil && m.user.Networking != nil && m.user.Data.Personal.Nickname != ""
+}
+
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
-		return "loading..."
+		return m.spinner.View() + "loading..."
 	}
 
-	var ui string
+	padW, padH := 2, 1
+	usableW := m.width - (padW * 2)
+	usableH := m.height - (padH * 2)
 
-	borderStyle := styles.BorderStyle
-	frameChromeW := lipgloss.Width(borderStyle.Render("X")) - 1
-	frameChromeH := lipgloss.Height(borderStyle.Render("X")) - 1
-
-	usableW := m.width - frameChromeW
-	usableH := m.height - frameChromeH
-
-	if usableW < 33 || usableH < 33 {
+	if usableW < 60 || usableH < 18 {
 		return "terminal too small"
 	}
 
-	title := styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.LOGO)
-	titleH := lipgloss.Height(title)
-	footerData := "ctrl+q (quit) | tab (switch panel) | enter (confirm/send) | ctrl+s (settings) | ctrl+b (mute micro) | ctrl+n (mute full) | ctrl+w (connections)"
-
-	if m.state == states.ERR_STATE {
-		footerData = "ctrl+q (quit) | esc (back)"
-	} else if m.curWindow == windows.PROFILE_WINDOW {
-		footerData = "ctrl+q (quit) | esc (back)"
-	} else if m.curWindow == windows.CONNECTIONS_WINDOW {
-		footerData = "ctrl+q (quit) | esc (back) | ctrl+up (increasew volume) | ctrl+down (decrease volume) | ctrl+f (mute/unmute user)"
-	} else if m.curWindow == windows.SETTINGS_WINDOW {
-		footerData = "ctrl+q (quit) | esc (back) | up/down+enter (select microphone) | ctrl+d (switch denoise)"
+	if m.curWindow == windows.START_WINDOW {
+		footer := lipgloss.NewStyle().Foreground(cDim).Width(usableW).Render("ALT+Q: quit")
+		uiContent := m.renderStartView(usableW, usableH-lipgloss.Height(footer)-1)
+		finalLayout := lipgloss.JoinVertical(lipgloss.Left, uiContent, "", footer)
+		return lipgloss.NewStyle().Padding(padH, padW).Render(m.zone.Scan(lipgloss.Place(usableW, usableH, lipgloss.Left, lipgloss.Top, finalLayout)))
 	}
 
-	footer := styles.FooterStyle.Width(usableW).MaxWidth(usableW).Render(footerData)
+	rightPart := lipgloss.NewStyle().Foreground(m.themeColor).Render(titles.LL)
+
+	rightW := lipgloss.Width(rightPart)
+
+	footerData := "ALT+Q: quit | TAB/ARRS: switch tabs | ESC: back | ALT+H: help"
+
+	leftPart := lipgloss.NewStyle().
+		Foreground(cDim).
+		Width(usableW - rightW).
+		Align(lipgloss.Left).
+		Render(footerData)
+
+	footer := lipgloss.JoinHorizontal(lipgloss.Bottom, leftPart, rightPart)
 	footerH := lipgloss.Height(footer)
 
-	contentWrapperStyle := styles.ContentStyle
-	contentChromeW := lipgloss.Width(contentWrapperStyle.Render("X")) - 1
-	contentChromeH := lipgloss.Height(contentWrapperStyle.Render("X")) - 1
+	logo := lipgloss.NewStyle().Foreground(m.themeColor).Render(titles.A)
+	logoH := lipgloss.Height(logo)
 
-	centerW := usableW - contentChromeW
-	centerH := usableH - titleH - footerH - contentChromeH
+	var tabs []string
+	if m.isLoggedIn() {
+		tabs = m.defTabs
+	} else {
+		tabs = m.regTabs
+	}
 
-	if centerH < 10 || centerW < 10 {
+	if m.activeTab >= len(tabs) {
+		m.activeTab = 0
+	}
+
+	gridH := usableH - footerH - logoH
+	if gridH < 10 {
 		return "terminal too small"
 	}
 
-	baseBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("30"))
-	boxChromeW := lipgloss.Width(baseBox.Render(""))
-	boxChromeH := lipgloss.Height(baseBox.Render("X")) - 1
+	inactiveBorder := tabBorderWithBottom("┴", "─", "┴")
+	activeBorder := tabBorderWithBottom("┘", " ", "└")
 
-	centerBox := baseBox.Align(lipgloss.Center, lipgloss.Center)
-	activeBox := centerBox.BorderForeground(lipgloss.Color("205"))
-	activeBaseBox := baseBox.BorderForeground(lipgloss.Color("205"))
+	inactiveTabStyle := lipgloss.NewStyle().
+		Border(inactiveBorder, true).
+		BorderForeground(cDim).
+		BorderBottomForeground(cDim).
+		Foreground(cDim).
+		Align(lipgloss.Center)
 
-	leftTotalW := centerW / 3
-	rightTotalW := centerW - leftTotalW
-	topTotalH := centerH / 2
-	botTotalH := centerH - topTotalH
+	activeTabStyle := lipgloss.NewStyle().
+		Border(activeBorder, true).
+		BorderForeground(cDim).
+		Foreground(m.themeColor).
+		Bold(true).
+		Align(lipgloss.Center)
 
-	innerLeftW := leftTotalW - boxChromeW
-	innerRightW := rightTotalW - boxChromeW
-	innerTopH := topTotalH - boxChromeH
-	innerBotH := botTotalH - boxChromeH
-	innerRightH := centerH - boxChromeH
+	windowStyle := lipgloss.NewStyle().
+		BorderForeground(cDim).
+		Border(lipgloss.NormalBorder()).
+		UnsetBorderTop()
 
-	if innerLeftW < 1 {
-		innerLeftW = 1
-	}
-	if innerRightW < 1 {
-		innerRightW = 1
-	}
-	if innerTopH < 1 {
-		innerTopH = 1
-	}
-	if innerBotH < 1 {
-		innerBotH = 1
-	}
-	if innerRightH < 1 {
-		innerRightH = 1
-	}
+	var renderedTabs []string
+	baseWidth := usableW / len(tabs)
+	remainder := usableW % len(tabs)
 
-	switch m.curWindow {
-	case windows.START_WINDOW:
-		lbl := styles.HeaderStyle.Render("welcome")
-		start := styles.ContentStyle.Render("press enter or tab to start")
-		mainContent := lipgloss.JoinVertical(lipgloss.Center, lbl, "", start)
-
-		pulseColors := []string{"#3a0088", "#5c00a6", "#9000c4", "#ce00cc", "#ff00aa", "#ce00cc", "#9000c4", "#5c00a6"}
-		currentColor := pulseColors[m.animFrame%len(pulseColors)]
-
-		clippedContent := lipgloss.NewStyle().MaxHeight(centerH - boxChromeH).MaxWidth(centerW / 2).Render(mainContent)
-
-		startBox := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(currentColor)).
-			Align(lipgloss.Center, lipgloss.Center).
-			Width(centerW / 2).
-			Height(centerH - boxChromeH).
-			Render(clippedContent)
-
-		content := lipgloss.Place(centerW, centerH, lipgloss.Center, lipgloss.Center, startBox)
-		styledContent := contentWrapperStyle.Render(content)
-		ui = m.zone.Mark("start", lipgloss.JoinVertical(lipgloss.Center, title, styledContent, footer))
-
-	case windows.DEF_WINDOW:
-		inputW := innerLeftW - 4
-		if inputW < 1 {
-			inputW = 1
-		}
-		for i := range m.regTextInputs {
-			m.regTextInputs[i].Width = inputW
+	for i, t := range tabs {
+		isFirst, isLast, isActive := i == 0, i == len(tabs)-1, i == m.activeTab
+		style := inactiveTabStyle
+		if isActive {
+			style = activeTabStyle
 		}
 
-		var topLeft string
-		styleTopLeft := centerBox
-		if m.state == states.REG_STATE || m.state == states.PROFILE_STATE {
-			styleTopLeft = activeBox
+		tabWidth := baseWidth
+		if i < remainder {
+			tabWidth++
+		}
+		innerWidth := max(0, tabWidth-2)
+		style = style.Width(innerWidth)
+
+		border, _, _, _, _ := style.GetBorder()
+		if isFirst && isActive {
+			border.BottomLeft = "│"
+		} else if isFirst && !isActive {
+			border.BottomLeft = "├"
+		}
+		if isLast && isActive {
+			border.BottomRight = "│"
+		} else if isLast && !isActive {
+			border.BottomRight = "┤"
 		}
 
-		var topContent string
-
-		inputContainer := lipgloss.NewStyle().Width(inputW).Align(lipgloss.Left)
-		if m.state == states.LOAD_STATE && m.prState == states.REG_STATE {
-			lbl := styles.HeaderStyle.Render("please wait")
-			loadingText := lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Render("loading...")
-			topContent = lipgloss.JoinVertical(lipgloss.Center, lbl, "", loadingText)
-		} else if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" {
-			lbl := styles.HeaderStyle.Render("profile")
-			var spekaing = ""
-			if m.user.Engines.AudioEngine.UserIsSpeaking() {
-				spekaing = "🔊"
+		styledT := style.Border(border).Render(t)
+		var mark string
+		if !m.isLoggedIn() {
+			switch i {
+			case 0:
+				mark = "registerT"
+			case 1:
+				mark = "loginT"
 			}
-			name := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Bold(true).Render(m.user.Data.Personal.Nickname + spekaing)
-			topContent = lipgloss.JoinVertical(lipgloss.Center, lbl, "", name)
 		} else {
-			lbl := styles.HeaderStyle.Render("registration")
-			// topContent = lipgloss.JoinVertical(lipgloss.Center, lbl, "", m.regTextInputs[0].View(), "", m.regTextInputs[1].View(), "", m.regTextInputs[2].View())
-			topContent = lipgloss.JoinVertical(
-				lipgloss.Center,
-				lbl,
-				"",
-				inputContainer.Render(m.regTextInputs[0].View()),
-				"",
-				inputContainer.Render(m.regTextInputs[1].View()),
-				"",
-				inputContainer.Render(m.regTextInputs[2].View()),
-			)
+			switch i {
+			case 0:
+				mark = "friendsT"
+			case 1:
+				mark = "chatT"
+			case 2:
+				mark = "voiceT"
+			case 3:
+				mark = "videoT"
+			case 4:
+				mark = "profileT"
+			case 5:
+				mark = "settingsT"
+			}
 		}
 
-		clippedTop := lipgloss.NewStyle().MaxWidth(innerLeftW).MaxHeight(innerTopH).Render(topContent)
-		topLeft = styleTopLeft.Width(innerLeftW).Height(innerTopH).Render(clippedTop)
+		renderedTabs = append(renderedTabs, m.zone.Mark(mark, styledT))
+	}
+	tabsRow := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 
-		topLeftZone := m.zone.Mark("top-left", topLeft)
+	windowInnerW := usableW - 4
+	windowInnerH := gridH - lipgloss.Height(tabsRow) - 2
 
-		var botLeft string
-		styleBotLeft := centerBox
-		if m.state == states.CONN_STATE || m.state == states.LEAVE_STATE || m.state == states.LOGIN_STATE {
-			styleBotLeft = activeBox
-		}
-
-		m.connTextInputs[0].Width = inputW
-		m.logingInput[0].Width = inputW
-		m.logingInput[1].Width = inputW
-
-		var botContent string
-		if m.state == states.LOAD_STATE && (m.prState == states.CONN_STATE || m.prState == states.LEAVE_STATE || m.prState == states.LOGIN_STATE) {
-			lbl := styles.HeaderStyle.Render("please wait")
-			loadingText := lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Render("loading...")
-			botContent = lipgloss.JoinVertical(lipgloss.Center, lbl, "", loadingText)
-		} else if m.user.Networking == nil {
-			lbl := styles.HeaderStyle.Render("login")
-			botContent = lipgloss.JoinVertical(lipgloss.Center, lbl, "", inputContainer.Render(m.logingInput[0].View()), "", inputContainer.Render(m.logingInput[1].View()))
+	var uiContent string
+	switch m.state {
+	case states.ERR_STATE:
+		uiContent = m.renderErrView(windowInnerW, windowInnerH, cText)
+	case states.HELP_STATE:
+		uiContent = m.renderHelpView(windowInnerW, windowInnerH, cText)
+	default:
+		if !m.isLoggedIn() {
+			switch m.activeTab {
+			case 0:
+				uiContent = m.renderRegistrationTab(windowInnerW, windowInnerH)
+			case 1:
+				uiContent = m.renderLoginTab(windowInnerW, windowInnerH)
+			}
 		} else {
-			onlineStr := "zero users are online"
-			if len(m.online) > 0 {
-				onlineStr = strings.Join(m.online, "|")
-			}
-			onlineView := lipgloss.NewStyle().Width(innerLeftW).MaxWidth(innerLeftW).Height(1).Align(lipgloss.Center).Foreground(lipgloss.Color("240")).Render(onlineStr)
-
-			if !m.connected {
-				lbl := styles.HeaderStyle.Render("connect")
-				botContent = lipgloss.JoinVertical(
-					lipgloss.Center,
-					lbl,
-					onlineView,
-					"",
-					inputContainer.Render(m.connTextInputs[0].View()),
-				)
-			} else {
-				lbl := styles.HeaderStyle.Render("leave")
-				botContent = lipgloss.JoinVertical(lipgloss.Center, lbl, "")
+			switch m.activeTab {
+			case 0:
+				uiContent = m.renderConnectTab(windowInnerW, windowInnerH)
+			case 1:
+				uiContent = m.renderChatTab(windowInnerW, windowInnerH, cText)
+			case 2:
+				uiContent = m.renderVoiceTab(windowInnerW, windowInnerH, cText)
+			case 3:
+				uiContent = m.renderVideoTab(windowInnerW, windowInnerH)
+			case 4:
+				uiContent = m.renderProfileView(windowInnerW, windowInnerH, cText)
+			case 5:
+				uiContent = m.renderSettingsView(windowInnerW, windowInnerH)
 			}
 		}
-		clippedBot := lipgloss.NewStyle().MaxWidth(innerLeftW).MaxHeight(innerBotH).Render(botContent)
-		botLeft = styleBotLeft.Width(innerLeftW).Height(innerBotH).Render(clippedBot)
+	}
 
-		botLeftZone := m.zone.Mark("bot-left", botLeft)
+	contentBox := windowStyle.Width(usableW - 2).Height(windowInnerH).Render(lipgloss.NewStyle().Padding(0, 1).Render(uiContent))
 
-		var right string
-		styleRight := baseBox
-		if m.state == states.CHAT_STATE {
-			styleRight = activeBaseBox
+	tabWindow := lipgloss.JoinVertical(lipgloss.Left, tabsRow, contentBox)
+
+	finalLayout := lipgloss.JoinVertical(lipgloss.Left, "", logo, tabWindow, "", footer)
+	screen := lipgloss.Place(usableW, usableH, lipgloss.Left, lipgloss.Top, finalLayout)
+
+	return lipgloss.NewStyle().Padding(padH, padW).Render(m.zone.Scan(screen))
+}
+
+func (m Model) renderVoiceTab(w, h int, cText lipgloss.AdaptiveColor) string {
+	leftW := (w - 3) / 2
+	rightW := w - leftW - 3
+
+	lblLeft := m.headerActiveStyle.Render("► active connections")
+
+	states := make([]string, 0, len(m.connections))
+
+	speakingUsers := m.user.Engines.AudioEngine.FetchSpeakingUsers()
+	mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
+
+	for _, c := range m.connections {
+		state := ""
+		clearNick := ansi.Strip(c)
+		if _, ok := mutedUsers[clearNick]; ok {
+			state = " 🔇"
+		} else if _, ok := speakingUsers[clearNick]; ok {
+			state = " 🔊"
 		}
+		states = append(states, state)
+	}
+	rawStatesStr := strings.Join(states, "\n\n\n")
+	rawStatesW := lipgloss.Width(rawStatesStr)
+	m.connectionsList.SetSize(leftW-rawStatesW-4, h-2)
+	connsView := lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render(m.connectionsList.View()),
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(rawStatesStr))
 
-		var rightContent string
-		if m.user.Networking != nil {
-			chatTitle := styles.HeaderStyle.Render("chat")
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", connsView)
+	leftPanel := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
-			cons := make([]string, 0, len(m.connections))
+	lblRight := m.headerActiveStyle.Render("► details & controls")
+	statusText := "offline"
+	statusColor := cDim
+	if m.connected {
+		statusText = "connected"
+		statusColor = m.themeColor
+	}
 
-			speakingUsers := m.user.Engines.AudioEngine.FetchSpeakingUsers()
-			mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
-
-			for _, c := range m.connections {
-				var state = ""
-				clearNickname := ansi.Strip(c)
-				if _, ok := mutedUsers[clearNickname]; ok {
-					state = "🔇"
-				} else {
-					if _, ok := speakingUsers[clearNickname]; ok {
-						state = "🔊"
-					}
-				}
-
-				cons = append(cons, c+" "+state)
-			}
-
-			strConn := strings.Join(cons, " | ")
-			if strConn == "" {
-				strConn = "no active connections"
-			}
-
-			activeConnectionsView := lipgloss.NewStyle().Bold(true).Width(innerRightW - 2).MaxWidth(innerRightW - 2).Align(lipgloss.Center).Render(strConn)
-
-			m.chatTextInput.Width = innerRightW - 2
-			chatInputContainer := lipgloss.NewStyle().Width(innerRightW - 2).Align(lipgloss.Left)
-			inputView := chatInputContainer.Render(m.chatTextInput.View())
-
-			usedSpaceH := lipgloss.Height(chatTitle) + lipgloss.Height(m.muteState) + lipgloss.Height(activeConnectionsView) + lipgloss.Height(inputView) + 1
-			historyMaxH := innerRightH - usedSpaceH
-			if historyMaxH < 0 {
-				historyMaxH = 0
-			}
-
-			var historyBox string
-			if historyMaxH > 0 {
-				var allMsgsLines []string
-				msgStyle := lipgloss.NewStyle().Width(innerRightW - 2).MaxWidth(innerRightW - 2)
-
-				for _, msg := range m.messages {
-					timeStr := lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Bold(true).Render(msg.Time)
-					renderedMsg := msgStyle.Render(timeStr + "> " + msg.Nickname + ": " + msg.Text)
-					msgLine := strings.Split(renderedMsg, "\n")
-					allMsgsLines = append(allMsgsLines, msgLine...)
-				}
-
-				lenAll := len(allMsgsLines)
-
-				maxOffset := lenAll - historyMaxH
-				if maxOffset < 0 {
-					maxOffset = 0
-				}
-
-				if m.chatOffset > maxOffset {
-					m.chatOffset = maxOffset
-				}
-
-				start := lenAll - historyMaxH - m.chatOffset
-				if start < 0 {
-					start = 0
-				}
-
-				end := lenAll - m.chatOffset
-				if end < 0 {
-					end = 0
-				}
-
-				visibleMsgs := allMsgsLines[start:end]
-
-				historyView := strings.Join(visibleMsgs, "\n")
-				historyBox = lipgloss.Place(innerRightW-2, historyMaxH, lipgloss.Left, lipgloss.Bottom, historyView)
-			}
-
-			rightContent = lipgloss.JoinVertical(lipgloss.Center, chatTitle, m.muteState, activeConnectionsView, historyBox, "", inputView)
-		} else {
-			rightContent = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("please register or login to start")
-		}
-
-		clippedRight := lipgloss.NewStyle().MaxWidth(innerRightW).MaxHeight(innerRightH).Render(rightContent)
-		right = styleRight.Width(innerRightW).Height(innerRightH).Render(clippedRight)
-
-		rightZone := m.zone.Mark("right", right)
-
-		leftCol := lipgloss.JoinVertical(lipgloss.Left, topLeftZone, botLeftZone)
-		mainContent := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, rightZone)
-
-		styledContent := contentWrapperStyle.Render(mainContent)
-		ui = lipgloss.JoinVertical(lipgloss.Center, title, styledContent, footer)
-
-	case windows.SETTINGS_WINDOW:
-		targetBoxWidth := (centerW) / 2
-
-		innerW := targetBoxWidth - boxChromeW
-		if innerW < 1 {
-			innerW = 1
-		}
-
-		innerH := centerH - boxChromeH
-		if innerH < 1 {
-			innerH = 1
-		}
-
-		lblLeft := styles.HeaderStyle.Width(innerW).Align(lipgloss.Center).Render("microphones")
-
-		listH := innerH - lipgloss.Height(lblLeft) - 1
-		if listH < 1 {
-			listH = 1
-		}
-		m.microphonesList.SetSize(innerW, listH)
-
-		leftContent := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", m.microphonesList.View())
-
-		micBox := baseBox.Width(innerW).
-			Height(innerH).
-			Render(leftContent)
-
-		lblRight := styles.HeaderStyle.Width(innerW).Align(lipgloss.Center).Render("settings")
-
-		denoiseText := fmt.Sprintf("denoise: %t", m.user.Data.Setup.Denoise)
-		aecText := fmt.Sprintf("echo cancelling: %t", m.user.Data.Setup.AEC)
-
-		setupText:=lipgloss.JoinVertical(lipgloss.Left, denoiseText,"", aecText)
-
-		setupContent := styles.ContentStyle.
-			Width(innerW).
-			PaddingLeft(2).
-			Render(setupText)
-
-		rightContent := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", setupContent)
-
-		setupBox := baseBox.Width(innerW).
-			Height(innerH).
-			Render(rightContent)
-
-		boxesJoined := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			micBox,
-			"",
-			setupBox,
+	rightBox := lipgloss.JoinVertical(lipgloss.Left,
+		lblRight, "",
+		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("network status: ")+lipgloss.NewStyle().Foreground(statusColor).
+		Render(statusText), rightW),
+		"",
+		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("user management:"), rightW),
+		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(m.themeColor).
+			Render("ALT+UP/DN")+lipgloss.NewStyle().Foreground(cText).Render(" - adjust user volume")), rightW),
+		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(m.themeColor).
+			Render("ALT+Z")+lipgloss.NewStyle().Foreground(cText).Render("     - mute/mnmute user")), rightW),
+		"",
+	)
+	if m.connected {
+		rightBox = lipgloss.JoinVertical(lipgloss.Left, rightBox,
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cErr).Render("ENTER to disconnect"),
 		)
-
-		content := lipgloss.Place(centerW, centerH, lipgloss.Center, lipgloss.Center, boxesJoined)
-
-		styledContent := contentWrapperStyle.Render(content)
-
-		ui = lipgloss.JoinVertical(lipgloss.Center, title, styledContent, footer)
-
-	case windows.CONNECTIONS_WINDOW:
-		targetBoxWidth := (centerW - boxChromeW) / 2
-		lbl := styles.HeaderStyle.Width(targetBoxWidth).Align(lipgloss.Center).Render("connections")
-
-		listContent := m.connectionsList.View()
-
-		mainContent := lipgloss.JoinVertical(lipgloss.Left, lbl, "", listContent)
-
-		clippedContent := lipgloss.NewStyle().
-			MaxWidth(targetBoxWidth).
-			MaxHeight(centerH - boxChromeH).
-			Render(mainContent)
-
-		connsBox := centerBox.
-			Width(targetBoxWidth).
-			Height(centerH - boxChromeH).
-			Render(clippedContent)
-
-		content := lipgloss.Place(centerW, centerH, lipgloss.Center, lipgloss.Center, connsBox)
-		styledContent := contentWrapperStyle.Render(content)
-
-		ui = lipgloss.JoinVertical(lipgloss.Center, title, styledContent, footer)
-
-	case windows.PROFILE_WINDOW:
-		lbl := styles.HeaderStyle.Render("profile")
-		nickname := styles.ContentStyle.Render("nickname: " + m.user.Data.Personal.Nickname)
-		registerTime := styles.ContentStyle.Render("registered: " + m.user.Data.Personal.RegisterTime)
-
-		mainContent := lipgloss.JoinVertical(lipgloss.Center, lbl, "", nickname, registerTime)
-
-		clippedProfile := lipgloss.NewStyle().MaxHeight(centerH - boxChromeH).MaxWidth(innerLeftW).Render(mainContent)
-		profileBox := centerBox.Width(innerLeftW).Height(centerH - boxChromeH).Render(clippedProfile)
-
-		content := lipgloss.Place(centerW, centerH, lipgloss.Center, lipgloss.Center, profileBox)
-		styledContent := contentWrapperStyle.Render(content)
-
-		ui = lipgloss.JoinVertical(lipgloss.Center, title, styledContent, footer)
-
-	case windows.ERR_WINDOW:
-		lbl := styles.HeaderStyle.Render("error")
-		errText := lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Bold(true).Render(tuierrs.CastError(m.err))
-		errContent := lipgloss.JoinVertical(lipgloss.Center, lbl, "", errText)
-
-		if m.user.Networking == nil && m.user.Data.Personal.Nickname != "" {
-			errContent = lipgloss.JoinVertical(lipgloss.Center, lbl, "", errText, "", m.regTextInputs[1].View())
-		}
-
-		clippedErr := lipgloss.NewStyle().MaxHeight(centerH - boxChromeH).MaxWidth(innerLeftW).Render(errContent)
-		errBox := centerBox.Width(innerLeftW).Height(centerH - boxChromeH).Render(clippedErr)
-
-		content := lipgloss.Place(centerW, centerH, lipgloss.Center, lipgloss.Center, errBox)
-		styledContent := contentWrapperStyle.Render(content)
-
-		ui = lipgloss.JoinVertical(lipgloss.Center, title, styledContent, footer)
 	}
 
-	return m.zone.Scan(borderStyle.Render(ui))
+	rightPanel := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
+
+	dividerPanel := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	return m.zone.Mark("voiceW", lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, dividerPanel, rightPanel))
+}
+
+func (m Model) renderVideoTab(w, h int) string {
+	return m.zone.Mark("videoW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, safeTruncate(lipgloss.NewStyle().Foreground(cDim).Render("~ video functionality coming soon ~"), w)))
+}
+
+func (m Model) renderConnectTab(w, h int) string {
+	leftW := (w - 3) / 2
+	rightW := w - leftW - 3
+
+	lblLeft := m.headerActiveStyle.Render("► online friends")
+	m.onlineList.SetSize(leftW-2, h-2)
+	onlineView := lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render(m.onlineList.View()))
+
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(onlineView))
+	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
+
+	lblRight := m.headerActiveStyle.Render("► connect")
+	var rightContent string
+	if m.state == states.LOAD_STATE && m.prState == states.CONN_STATE {
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(m.spinner.View() + "connecting to friend...")
+	} else if m.connected {
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(m.themeColor).Render("you are already connected.\ngo to voice tab to manage")
+	} else {
+		m.connTextInputs.Width = max(1, rightW-4)
+		rightContent = lipgloss.JoinVertical(lipgloss.Left,
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("enter nickname:"), "",
+			lipgloss.NewStyle().PaddingLeft(2).Render(m.connTextInputs.View()),
+		)
+	}
+	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", rightContent)
+	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
+
+	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	return m.zone.Mark("friendsW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
+}
+
+func (m Model) renderSettingsView(w, h int) string {
+	leftW := (w - 3) / 2
+	rightW := w - leftW - 3
+
+	lblLeft := m.headerActiveStyle.Render("► app settings")
+
+	m.settingsList.SetSize(rightW-2, h-2)
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.View()))
+	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
+
+	lblRight := m.headerActiveStyle.Render("► microphones")
+	m.microphonesList.SetSize(leftW-2, h-2)
+	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", lipgloss.NewStyle().PaddingLeft(2).Render(m.microphonesList.View()))
+	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
+
+	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	return m.zone.Mark("settingsW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
+}
+
+func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string {
+	leftW := (w - 3) / 2
+	rightW := w - leftW - 3
+
+	lblLeft := m.headerActiveStyle.Render("► profile info")
+	leftBox := lipgloss.JoinVertical(lipgloss.Left,
+		lblLeft, "",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("nickname:"),
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(m.user.Data.Personal.Nickname),
+		"",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("registered:"),
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(m.user.Data.Personal.RegisterTime),
+		"",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("theme color: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.ThemeColor)),
+		lipgloss.NewStyle().PaddingLeft(2).Render(m.themeColorInput.View()),
+	)
+	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
+
+	lblRight := m.headerActiveStyle.Render("► statistics")
+	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate("no statistics available", rightW)))
+	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
+
+	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	return m.zone.Mark("profileW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
+}
+
+func (m Model) renderRegistrationTab(w, h int) string {
+	inputPad := lipgloss.NewStyle().PaddingLeft(2).Width(w)
+	var content string
+	if m.state == states.LOAD_STATE && m.prState == states.REG_STATE {
+		content = lipgloss.NewStyle().Foreground(cDim).Render(m.spinner.View() + "processing registration...")
+	} else {
+		for i := range m.regTextInputs {
+			m.regTextInputs[i].Width = max(1, w-10)
+		}
+		inputs := lipgloss.JoinVertical(lipgloss.Left,
+			m.regTextInputs[0].View(), "",
+			m.regTextInputs[1].View(), "",
+			m.regTextInputs[2].View(),
+		)
+		content = lipgloss.JoinVertical(lipgloss.Left, m.headerActiveStyle.Render("► create new account"), "", inputs)
+	}
+	return m.zone.Mark("registerW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, inputPad.Render(content)))
+}
+
+func (m Model) renderLoginTab(w, h int) string {
+	inputPad := lipgloss.NewStyle().PaddingLeft(2).Width(w)
+	var content string
+	if m.state == states.LOAD_STATE && (m.prState == states.CONN_STATE || m.prState == states.LOGIN_STATE) {
+		content = lipgloss.NewStyle().Foreground(cDim).Render(m.spinner.View() + "login proccesing...")
+	} else {
+		for i := range m.logingInput {
+			m.logingInput[i].Width = max(1, w-10)
+		}
+		inputs := lipgloss.JoinVertical(lipgloss.Left,
+			m.logingInput[0].View(), "",
+			m.logingInput[1].View(),
+		)
+		content = lipgloss.JoinVertical(lipgloss.Left, m.headerActiveStyle.Render("► login"), "", inputs)
+	}
+	return m.zone.Mark("loginW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, inputPad.Render(content)))
+}
+
+func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
+	m.chatTextInput.Width = max(1, w-4)
+	inputView := lipgloss.NewStyle().PaddingLeft(2).Render(m.chatTextInput.View())
+
+	cons := make([]string, 0, len(m.connections))
+	speakingUsers := m.user.Engines.AudioEngine.FetchSpeakingUsers()
+	mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
+
+	for _, c := range m.connections {
+		state := ""
+		clearNick := ansi.Strip(c)
+		if _, ok := mutedUsers[clearNick]; ok {
+			state = " 🔇"
+		} else if _, ok := speakingUsers[clearNick]; ok {
+			state = " 🔊"
+		}
+		cons = append(cons, c+state)
+	}
+
+	rawConnStr := strings.Join(cons, "  ·  ")
+	if rawConnStr == "" {
+		rawConnStr = "no active connections"
+	}
+	connsView := lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate(rawConnStr, w-2))
+
+	coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Personal.Nickname)
+
+	usersAudioState := lipgloss.NewStyle().PaddingLeft(2).Render(coloredUserNickname)
+
+	var chatParts []string
+	if m.user.Engines.AudioEngine.UserIsSpeaking() {
+		usersAudioState = lipgloss.NewStyle().PaddingLeft(2).Render(coloredUserNickname + " 🔊")
+	}
+
+	if m.muteState != "" {
+		usersAudioState += lipgloss.NewStyle().PaddingLeft(2).Render(m.muteState)
+	}
+	chatParts = append(chatParts, usersAudioState, connsView, "")
+
+	usedH := 0
+	for _, p := range chatParts {
+		usedH += lipgloss.Height(p)
+	}
+	usedH += lipgloss.Height(inputView) + 1
+
+	historyMaxH := max(0, h-usedH)
+	var historyBox string
+
+	if historyMaxH > 0 {
+		var allMsgsLines []string
+		msgStyle := lipgloss.NewStyle().Width(w - 2).MaxWidth(w - 2).PaddingLeft(2)
+
+		for _, msg := range m.messages {
+			t := lipgloss.NewStyle().Foreground(cDim).Render(msg.Time)
+			n := lipgloss.NewStyle().Foreground(cSubtext).Bold(true).Render(msg.Nickname + ":")
+
+			var renderedMsg string
+
+			if strings.HasPrefix(msg.Text, "\n") {
+				txt := msg.Text
+				renderedMsg = lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("%s %s %s", t, n, txt))
+			} else {
+				txt := lipgloss.NewStyle().Foreground(c).Render(msg.Text)
+				renderedMsg = msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
+			}
+			allMsgsLines = append(allMsgsLines, strings.Split(renderedMsg, "\n")...)
+		}
+
+		lenAll := len(allMsgsLines)
+		m.chatOffset = min(m.chatOffset, max(0, lenAll-historyMaxH))
+		startIdx := max(0, lenAll-historyMaxH-m.chatOffset)
+		endIdx := max(0, lenAll-m.chatOffset)
+
+		visibleMsgs := allMsgsLines[startIdx:endIdx]
+		historyBox = lipgloss.Place(w, historyMaxH, lipgloss.Left, lipgloss.Bottom, strings.Join(visibleMsgs, "\n"))
+	}
+
+	chatParts = append(chatParts, historyBox, "", inputView)
+	return m.zone.Mark("chatW", lipgloss.JoinVertical(lipgloss.Left, chatParts...))
+}
+
+func (m Model) renderStartView(w, h int) string {
+	pulse := whitePulse
+	if !lipgloss.HasDarkBackground() {
+		pulse = blackPulse
+	}
+
+	currentColor := pulse[m.animFrame%len(pulse)]
+	titleLogo := m.logoAnim[m.animFrame%len(m.logoAnim)]
+	if w < 80 || h < 25 {
+		titleLogo = titles.LITTLE_LOGO
+	}
+
+	logo := lipgloss.NewStyle().Foreground(m.themeColor).Render(titleLogo)
+	msg := lipgloss.NewStyle().Foreground(lipgloss.Color(currentColor)).Bold(true).Render(titles.START)
+	msgCentered := lipgloss.NewStyle().Width(w).Align(lipgloss.Center).Render(msg)
+	content := lipgloss.JoinVertical(lipgloss.Center, logo, "", "", msgCentered)
+	return m.zone.Mark("start", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, content))
+}
+
+func (m Model) renderErrView(w, h int, cText lipgloss.AdaptiveColor) string {
+	leftW := (w - 3) / 2
+	rightW := w - leftW - 3
+
+	lblLeft := lipgloss.NewStyle().Foreground(cErr).Bold(true).Render("► error detected")
+	errText := lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(tuierrs.CastError(m.err))
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", errText)
+	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
+
+	lblRight := lipgloss.NewStyle().Foreground(cErr).Bold(true).Render("► resolution")
+	var rightContent string
+	if m.user.Networking == nil && m.user.Data.Personal.Nickname != "" {
+		m.regTextInputs[1].Width = max(1, rightW-4)
+		rightContent = lipgloss.JoinVertical(lipgloss.Left,
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("please re-enter credentials"),
+		)
+	} else {
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("check logs")
+	}
+	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", rightContent)
+	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
+
+	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane)
+}
+
+func (m Model) renderHelpView(w, h int, cText lipgloss.AdaptiveColor) string {
+	leftW := (w - 3) / 2
+	rightW := w - leftW - 3
+
+	lblLeft := m.headerActiveStyle.Render("► general & navigation")
+	lblRight := m.headerActiveStyle.Render("► audio & voice controls")
+
+	renderShortcut := func(keys, desc string) string {
+		k := lipgloss.NewStyle().Foreground(m.themeColor).Width(22).Render(keys)
+		d := lipgloss.NewStyle().Foreground(cText).Render(desc)
+		return safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(k+d), leftW)
+	}
+	sectionLbl := lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim)
+
+	leftRows := []string{
+		lblLeft, "",
+		sectionLbl.Render("app controls:"),
+		renderShortcut("ALT+Q", "- quit application"),
+		renderShortcut("ESC", "- go back / close error"),
+		renderShortcut("ENTER", "- confirm / connect / send msg"),
+		"",
+		sectionLbl.Render("navigation:"),
+		renderShortcut("TAB / ALT+RIGHT", "- next tab"),
+		renderShortcut("SHIFT+TAB / ALT+LEFT", "- previous tab"),
+		renderShortcut("UP / DN", "- move cursor in lists/inputs"),
+		"",
+		sectionLbl.Render("quick jump:"),
+		renderShortcut("ALT+C", "- go to connect tab"),
+		renderShortcut("ALT+A", "- go to voice tab"),
+		renderShortcut("ALT+S", "- go to settings tab"),
+		renderShortcut("ALT+H", "- go to / close help menu"),
+	}
+
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, leftRows...)
+	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
+
+	rightRows := []string{
+		lblRight, "",
+		sectionLbl.Render("voice controls:"),
+		renderShortcut("ALT+V", "- toggle mic mute"),
+		renderShortcut("ALT+B", "- toggle full mute"),
+		renderShortcut("ALT+Z", "- toggle user's mute"),
+		renderShortcut("ALT+UP/DN", "- increase / decrease user's volume"), "",
+		sectionLbl.Render("chat controls:"),
+		renderShortcut("CTRL+P", "- paste image"),
+	}
+
+	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightRows...)
+	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
+
+	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	return m.zone.Mark("profileW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
+}
+
+func vertLine(h int) string {
+	if h <= 0 {
+		return ""
+	}
+	return strings.Repeat("│\n", h-1) + "│"
+}
+
+func safeTruncate(s string, maxW int) string {
+	if maxW <= 0 {
+		return ""
+	}
+	cleanStr := ansi.Strip(s)
+	runes := []rune(cleanStr)
+	if len(runes) > maxW {
+		return string(runes[:maxW-2]) + ".."
+	}
+	return s
 }

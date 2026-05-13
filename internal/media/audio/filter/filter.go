@@ -1,30 +1,52 @@
 package filter
 
-import (
-	"math"
-)
+import "math"
 
 type BiquadFilter struct {
-	b0, b1, b2 float64 
-	a1, a2     float64 
-	x1, x2     float64 
+	b0, b1, b2 float64
+	a1, a2     float64
+	x1, x2     float64
 	y1, y2     float64
 }
 
-
-func NewHighPassFilter(sampleRate, cutoffFreq float64) *BiquadFilter {
-	const Q = 0.7071
-
+func NewLowShelfFilter(sampleRate, cutoffFreq, gainDB float64) *BiquadFilter {
+	A := math.Pow(10.0, gainDB/40.0)
 	w0 := 2.0 * math.Pi * cutoffFreq / sampleRate
-	alpha := math.Sin(w0) / (2.0 * Q)
 	cosW0 := math.Cos(w0)
+	sinW0 := math.Sin(w0)
 
-	b0 := (1.0 + cosW0) / 2.0
-	b1 := -(1.0 + cosW0)
-	b2 := (1.0 + cosW0) / 2.0
-	a0 := 1.0 + alpha
-	a1 := -2.0 * cosW0
-	a2 := 1.0 - alpha
+	alpha := sinW0 / 2.0 * math.Sqrt(2.0)
+
+	b0 := A * ((A + 1.0) - (A-1.0)*cosW0 + 2.0*math.Sqrt(A)*alpha)
+	b1 := 2.0 * A * ((A - 1.0) - (A+1.0)*cosW0)
+	b2 := A * ((A + 1.0) - (A-1.0)*cosW0 - 2.0*math.Sqrt(A)*alpha)
+	a0 := (A + 1.0) + (A-1.0)*cosW0 + 2.0*math.Sqrt(A)*alpha
+	a1 := -2.0 * ((A - 1.0) + (A+1.0)*cosW0)
+	a2 := (A + 1.0) + (A-1.0)*cosW0 - 2.0*math.Sqrt(A)*alpha
+
+	return &BiquadFilter{
+		b0: b0 / a0,
+		b1: b1 / a0,
+		b2: b2 / a0,
+		a1: a1 / a0,
+		a2: a2 / a0,
+	}
+}
+
+func NewHighShelfFilter(sampleRate, cutoffFreq, gainDB float64) *BiquadFilter {
+	A := math.Pow(10.0, gainDB/40.0)
+	w0 := 2.0 * math.Pi * cutoffFreq / sampleRate
+	cosW0 := math.Cos(w0)
+	sinW0 := math.Sin(w0)
+
+	alpha := sinW0 / 2.0 * math.Sqrt(2.0)
+
+	b0 := A * ((A + 1.0) + (A-1.0)*cosW0 + 2.0*math.Sqrt(A)*alpha)
+	b1 := -2.0 * A * ((A - 1.0) + (A+1.0)*cosW0)
+	b2 := A * ((A + 1.0) + (A-1.0)*cosW0 - 2.0*math.Sqrt(A)*alpha)
+	a0 := (A + 1.0) - (A-1.0)*cosW0 + 2.0*math.Sqrt(A)*alpha
+	a1 := 2.0 * ((A - 1.0) - (A+1.0)*cosW0)
+	a2 := (A + 1.0) - (A-1.0)*cosW0 - 2.0*math.Sqrt(A)*alpha
 
 	return &BiquadFilter{
 		b0: b0 / a0,

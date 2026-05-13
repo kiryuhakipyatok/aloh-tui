@@ -39,9 +39,13 @@ type Devices struct {
 }
 
 type Setup struct {
-	Denoise    bool                  `json:"denoise"`
-	AEC        bool                  `json:"aec"`
-	UsersSetup map[string]UsersSetup `json:"users-setup"`
+	Denoise              bool                  `json:"denoise"`
+	AEC                  bool                  `json:"aec"`
+	Filter               bool                  `json:"filter"`
+	UsersSetup           map[string]UsersSetup `json:"users-setup"`
+	ThemeColor           string                `json:"theme-color"`
+	DesktopNotifications bool                  `json:"desktop-notifications"`
+	AudioNotifications   bool                  `json:"audio-notifications"`
 }
 
 type UsersSetup struct {

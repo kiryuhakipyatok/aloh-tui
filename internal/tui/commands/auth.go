@@ -47,7 +47,12 @@ func AuthCmd(user *entities.User, appLogger *logger.Logger, password []byte) tea
 			return AuthMsg{Typee: auth.DEFAULT, Err: err}
 		}
 
-		audioEngine, err := audio.NewAudioEngine(appLogger, user.Data.Devices.Microphone, false, false)
+		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
+			Microphone:           user.Data.Devices.Microphone,
+			Aec:                  user.Data.Setup.AEC,
+			Denoice:              user.Data.Setup.Denoise,
+			Filtered:             user.Data.Setup.Filter,
+		})
 		if err != nil {
 			return AuthMsg{Typee: auth.DEFAULT, Err: err}
 		}
@@ -84,7 +89,12 @@ func RegisterCmd(user *entities.User, appLogger *logger.Logger, password, repPas
 			return AuthMsg{Typee: auth.REGISTER, Err: err}
 		}
 
-		audioEngine, err := audio.NewAudioEngine(appLogger, user.Data.Devices.Microphone, false, false)
+		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
+			Microphone:           user.Data.Devices.Microphone,
+			Aec:                  user.Data.Setup.AEC,
+			Denoice:              user.Data.Setup.Denoise,
+			Filtered:             user.Data.Setup.Filter,
+		})
 		if err != nil {
 			return AuthMsg{Typee: auth.DEFAULT, Err: err}
 		}
@@ -122,7 +132,12 @@ func LoginCmd(user *entities.User, appLogger *logger.Logger, secret []byte) tea.
 			return AuthMsg{Typee: auth.LOGIN, Err: err}
 		}
 
-		audioEngine, err := audio.NewAudioEngine(appLogger, user.Data.Devices.Microphone, false, false)
+		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
+			Microphone:           user.Data.Devices.Microphone,
+			Aec:                  user.Data.Setup.AEC,
+			Denoice:              user.Data.Setup.Denoise,
+			Filtered:             user.Data.Setup.Filter,
+		})
 		if err != nil {
 			return AuthMsg{Typee: auth.DEFAULT, Err: err}
 		}

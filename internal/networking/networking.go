@@ -11,8 +11,10 @@ type Networking interface {
 	ChatCallback(cb func(id string, data []byte))
 	VideoCallback(cb func(id string, data []byte))
 	VoiceCallback(cb func(id string, data []byte))
+	PeerConnectedCallback(cb func(id string))
+	PeerDisconnectedCallback(cb func(id string))
 
-	SendMessageInChat(msg string) error
+	SendMessageInChat(msg []byte) error
 	SendVoiceData(data []byte) error
 	SendVideoData(data []byte) error
 
@@ -66,7 +68,15 @@ func (n *networking) VoiceCallback(cb func(id string, data []byte)) {
 	n.RegisterOnVoice(cb)
 }
 
-func (n *networking) SendMessageInChat(msg string) error {
+func (n *networking) PeerConnectedCallback(cb func(id string)) {
+	n.RegisterOnPeerConnected(cb)
+}
+
+func (n *networking) PeerDisconnectedCallback(cb func(id string)) {
+	n.RegisterOnPeerDisconnected(cb)
+}
+
+func (n *networking) SendMessageInChat(msg []byte) error {
 	if err := n.SendMessage(msg); err != nil {
 		return err
 	}

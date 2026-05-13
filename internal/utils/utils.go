@@ -1,8 +1,11 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -81,3 +84,47 @@ func SetupFiles() (nlP, alP, nP, kP string, err error) {
 	return netwLogFilePath, appLogFilePath, nickFilePath, keysPath, nil
 }
 
+func DarkenHex(hex string, factor float64) string {
+	hex = strings.TrimPrefix(hex, "#")
+
+	if len(hex) == 3 {
+		hex = string([]byte{hex[0], hex[0], hex[1], hex[1], hex[2], hex[2]})
+	}
+
+	if len(hex) != 6 {
+		return ""
+	}
+
+	r, err := strconv.ParseUint(hex[0:2], 16, 8)
+	if err != nil {
+		return ""
+	}
+	g, err := strconv.ParseUint(hex[2:4], 16, 8)
+	if err != nil {
+		return ""
+	}
+	b, err := strconv.ParseUint(hex[4:6], 16, 8)
+	if err != nil {
+		return ""
+	}
+
+	darken := func(color uint64) uint64 {
+		val := float64(color) * factor
+		if val < 0 {
+			return 0
+		}
+		if val > 255 {
+			return 255
+		}
+		return uint64(val)
+	}
+
+	return fmt.Sprintf("#%02X%02X%02X", darken(r), darken(g), darken(b))
+}
+
+func SetThreeFirstByte(threeFb []byte, data []byte) []byte {
+	new := make([]byte, 0, len(data)+3)
+	new = append(new, threeFb...)
+	new = append(new, data...)
+	return new
+}

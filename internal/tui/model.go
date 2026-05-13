@@ -5,12 +5,11 @@ import (
 	"aloh-tui/internal/entities"
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
-	"aloh-tui/internal/notifications"
 	"aloh-tui/internal/tui/commands"
 	"aloh-tui/internal/tui/components/states"
-	"aloh-tui/internal/tui/components/styles"
 	"aloh-tui/internal/tui/components/titles"
 	"aloh-tui/internal/tui/components/windows"
+	"aloh-tui/internal/utils"
 	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
 	"encoding/json"
@@ -23,6 +22,7 @@ import (
 
 	"github.com/AvraamMavridis/randomcolor"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -36,19 +36,71 @@ type connectionItem struct {
 	muted             bool
 }
 
-func (ci connectionItem) Title() string { return ci.nickname }
+func (ci connectionItem) Title() string {
+	return ci.nickname
+}
 func (ci connectionItem) Description() string {
 	return fmt.Sprintf("volume: %.1f, muted: %t", ci.volumeCoefficient, ci.muted)
 }
-func (ci connectionItem) FilterValue() string { return ci.nickname }
+func (ci connectionItem) FilterValue() string {
+	return ci.nickname
+}
 
 type micItem struct {
+	name       string
+	channels   uint32
+	sampleRate uint32
+	current    string
+}
+
+func (mi micItem) Title() string {
+	return mi.name
+}
+func (mi micItem) Description() string {
+	return fmt.Sprintf("channels: %d, sample rate: %d, %s", mi.channels, mi.sampleRate, mi.current)
+}
+func (mi micItem) FilterValue() string {
+	return mi.name
+}
+
+type onlineItem struct {
 	name string
 }
 
-func (mi micItem) Title() string       { return mi.name }
-func (mi micItem) Description() string { return "" }
-func (mi micItem) FilterValue() string { return mi.name }
+func (oi onlineItem) Title() string {
+	return oi.name
+}
+func (oi onlineItem) Description() string {
+	return "solo"
+}
+func (oi onlineItem) FilterValue() string {
+	return oi.name
+}
+
+const (
+	DENOISE   = 0
+	AEC       = 1
+	EQUALIZER = 2
+	AUDIO_N   = 3
+	DESKTOP_N = 4
+)
+
+type settingsItem struct {
+	id          uint
+	name        string
+	description string
+	enabled     bool
+}
+
+func (si settingsItem) Title() string {
+	return si.name
+}
+func (si settingsItem) Description() string {
+	return fmt.Sprintf("%s, state: %t", si.description, si.enabled)
+}
+func (si settingsItem) FilterValue() string {
+	return si.name
+}
 
 type connData struct {
 	nickname          string
@@ -60,21 +112,38 @@ type Model struct {
 	width  int
 	height int
 
+	defTabs []string
+	regTabs []string
+
+	sideState uint
+
+	activeTab int
+
+	logoAnim []string
+
 	state   uint
 	prState uint
+
+	spinner spinner.Model
 
 	curWindow uint
 
 	regTextInputs  []textinput.Model
-	connTextInputs []textinput.Model
+	connTextInputs textinput.Model
 	chatTextInput  textinput.Model
 	logingInput    []textinput.Model
+
+	defaultThemeColor string
+
+	imageBuffer []byte
 
 	speaking bool
 
 	chatOffset int
+	chatWidth  int
+	chatHeight int
 
-	updateTick bool
+	ticked bool
 
 	userColor string
 
@@ -92,16 +161,32 @@ type Model struct {
 	connections []string
 	online      []string
 
-	microphonesList list.Model
-	connectionsList list.Model
+	microphonesList     list.Model
+	microphonesDelegate list.DefaultDelegate
+	connectionsList     list.Model
+	connectionsDelegate list.DefaultDelegate
+	onlineList          list.Model
+	onlineDelegate      list.DefaultDelegate
+	settingsList        list.Model
+	settingsDelegate    list.DefaultDelegate
 
 	connected bool
 
-	msgChan chan commands.ChatMessage
+	msgChan    chan commands.ChatMessage
+	rawMsgChan chan commands.RawChatMessage
+
+	peerConnectionsChan    chan commands.PeerConnectedMsg
+	peerDisconnectionsChan chan commands.PeerDisconnectedMsg
 
 	log *logger.Logger
 
 	animFrame int
+
+	headerActiveStyle lipgloss.Style
+	themeColor        lipgloss.Color
+	subThemeColor     lipgloss.Color
+
+	themeColorInput textinput.Model
 
 	err error
 }
@@ -111,16 +196,26 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	log := appLogger.AddOp(op)
 	log.Info("creating new model...")
 
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+
 	m := &Model{
 		state:   states.START_STATE,
 		prState: states.START_STATE,
 
 		curWindow: windows.START_WINDOW,
 
-		regTextInputs:  make([]textinput.Model, 3),
-		connTextInputs: make([]textinput.Model, 1),
-		logingInput:    make([]textinput.Model, 2),
-		messages:       []commands.ChatMessage{},
+		defTabs: []string{"friends", "chat", "voice", "video", "profile", "settings"},
+		regTabs: []string{"registration", "login"},
+
+		regTextInputs: make([]textinput.Model, 3),
+		logingInput:   make([]textinput.Model, 2),
+		logoAnim:      make([]string, 0, 3),
+		messages:      []commands.ChatMessage{},
+
+		defaultThemeColor: "#A6E22E",
+
+		spinner: sp,
 
 		usersColors: make(map[string]lipgloss.Color),
 
@@ -132,8 +227,14 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		log: appLogger,
 
-		msgChan: make(chan commands.ChatMessage, 100),
+		msgChan:    make(chan commands.ChatMessage, 100),
+		rawMsgChan: make(chan commands.RawChatMessage, 100),
+
+		peerConnectionsChan:    make(chan commands.PeerConnectedMsg, 100),
+		peerDisconnectionsChan: make(chan commands.PeerDisconnectedMsg, 100),
 	}
+
+	m.logoAnim = []string{titles.BIG_LOGO1, titles.BIG_LOGO2, titles.BIG_LOGO3, titles.BIG_LOGO2}
 
 	user := entities.User{
 		Paths: entities.Paths{
@@ -153,7 +254,10 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	userData := entities.Data{
 		Setup: entities.Setup{
-			UsersSetup: make(map[string]entities.UsersSetup, 0),
+			UsersSetup:           make(map[string]entities.UsersSetup, 0),
+			ThemeColor:           m.defaultThemeColor,
+			AudioNotifications:   true,
+			DesktopNotifications: true,
 		},
 	}
 
@@ -166,6 +270,12 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	}
 
 	user.Data = userData
+
+	log.Info("userdata", user.Data)
+
+	m.themeColor = lipgloss.Color(user.Data.Setup.ThemeColor)
+	m.subThemeColor = lipgloss.Color(utils.DarkenHex(user.Data.Setup.ThemeColor, 0.7))
+	m.headerActiveStyle = lipgloss.NewStyle().Foreground(m.themeColor).Bold(true)
 
 	if userData.Personal.Nickname != "" && userData.Personal.RegisterTime != "" {
 
@@ -188,7 +298,12 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 				log.Error("failed to create networking", logger.Err(err), logNickname)
 				return nil, err
 			}
-			audioEngine, err := audio.NewAudioEngine(appLogger, user.Data.Devices.Microphone, user.Data.Setup.Denoise, user.Data.Setup.AEC)
+			audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
+				Microphone: user.Data.Devices.Microphone,
+				Aec:        user.Data.Setup.AEC,
+				Denoice:    user.Data.Setup.Denoise,
+				Filtered:   user.Data.Setup.Filter,
+			})
 			if err != nil {
 				log.Error("failed to create audio engine", logger.Err(err))
 				return nil, err
@@ -200,18 +315,19 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			}
 
 			log.Info("setting netwoking callbacks...", logNickname)
+			t := time.Now().Format("15:04:05")
 			networking.ChatCallback(func(id string, data []byte) {
+				m.rawMsgChan <- commands.RawChatMessage{Time: t, Nickname: id, Data: data}
 
-				t := time.Now().Format("15:04:05")
-				msg := string(data)
-				m.msgChan <- commands.ChatMessage{Time: t, Nickname: id, Text: msg}
-				m.user.Engines.AudioEngine.PlayNotification()
-				if err := notifications.Notify(t, id, msg); err != nil {
-					m.log.Error("failed to notify", logger.Attr("userId", id), logger.Err(err))
-				}
 			})
 			networking.VoiceCallback(func(id string, data []byte) {
 				audioEngine.PlayUserVoice(id, data)
+			})
+			networking.PeerConnectedCallback(func(id string) {
+				m.peerConnectionsChan <- commands.PeerConnectedMsg{Nickname: id, Time: t}
+			})
+			networking.PeerDisconnectedCallback(func(id string) {
+				m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
 			})
 
 			user.Engines.AudioEngine = audioEngine
@@ -222,8 +338,10 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	m.user = &user
 
-	m.setupMicrohonesList(m.user.Data.Devices.Microphone)
+	m.setupMicrohonesList()
 	m.setupConnestionsList()
+	m.setupOnlineList()
+	m.setupSettingsList()
 
 	for i := range m.regTextInputs {
 		ti := textinput.New()
@@ -256,11 +374,15 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	connTextInput := textinput.New()
 	connTextInput.Placeholder = "enter nickname"
-	m.connTextInputs[0] = connTextInput
+	m.connTextInputs = connTextInput
 
 	chatInput := textinput.New()
 	chatInput.Placeholder = "type a message..."
 	m.chatTextInput = chatInput
+
+	themeColorInput := textinput.New()
+	themeColorInput.Placeholder = "new color in hex, d to default"
+	m.themeColorInput = themeColorInput
 
 	log.Info("model created successfully")
 
@@ -269,10 +391,12 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
-	cmds = append(cmds, commands.AnimTickCmd())
+	cmds = append(cmds, commands.AnimTickCmd(), m.spinner.Tick)
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
 		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan),
-			commands.FetchSessionsCmd(m.user.Networking, m.user.Data.Personal.Nickname),
+			commands.WaitForRawChatMessageCmd(m.rawMsgChan),
+			commands.WaitForPeerConnectionCmd(m.peerConnectionsChan),
+			commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan),
 			commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 			commands.TickCmd(), tea.EnableMouseCellMotion)
 		return tea.Batch(cmds...)
@@ -291,70 +415,84 @@ func (m *Model) Clean() {
 }
 
 func (m *Model) focusInputs() {
+	m.unfocusInputs()
+	ps := lipgloss.NewStyle().Foreground(lipgloss.Color(m.themeColor))
+	switch m.state {
+	case states.REG_STATE:
+		m.regTextInputs[m.cursor].Focus()
+		m.regTextInputs[m.cursor].PromptStyle = ps
+	case states.CONN_STATE:
+		if m.sideState == 1 {
+			m.connTextInputs.Focus()
+			m.connTextInputs.PromptStyle = ps
+		}
+	case states.CHAT_STATE:
+		m.chatTextInput.Focus()
+		m.chatTextInput.PromptStyle = ps
+	case states.LOGIN_STATE:
+		m.logingInput[m.cursor].Focus()
+		m.logingInput[m.cursor].PromptStyle = ps
+	case states.PROFILE_STATE:
+		m.themeColorInput.Focus()
+		m.themeColorInput.PromptStyle = ps
+	}
+}
+
+func (m *Model) unfocusInputs() {
 	for i := range m.regTextInputs {
 		m.regTextInputs[i].Blur()
 		m.regTextInputs[i].PromptStyle = lipgloss.NewStyle()
 		m.regTextInputs[i].TextStyle = lipgloss.NewStyle()
 	}
-	for i := range m.connTextInputs {
-		m.connTextInputs[i].Blur()
-		m.connTextInputs[i].PromptStyle = lipgloss.NewStyle()
-		m.connTextInputs[i].TextStyle = lipgloss.NewStyle()
-	}
+
+	m.connTextInputs.Blur()
+	m.connTextInputs.PromptStyle = lipgloss.NewStyle()
+	m.connTextInputs.TextStyle = lipgloss.NewStyle()
 
 	for i := range m.logingInput {
 		m.logingInput[i].Blur()
 		m.logingInput[i].PromptStyle = lipgloss.NewStyle()
 		m.logingInput[i].TextStyle = lipgloss.NewStyle()
 	}
+
 	m.chatTextInput.Blur()
 	m.chatTextInput.PromptStyle = lipgloss.NewStyle()
 	m.chatTextInput.TextStyle = lipgloss.NewStyle()
 
-	switch m.state {
-	case states.REG_STATE:
-		m.regTextInputs[m.cursor].Focus()
-		m.regTextInputs[m.cursor].PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-		m.regTextInputs[m.cursor].TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	case states.CONN_STATE:
-		m.connTextInputs[m.cursor].Focus()
-		m.connTextInputs[m.cursor].PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-		m.connTextInputs[m.cursor].TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	case states.CHAT_STATE:
-		m.chatTextInput.Focus()
-		m.chatTextInput.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-		m.chatTextInput.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	case states.LOGIN_STATE:
-		m.logingInput[m.cursor].Focus()
-		m.logingInput[m.cursor].PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-		m.logingInput[m.cursor].TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	}
+	m.themeColorInput.Blur()
+	m.themeColorInput.PromptStyle = lipgloss.NewStyle()
+	m.themeColorInput.TextStyle = lipgloss.NewStyle()
 }
 
-func (m *Model) setupMicrohonesList(selected string) {
+func (m *Model) setupMicrohonesList() {
 	if m.user != nil && m.user.Engines.AudioEngine != nil {
 		ms := m.user.Engines.AudioEngine.FetchMicrophones()
 
-		microphones := make([]list.Item, 0, len(ms))
-
-		selectedIndex := 0
+		microphones := make([]list.Item, len(ms))
 
 		for i, v := range ms {
-			microphones = append(microphones, micItem{name: v.Name()})
-			if v.Name() == selected {
-				selectedIndex = i
+			mi := micItem{name: v.Name, channels: v.Channels, sampleRate: v.SampleRate, current: ""}
+
+			if i == m.user.Engines.AudioEngine.GetCurrentMicrophone().Name {
+				mi.current = lipgloss.NewStyle().Foreground(m.themeColor).Render("CURRENT")
 			}
+
+			microphones[v.Index] = mi
 		}
 
 		delegate := list.NewDefaultDelegate()
-		delegate.ShowDescription = false
-		delegate.SetSpacing(3)
+		delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+		delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
+		delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+		delegate.SetSpacing(1)
+		m.microphonesDelegate = delegate
 		m.microphonesList = list.New(microphones, delegate, m.width/2, m.height-4)
+		m.microphonesList.DisableQuitKeybindings()
 		m.microphonesList.Title = "select microphone"
-		m.microphonesList.Select(selectedIndex)
+		m.microphonesList.Select(-1)
 		m.microphonesList.SetShowStatusBar(false)
-		m.microphonesList.SetShowTitle(true)
+		m.microphonesList.SetShowTitle(false)
 		m.microphonesList.SetFilteringEnabled(false)
 		m.microphonesList.SetShowFilter(false)
 		m.microphonesList.SetShowHelp(false)
@@ -365,16 +503,88 @@ func (m *Model) setupConnestionsList() {
 	conns := make([]list.Item, 0)
 
 	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 	delegate.ShowDescription = true
-	delegate.SetSpacing(3)
-
+	delegate.SetSpacing(1)
+	m.connectionsDelegate = delegate
 	m.connectionsList = list.New(conns, delegate, m.width/2, m.height-4)
-	m.connectionsList.Title = "connections"
+	m.connectionsList.DisableQuitKeybindings()
+	m.connectionsList.Select(0)
 	m.connectionsList.SetShowStatusBar(false)
 	m.connectionsList.SetShowTitle(false)
 	m.connectionsList.SetFilteringEnabled(false)
 	m.connectionsList.SetShowFilter(false)
 	m.connectionsList.SetShowHelp(false)
+}
+
+func (m *Model) setupOnlineList() {
+	online := make([]list.Item, 0)
+
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+
+	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+	delegate.SetSpacing(0)
+	m.onlineDelegate = delegate
+	m.onlineList = list.New(online, delegate, m.width/2, m.height-4)
+	m.onlineList.DisableQuitKeybindings()
+	m.onlineList.SetShowStatusBar(false)
+	m.onlineList.SetShowTitle(false)
+	m.onlineList.SetFilteringEnabled(false)
+	m.onlineList.SetShowFilter(false)
+	m.onlineList.SetShowHelp(false)
+}
+
+func (m *Model) setupSettingsList() {
+	settings := []list.Item{
+		settingsItem{
+			id:          DENOISE,
+			name:        "denoise",
+			description: "reduce noise",
+			enabled:     m.user.Data.Setup.Denoise,
+		},
+		settingsItem{
+			id:          AEC,
+			name:        "echocanceller",
+			description: "reduce echo",
+			enabled:     m.user.Data.Setup.AEC,
+		},
+		settingsItem{
+			id:          EQUALIZER,
+			name:        "equalizer",
+			description: "reduce low freqs and increase high",
+			enabled:     m.user.Data.Setup.Filter,
+		},
+		settingsItem{
+			id:          AUDIO_N,
+			name:        "audio notifications",
+			description: "puck puck",
+			enabled:     m.user.Data.Setup.AudioNotifications,
+		},
+		settingsItem{
+			id:          DESKTOP_N,
+			name:        "desktop notification",
+			description: "kvadrat zadral",
+			enabled:     m.user.Data.Setup.DesktopNotifications,
+		},
+	}
+
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+
+	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+	delegate.SetSpacing(1)
+	m.settingsDelegate = delegate
+	m.settingsList = list.New(settings, delegate, m.width/2, m.height-4)
+	m.settingsList.Select(0)
+	m.settingsList.DisableQuitKeybindings()
+	m.settingsList.SetShowStatusBar(false)
+	m.settingsList.SetShowTitle(false)
+	m.settingsList.SetFilteringEnabled(false)
+	m.settingsList.SetShowFilter(false)
+	m.settingsList.SetShowHelp(false)
 }
 
 func (m *Model) updateConnectionItemList(nickname string, volume float32, muted bool) tea.Cmd {
@@ -393,7 +603,115 @@ func (m *Model) updateConnectionItemList(nickname string, volume float32, muted 
 		cmds = append(cmds, m.connectionsList.SetItem(i, conn))
 	}
 	return tea.Batch(cmds...)
+}
 
+func (m *Model) updateMicrophonesItemList(microphone string) tea.Cmd {
+	var cmd tea.Cmd
+	items := m.microphonesList.Items()
+	for i, v := range items {
+		mic, ok := v.(micItem)
+		if !ok {
+			continue
+		}
+		mic.current = ""
+		if mic.name == microphone {
+			mic.current = lipgloss.NewStyle().Foreground(m.themeColor).Render("CURRENT")
+		}
+		cmd = m.microphonesList.SetItem(i, mic)
+	}
+	return cmd
+}
+
+func (m *Model) updateSettingsItemList(setting string) tea.Cmd {
+	var cmd tea.Cmd
+	items := m.settingsList.Items()
+	for i, v := range items {
+		s, ok := v.(settingsItem)
+		if !ok {
+			continue
+		}
+		if s.name == setting {
+			s.enabled = !s.enabled
+			cmd = m.settingsList.SetItem(i, s)
+			return cmd
+		}
+	}
+	return cmd
+}
+
+func (m *Model) updateMicrophonesList() tea.Cmd {
+	var cmds []tea.Cmd
+	items := m.microphonesList.Items()
+	ms := m.user.Engines.AudioEngine.FetchMicrophones()
+	micsMap := make(map[string]struct{}, len(ms))
+	for i := range ms {
+		micsMap[i] = struct{}{}
+	}
+
+	itemsMap := make(map[string]struct{}, len(items))
+	for _, v := range items {
+		item, ok := v.(micItem)
+		if !ok {
+			continue
+		}
+		itemsMap[item.name] = struct{}{}
+	}
+
+	for i := len(items) - 1; i >= 0; i-- {
+		item, ok := items[i].(micItem)
+		if !ok {
+			continue
+		}
+		_, ok = micsMap[item.name]
+		if !ok {
+			m.microphonesList.RemoveItem(i)
+		}
+	}
+
+	for i, v := range ms {
+		if _, ok := itemsMap[i]; !ok {
+			itLenLen := len(m.microphonesList.Items())
+			cmds = append(cmds, m.microphonesList.InsertItem(itLenLen, micItem{name: i, sampleRate: v.SampleRate, channels: v.Channels}))
+		}
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *Model) updateOnlineList() tea.Cmd {
+	var cmds []tea.Cmd
+	items := m.onlineList.Items()
+	onlineMap := make(map[string]struct{}, len(m.online))
+	for _, v := range m.online {
+		onlineMap[v] = struct{}{}
+	}
+
+	itemsMap := make(map[string]struct{}, len(items))
+	for _, v := range items {
+		item, ok := v.(onlineItem)
+		if !ok {
+			continue
+		}
+		itemsMap[item.name] = struct{}{}
+	}
+
+	for i := len(items) - 1; i >= 0; i-- {
+		item, ok := items[i].(onlineItem)
+		if !ok {
+			continue
+		}
+		_, ok = onlineMap[item.name]
+		if !ok {
+			m.onlineList.RemoveItem(i)
+		}
+	}
+
+	for _, v := range m.online {
+		if _, ok := itemsMap[v]; !ok {
+			itLenLen := len(m.onlineList.Items())
+			cmds = append(cmds, m.onlineList.InsertItem(itLenLen, onlineItem{name: v}))
+		}
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) updateConnectionsList() tea.Cmd {
@@ -450,67 +768,74 @@ func (m *Model) coloredNickname(nickname string) string {
 	return nickname
 }
 
-func (m Model) getMaxChatOffset() int {
+func (m Model) getChatSizes() (int, int, int) {
 	if m.width == 0 || m.height == 0 {
-		return 0
+		return 0, 0, 0
 	}
 
-	borderStyle := styles.BorderStyle
-	frameChromeW := lipgloss.Width(borderStyle.Render("X")) - 1
-	frameChromeH := lipgloss.Height(borderStyle.Render("X")) - 1
+	padW, padH := 2, 1
+	usableW := m.width - (padW * 2)
+	usableH := m.height - (padH * 2)
 
-	usableW := m.width - frameChromeW
-	usableH := m.height - frameChromeH
+	footerH := lipgloss.Height("X")
+	logo := lipgloss.NewStyle().Render(titles.A)
+	logoH := lipgloss.Height(logo)
 
-	titleH := lipgloss.Height(styles.TitleStyle.Width(usableW).MaxWidth(usableW).Render(titles.LOGO))
-	footerH := lipgloss.Height(styles.FooterStyle.Width(usableW).MaxWidth(usableW).Render("X"))
+	gridH := usableH - footerH - logoH
+	activeBorder := tabBorderWithBottom("┘", " ", "└")
 
-	contentChromeW := lipgloss.Width(styles.ContentStyle.Render("X")) - 1
-	contentChromeH := lipgloss.Height(styles.ContentStyle.Render("X")) - 1
+	activeTabStyle := lipgloss.NewStyle().
+		Border(activeBorder, true).
+		Bold(true).
+		Align(lipgloss.Center)
 
-	centerW := usableW - contentChromeW
-	centerH := usableH - titleH - footerH - contentChromeH
+	tab := m.defTabs[0]
+	style := activeTabStyle
+	border, _, _, _, _ := style.GetBorder()
+	border.BottomLeft = "│"
+	border.BottomRight = "│"
+	styledT := style.Border(border).Render(tab)
+	tabsRow := lipgloss.JoinHorizontal(lipgloss.Top, styledT)
+	w := usableW - 4
+	h := gridH - lipgloss.Height(tabsRow) - 2
 
-	baseBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder())
-	boxChromeW := lipgloss.Width(baseBox.Render(""))
-	boxChromeH := lipgloss.Height(baseBox.Render("X")) - 1
+	m.chatTextInput.Width = max(1, w-4)
+	inputView := lipgloss.NewStyle().PaddingLeft(2).Render(m.chatTextInput.View())
 
-	leftTotalW := centerW / 3
-	innerRightW := (centerW - leftTotalW) - boxChromeW
-	innerRightH := centerH - boxChromeH
+	rawConnStr := "X"
+	connsView := lipgloss.NewStyle().PaddingLeft(2).Render(safeTruncate(rawConnStr, w-2))
 
-	if innerRightW < 1 {
-		innerRightW = 1
+	usersAudioState := "X"
+
+	var chatParts []string
+
+	chatParts = append(chatParts, usersAudioState, connsView, "")
+
+	usedH := 0
+	for _, p := range chatParts {
+		usedH += lipgloss.Height(p)
 	}
-	if innerRightH < 1 {
-		innerRightH = 1
+	usedH += lipgloss.Height(inputView) + 1
+
+	historyMaxH := max(0, h-usedH)
+
+	var maxOffset int
+	if historyMaxH > 0 {
+		var allMsgsLines []string
+		msgStyle := lipgloss.NewStyle().Width(w - 2).MaxWidth(w - 2).PaddingLeft(2)
+
+		for _, msg := range m.messages {
+			t := lipgloss.NewStyle().Render(msg.Time)
+			n := lipgloss.NewStyle().Bold(true).Render(msg.Nickname + ":")
+			txt := lipgloss.NewStyle().Render(msg.Text)
+			renderedMsg := msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
+			allMsgsLines = append(allMsgsLines, strings.Split(renderedMsg, "\n")...)
+		}
+
+		lenAll := len(allMsgsLines)
+
+		maxOffset = lenAll - historyMaxH
 	}
 
-	chatTitleH := lipgloss.Height(styles.HeaderStyle.Render("chat"))
-	muteStateH := lipgloss.Height(m.muteState)
-
-	activeConnectionsViewH := lipgloss.Height(lipgloss.NewStyle().Width(innerRightW - 2).MaxWidth(innerRightW - 2).Render("X"))
-	inputViewH := lipgloss.Height(lipgloss.NewStyle().Width(innerRightW - 2).Render(m.chatTextInput.View()))
-
-	usedSpaceH := chatTitleH + muteStateH + activeConnectionsViewH + inputViewH + 1
-	historyMaxH := innerRightH - usedSpaceH
-	if historyMaxH < 0 {
-		historyMaxH = 0
-	}
-
-	var totalLines int
-	msgStyle := lipgloss.NewStyle().Width(innerRightW - 2).MaxWidth(innerRightW - 2)
-
-	for _, msg := range m.messages {
-		timeStr := lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Bold(true).Render(msg.Time)
-		renderedMsg := msgStyle.Render(timeStr + "> " + msg.Nickname + ": " + msg.Text)
-		totalLines += len(strings.Split(renderedMsg, "\n"))
-	}
-
-	maxOffset := totalLines - historyMaxH
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-
-	return maxOffset
+	return maxOffset, w, historyMaxH
 }

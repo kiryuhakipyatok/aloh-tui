@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/AvraamMavridis/randomcolor v0.0.0-20180822172341-208aff70bf2c
+	github.com/blacktop/go-termimg v0.1.26
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/keygen v0.5.4
@@ -12,10 +13,12 @@ require (
 	github.com/gen2brain/beeep v0.11.2
 	github.com/gen2brain/malgo v0.11.24
 	github.com/kechako/go-speexdsp v0.2.2
-	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260425125738-ae1c1db71654
+	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260513180758-85070c98bdf9
 	github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e
 	github.com/lrstanley/bubblezone v1.0.0
+	golang.design/x/clipboard v0.7.1
 	golang.org/x/crypto v0.48.0
+	golang.org/x/image v0.36.0
 	gopkg.in/hraban/opus.v2 v2.0.0-20230925203106-0188a62cb302
 )
 
@@ -23,8 +26,10 @@ require (
 	git.sr.ht/~jackmordaunt/go-toast v1.1.2 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/charmbracelet/colorprofile v0.4.1 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
+	github.com/charmbracelet/x/mosaic v0.0.0-20260216111343-536eb63c1f4c // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.9.0 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
@@ -40,9 +45,11 @@ require (
 	github.com/jackmordaunt/icns/v3 v3.0.1 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
+	github.com/makeworld-the-better-one/dither/v2 v2.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
+	github.com/mattn/go-sixel v0.0.8 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
@@ -63,6 +70,7 @@ require (
 	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
 	github.com/sergeymakinen/go-ico v1.0.0-beta.0 // indirect
+	github.com/soniakeys/quant v1.0.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
@@ -73,9 +81,12 @@ require (
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/exp/shiny v0.0.0-20250606033433-dcc06ee1d476 // indirect
+	golang.org/x/mobile v0.0.0-20250606033058-a2a15c67f36f // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/term v0.40.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -10,7 +10,7 @@ type SendInChatMsg struct {
 	Err error
 }
 
-func SendInChatCmd(netw networking.Networking, msg string) tea.Cmd {
+func SendInChatCmd(netw networking.Networking, msg []byte) tea.Cmd {
 	return func() tea.Msg {
 		if err := netw.SendMessageInChat(msg); err != nil {
 			return SendInChatMsg{err}

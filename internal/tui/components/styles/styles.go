@@ -7,7 +7,7 @@ var (
 
 	TitleStyle   = lipgloss.NewStyle().Align(lipgloss.Center).Bold(true).Foreground(lipgloss.Color("63"))
 
-	ContentStyle = lipgloss.NewStyle().Bold(true).MarginTop(1)
+	ContentStyle = lipgloss.NewStyle().Bold(true)
 
 	FooterStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#CFCFCF")).Align(lipgloss.Center).MarginTop(1)
 	

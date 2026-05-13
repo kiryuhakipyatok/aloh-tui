@@ -1,25 +1,24 @@
-FROM golang:1.26-alpine AS base
+FROM golang:1.26-bookworm AS base
 
-RUN apk update && apk add --no-cache \
-    pkgconfig \
-    build-base \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    build-essential \
     wget \
     tar \
     git \
-    mingw-w64-gcc \
+    mingw-w64 \
     autoconf \
     automake \
     libtool \
-    util-macros \
-    xorgproto \
     libx11-dev \
-    libx11-static \
-    libxcb-dev \
-    libxcb-static \
+    libxcb1-dev \
     libxau-dev \
     libxdmcp-dev \
+    libasound2-dev \
+    libpulse-dev \
     bash \
-    coreutils
+    coreutils && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -33,57 +32,47 @@ FROM base AS build-linux
 ENV GOOS=linux
 ENV GOARCH=amd64
 ENV CGO_ENABLED=1
-
-ENV CC=gcc 
+ENV CC=gcc
 ENV PREFIX=/usr/local
 
 ENV PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
 WORKDIR /tmp/build
 
-RUN wget https://xorg.freedesktop.org/releases/individual/lib/libXau-1.0.11.tar.gz && \
-    tar -xzf libXau-1.0.11.tar.gz && cd libXau-1.0.11 && \
-    CC=${CC} ./configure --prefix=${PREFIX} --disable-shared --enable-static && \
-    make -j$(nproc) && make install
-
-RUN wget https://xorg.freedesktop.org/releases/individual/lib/libXdmcp-1.1.4.tar.gz && \
-    tar -xzf libXdmcp-1.1.4.tar.gz && cd libXdmcp-1.1.4 && \
-    CC=${CC} ./configure --prefix=${PREFIX} --disable-shared --enable-static && \
-    make -j$(nproc) && make install
-
 RUN wget https://downloads.xiph.org/releases/ogg/libogg-1.3.5.tar.gz && \
     tar -xzf libogg-1.3.5.tar.gz && cd libogg-1.3.5 && \
-    CC=${CC} ./configure --prefix=${PREFIX} --disable-shared --enable-static && \
+    CC=${CC} ./configure --prefix=${PREFIX} --enable-shared --disable-static && \
     make -j$(nproc) && make install
 
 RUN wget https://downloads.xiph.org/releases/opus/opus-1.4.tar.gz && \
     tar -xzf opus-1.4.tar.gz && cd opus-1.4 && \
-    CC=${CC} ./configure --prefix=${PREFIX} --disable-shared --enable-static --disable-extra-programs && \
+    CC=${CC} ./configure --prefix=${PREFIX} --enable-shared --disable-static --disable-extra-programs && \
     make -j$(nproc) && make install
 
 RUN wget https://downloads.xiph.org/releases/opus/opusfile-0.12.tar.gz && \
     tar -xzf opusfile-0.12.tar.gz && cd opusfile-0.12 && \
     CC=${CC} CFLAGS="-I${PREFIX}/include" LDFLAGS="-L${PREFIX}/lib" \
-    ./configure --prefix=${PREFIX} --disable-shared --enable-static --disable-http --disable-examples --disable-doc && \
+    ./configure --prefix=${PREFIX} --enable-shared --disable-static --disable-http --disable-examples --disable-doc && \
     make -j$(nproc) && make install
-
+    
 RUN wget https://downloads.xiph.org/releases/speex/speexdsp-1.2.1.tar.gz && \
     tar -xzf speexdsp-1.2.1.tar.gz && cd speexdsp-1.2.1 && \
-    CC=${CC} ./configure --prefix=${PREFIX} --disable-shared --enable-static && \
+    CC=${CC} ./configure --prefix=${PREFIX} --enable-shared --disable-static && \
     make -j$(nproc) && make install
 
 RUN git clone https://github.com/xiph/rnnoise.git && cd rnnoise && \
     ./autogen.sh && \
-    CC=${CC} ./configure --prefix=${PREFIX} --disable-shared --enable-static && \
+    CC=${CC} ./configure --prefix=${PREFIX} --enable-shared --disable-static && \
     make -j$(nproc) && make install
 
 WORKDIR /app
 ENV CGO_CFLAGS="-I${PREFIX}/include"
 ENV CGO_LDFLAGS="-L${PREFIX}/lib -lopusfile -lopus -logg -lspeexdsp -lrnnoise -lX11 -lxcb -lXau -lXdmcp -lm"
 
-RUN mkdir -p /out && \
+RUN mkdir -p /out/libs && \
     go build -tags netgo,osusergo \
-    -ldflags="-s -w -extldflags '-static' -X 'main.version=${VERSION}' -X 'main.env=${APP_ENV}'" \
-    -o /out/aloh-linux-amd64-s ./cmd/app
+    -ldflags="-s -w -X 'main.version=${VERSION}' -X 'main.env=${APP_ENV}'" \
+    -o /out/aloh ./cmd/app && \
+    cp -P ${PREFIX}/lib/libogg.so* ${PREFIX}/lib/libopus.so* ${PREFIX}/lib/libopusfile.so* ${PREFIX}/lib/librnnoise.so* ${PREFIX}/lib/libspeexdsp.so* /out/libs/
 
 
 FROM base AS build-windows
@@ -115,25 +104,26 @@ RUN wget https://downloads.xiph.org/releases/opus/opusfile-0.12.tar.gz && \
     ./configure --host=${HOST} --prefix=${PREFIX} --disable-shared --enable-static --disable-http --disable-examples --disable-doc && \
     make -j$(nproc) && make install
 
-RUN wget https://downloads.xiph.org/releases/speex/speexdsp-1.2.1.tar.gz && \
-    tar -xzf speexdsp-1.2.1.tar.gz && cd speexdsp-1.2.1 && \
-    ./configure --host=${HOST} --prefix=${PREFIX} --disable-shared --enable-static && \
-    make -j$(nproc) && make install
-
 RUN git clone https://github.com/xiph/rnnoise.git && cd rnnoise && \
     ./autogen.sh && \
     ./configure --host=${HOST} --prefix=${PREFIX} --disable-shared --enable-static && \
     make -j$(nproc) && make install
 
+RUN wget https://downloads.xiph.org/releases/speex/speexdsp-1.2.1.tar.gz && \
+    tar -xzf speexdsp-1.2.1.tar.gz && cd speexdsp-1.2.1 && \
+    ./configure --host=${HOST} --prefix=${PREFIX} --disable-shared --enable-static && \
+    make -j$(nproc) && make install
+
 WORKDIR /app
 ENV CGO_CFLAGS="-I${PREFIX}/include -Wno-stringop-overflow -Wno-array-bounds"
-ENV CGO_LDFLAGS="-L${PREFIX}/lib -Wl,--start-group -lopusfile -lopus -logg -lspeexdsp -lrnnoise -Wl,--end-group -lm -lpthread -lws2_32"
+ENV CGO_LDFLAGS="-L${PREFIX}/lib -Wl,--start-group -lopusfile -lopus -logg -lspeexdsp -lrnnoise -Wl,--end-group -lm -lpthread -lws2_32 -lole32"
 
 RUN mkdir -p /out && \
     go build -tags netgo,osusergo \
     -ldflags="-s -w -extldflags '-static' -X 'main.version=${VERSION}' -X 'main.env=${APP_ENV}'" \
-    -o /out/aloh-windows-amd64-s.exe ./cmd/app
+    -o /out/aloh.exe ./cmd/app
 
 FROM scratch AS export
-COPY --from=build-linux /out/aloh-linux-amd64-s /
-COPY --from=build-windows /out/aloh-windows-amd64-s.exe /
+COPY --from=build-linux /out/aloh /linux/
+COPY --from=build-linux /out/libs/ /linux/libs/
+COPY --from=build-windows /out/aloh.exe /windows/
