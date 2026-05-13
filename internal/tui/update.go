@@ -655,7 +655,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter":
-			if m.state != states.LOAD_STATE {
+			if m.state == states.LOAD_STATE {
 				return m, nil
 			}
 			if m.curWindow == windows.START_WINDOW {
