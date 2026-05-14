@@ -103,20 +103,20 @@ type audioEngine struct {
 	pcmBuffer            []int16
 	float32Buffer        []float32
 	echolessBufferInt16s []int16
-	micNativeBuffer      []int16
+	micBuffer            []int16
 	workMic              []int16
-	playbackNativeBuffer []int16
+	playbackBuffer       []int16
 	workMix              []int16
-	resampledWorkMix     []int16
-	resampledWorkMic     []int16
-	monoCaptureBuffer    []int16
+	//resampledWorkMix     []int16
+	//resampledWorkMic     []int16
+	//monoCaptureBuffer    []int16
 
 	connected bool
 
-	echoCanceller     *speexdsp.EchoCanceller
-	preprocessor      *speexdsp.Preprocessor
-	captureResampler  *speexdsp.Resampler
-	playbackResampler *speexdsp.Resampler
+	echoCanceller *speexdsp.EchoCanceller
+	preprocessor  *speexdsp.Preprocessor
+	//captureResampler  *speexdsp.Resampler
+	//playbackResampler *speexdsp.Resampler
 
 	log *logger.SparseLogger
 
@@ -166,7 +166,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 
 	notificationSound := notifications.NotificationSoundBytes()
 
-	opusEncoder, err := opus.NewEncoder(48000, 1, opus.Application(opus.AppVoIP))
+	opusEncoder, err := opus.NewEncoder(48000, 1, opus.Application(opus.AppAudio))
 	if err != nil {
 		log.Error("failed to create new opus encoder", logger.Err(err))
 		return nil, err
@@ -228,14 +228,14 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		denoicedBuffer:       make([]float32, frameLen),
 		float32Buffer:        make([]float32, frameLen),
 		pcmBuffer:            make([]int16, frameLen),
-		playbackNativeBuffer: make([]int16, 0, 4096),
-		micNativeBuffer:      make([]int16, 0, 4096),
+		playbackBuffer:       make([]int16, 0, 4096),
+		micBuffer:            make([]int16, 0, 4096),
 		echolessBufferInt16s: make([]int16, frameLen),
 		workMix:              make([]int16, 4096),
 		workMic:              make([]int16, 4096),
-		resampledWorkMix:     make([]int16, 4096),
-		resampledWorkMic:     make([]int16, 4096),
-		monoCaptureBuffer:    make([]int16, 0, 4096),
+		//resampledWorkMix:     make([]int16, 4096),
+		//resampledWorkMic:     make([]int16, 4096),
+		//monoCaptureBuffer:    make([]int16, 0, 4096),
 
 		echoCanceller: echoCanceller,
 		preprocessor:  preprocessor,
@@ -267,7 +267,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 	micsInfo := make(map[string]MicrophoneInfo, 0)
 
 	var (
-		ch    uint32
+		//ch    uint32
 		micId unsafe.Pointer
 	)
 
@@ -293,7 +293,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 
 		if as.Microphone != "" && microphones[i].Name() == as.Microphone {
 			micId = microphones[i].ID.Pointer()
-			ch = format.Channels
+			//ch = format.Channels
 			ae.CurrentMicrophone = mi
 			log.Debug("current mic's info", logger.Attr("name", mi.Name),
 				logger.Attr("sampleRate", format.SampleRate), logger.Attr("channels", format.Channels),
@@ -317,18 +317,19 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 	playbackConfig := malgo.DefaultDeviceConfig(malgo.Playback)
 
 	captureConfig.Capture.Format = malgo.FormatS16
-	if ch > 2 {
-		captureConfig.Capture.Channels = 2
-	} else {
-		captureConfig.Capture.Channels = 0
-	}
-	captureConfig.SampleRate = 0
+	// if ch > 2 {
+	// 	captureConfig.Capture.Channels = 2
+	// } else {
+	// 	captureConfig.Capture.Channels = 0
+	// }
+	captureConfig.Capture.Channels = 1
+	captureConfig.SampleRate = 48000
 	captureConfig.Capture.DeviceID = micId
 	captureConfig.PeriodSizeInFrames = 960
 
 	playbackConfig.Playback.Channels = 1
 	playbackConfig.Playback.Format = malgo.FormatS16
-	playbackConfig.SampleRate = 0
+	playbackConfig.SampleRate = 48000
 	playbackConfig.PeriodSizeInFrames = 960
 
 	ae.captureCallback = ae.newCaptureCallback()
@@ -357,23 +358,23 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 	ae.captureDevice = captureDevice
 	ae.playbackDevice = playbackDevice
 
-	captureSampleRate := int(ae.captureDevice.SampleRate())
-	playbackSampleRate := int(ae.playbackDevice.SampleRate())
+	// captureSampleRate := int(ae.captureDevice.SampleRate())
+	// playbackSampleRate := int(ae.playbackDevice.SampleRate())
 
-	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 7)
-	if err != nil {
-		ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
-		return nil, err
-	}
+	// captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 7)
+	// if err != nil {
+	// 	ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
+	// 	return nil, err
+	// }
 
-	playbackResampler, err := speexdsp.NewResampler(1, 48000, playbackSampleRate, 7)
-	if err != nil {
-		ae.log.Error(ae.errLogCount, "failed to create new playback resampler", logger.Err(err))
-		return nil, err
-	}
+	// playbackResampler, err := speexdsp.NewResampler(1, 48000, playbackSampleRate, 7)
+	// if err != nil {
+	// 	ae.log.Error(ae.errLogCount, "failed to create new playback resampler", logger.Err(err))
+	// 	return nil, err
+	// }
 
-	ae.captureResampler = captureResampler
-	ae.playbackResampler = playbackResampler
+	// ae.captureResampler = captureResampler
+	// ae.playbackResampler = playbackResampler
 
 	if err := ae.start(); err != nil {
 		ae.log.Error(ae.errLogCount, "failed to start audio engine", logger.Err(err))
@@ -441,7 +442,7 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 
 	var (
 		micId unsafe.Pointer
-		ch    uint32
+		// ch    uint32
 	)
 
 	if microphone != "" {
@@ -456,7 +457,7 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 	micInfo, ok := ae.Microphones[microphone]
 	if ok && micId != nil {
 		ae.CurrentMicrophone = micInfo
-		ch = micInfo.Channels
+		//ch = micInfo.Channels
 	}
 
 	if ae.captureDevice != nil {
@@ -470,12 +471,13 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 
 	captureConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	captureConfig.Capture.Format = malgo.FormatS16
-	if ch > 2 {
-		captureConfig.Capture.Channels = 2
-	} else {
-		captureConfig.Capture.Channels = 0
-	}
-	captureConfig.SampleRate = 0
+	// if ch > 2 {
+	// 	captureConfig.Capture.Channels = 2
+	// } else {
+	// 	captureConfig.Capture.Channels = 0
+	// }
+	captureConfig.Capture.Channels = 1
+	captureConfig.SampleRate = 48000
 	captureConfig.Capture.DeviceID = micId
 
 	captureDevice, err := malgo.InitDevice(ae.malgoCtx.Context, captureConfig, ae.captureCallback)
@@ -487,22 +489,22 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 		return err
 	}
 
-	if err := ae.captureResampler.Close(); err != nil {
-		ae.log.Error(ae.errLogCount, "failed to close old capture resampler", logger.Err(err))
-		return err
-	}
+	// if err := ae.captureResampler.Close(); err != nil {
+	// 	ae.log.Error(ae.errLogCount, "failed to close old capture resampler", logger.Err(err))
+	// 	return err
+	// }
 
-	captureSampleRate := int(captureDevice.SampleRate())
+	// captureSampleRate := int(captureDevice.SampleRate())
 
-	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 7)
-	if err != nil {
-		ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
-		return err
-	}
+	// captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 7)
+	// if err != nil {
+	// 	ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
+	// 	return err
+	// }
 
 	ae.mu.Lock()
 	ae.captureDevice = captureDevice
-	ae.captureResampler = captureResampler
+	//ae.captureResampler = captureResampler
 	ae.mu.Unlock()
 
 	if err := ae.start(); err != nil {
@@ -574,32 +576,33 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 
 		if pInputSamples != nil && netw != nil && connected && !ae.mutedMicro.Load() && !ae.muted.Load() {
 			nativeSamples := len(pInputSamples) / 2
-			if len(ae.micNativeBuffer) < nativeSamples {
-				ae.micNativeBuffer = make([]int16, nativeSamples)
+			if len(ae.micBuffer) < nativeSamples {
+				ae.micBuffer = make([]int16, nativeSamples)
 			}
 
-			bytesToInt16(ae.micNativeBuffer[:nativeSamples], pInputSamples)
+			bytesToInt16(ae.micBuffer[:nativeSamples], pInputSamples)
 
-			usingMicBuffer := ae.micNativeBuffer[:nativeSamples]
+			usingMicBuffer := ae.micBuffer[:nativeSamples]
 
-			if ae.captureDevice.CaptureChannels() == 2 {
-				monoSamples := nativeSamples / 2
-				if len(ae.monoCaptureBuffer) < monoSamples {
-					ae.monoCaptureBuffer = make([]int16, monoSamples)
-				}
-				ae.stereoToMono(ae.micNativeBuffer[:nativeSamples], ae.monoCaptureBuffer[:monoSamples])
-				usingMicBuffer = ae.monoCaptureBuffer[:monoSamples]
-			}
+			// if ae.captureDevice.CaptureChannels() == 2 {
+			// 	monoSamples := nativeSamples / 2
+			// 	if len(ae.monoCaptureBuffer) < monoSamples {
+			// 		ae.monoCaptureBuffer = make([]int16, monoSamples)
+			// 	}
+			// 	ae.stereoToMono(ae.micNativeBuffer[:nativeSamples], ae.monoCaptureBuffer[:monoSamples])
+			// 	usingMicBuffer = ae.monoCaptureBuffer[:monoSamples]
+			// }
 
-			outLen := int(float64(nativeSamples)*(48000.0/float64(ae.captureDevice.SampleRate()))) + 100
-			if len(ae.resampledWorkMic) < outLen {
-				ae.resampledWorkMic = make([]int16, outLen)
-			}
+			// outLen := int(float64(nativeSamples)*(48000.0/float64(ae.captureDevice.SampleRate()))) + 100
+			// if len(ae.resampledWorkMic) < outLen {
+			// 	ae.resampledWorkMic = make([]int16, outLen)
+			// }
 
-			_, out, err := ae.captureResampler.ProcessInt(0, usingMicBuffer, ae.resampledWorkMic)
-			if err == nil {
-				ae.workMic = append(ae.workMic, ae.resampledWorkMic[:out]...)
-			}
+			// _, out, err := ae.captureResampler.ProcessInt(0, usingMicBuffer, ae.resampledWorkMic)
+			// if err == nil {
+			// 	ae.workMic = append(ae.workMic, ae.resampledWorkMic[:out]...)
+			// }
+			ae.workMic = append(ae.workMic, usingMicBuffer...)
 
 			for len(ae.workMic) >= frameLen {
 				chunk := ae.workMic[:frameLen]
@@ -730,7 +733,7 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 
 			nativeSamples := len(pOutputSample) / 2
 
-			for len(ae.playbackNativeBuffer) < nativeSamples {
+			for len(ae.playbackBuffer) < nativeSamples {
 				for i := 0; i < frameLen; i++ {
 					ae.workMix[i] = 0
 				}
@@ -805,24 +808,24 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 					ae.echoCanceller.Playback(ae.workMix[:frameLen])
 				}
 
-				outLen := int(float64(frameLen)*(float64(ae.playbackDevice.SampleRate())/48000.0)) + 100
-				if len(ae.resampledWorkMix) < outLen {
-					ae.resampledWorkMix = make([]int16, outLen)
-				}
+				// outLen := int(float64(frameLen)*(float64(ae.playbackDevice.SampleRate())/48000.0)) + 100
+				// if len(ae.resampledWorkMix) < outLen {
+				// 	ae.resampledWorkMix = make([]int16, outLen)
+				// }
 
-				_, out, err := ae.playbackResampler.ProcessInt(0, ae.workMix[:frameLen], ae.resampledWorkMix)
-				if err == nil {
-					ae.playbackNativeBuffer = append(ae.playbackNativeBuffer, ae.resampledWorkMix[:out]...)
-				}
+				// _, out, err := ae.playbackResampler.ProcessInt(0, ae.workMix[:frameLen], ae.resampledWorkMix)
+				// if err == nil {
+				ae.playbackBuffer = append(ae.playbackBuffer, ae.workMix[:frameLen]...)
+				// }
 
 			}
 
-			outNativeBuffer := ae.playbackNativeBuffer[:nativeSamples]
+			outBuffer := ae.playbackBuffer[:nativeSamples]
 
-			int16ToBytes(outNativeBuffer, pOutputSample)
+			int16ToBytes(outBuffer, pOutputSample)
 
-			copy(ae.playbackNativeBuffer, ae.playbackNativeBuffer[nativeSamples:])
-			ae.playbackNativeBuffer = ae.playbackNativeBuffer[:len(ae.playbackNativeBuffer)-nativeSamples]
+			copy(ae.playbackBuffer, ae.playbackBuffer[nativeSamples:])
+			ae.playbackBuffer = ae.playbackBuffer[:len(ae.playbackBuffer)-nativeSamples]
 		}
 
 	}
@@ -1024,17 +1027,17 @@ func (ae *audioEngine) Stop() {
 		}
 	}
 
-	if ae.captureResampler != nil {
-		if err := ae.captureResampler.Close(); err != nil {
-			ae.log.Error(0, "failed to close capture resampler", logger.Err(err))
-		}
-	}
+	// if ae.captureResampler != nil {
+	// 	if err := ae.captureResampler.Close(); err != nil {
+	// 		ae.log.Error(0, "failed to close capture resampler", logger.Err(err))
+	// 	}
+	// }
 
-	if ae.playbackResampler != nil {
-		if err := ae.playbackResampler.Close(); err != nil {
-			ae.log.Error(0, "failed to close playback resampler", logger.Err(err))
-		}
-	}
+	// if ae.playbackResampler != nil {
+	// 	if err := ae.playbackResampler.Close(); err != nil {
+	// 		ae.log.Error(0, "failed to close playback resampler", logger.Err(err))
+	// 	}
+	// }
 
 	ae.stopSendVocie <- struct{}{}
 	close(ae.stopSendVocie)
@@ -1175,66 +1178,66 @@ func (ae *audioEngine) filter(samples []int16) {
 	}
 }
 
-func (ae *audioEngine) stereoToMono(s []int16, m []int16) {
-	frames := len(s) / 2
-	for i := 0; i < frames && i < len(m); i++ {
-		m[i] = s[i*2]
-	}
-	// frames := len(s) / 2
+// func (ae *audioEngine) stereoToMono(s []int16, m []int16) {
+// 	frames := len(s) / 2
+// 	for i := 0; i < frames && i < len(m); i++ {
+// 		m[i] = s[i*2]
+// 	}
+// 	// frames := len(s) / 2
 
-	// var (
-	// 	lsum      float64
-	// 	lzcr      int
-	// 	llastSign bool
+// 	// var (
+// 	// 	lsum      float64
+// 	// 	lzcr      int
+// 	// 	llastSign bool
 
-	// 	rsum      float64
-	// 	rzcr      int
-	// 	rlastSign bool
-	// )
+// 	// 	rsum      float64
+// 	// 	rzcr      int
+// 	// 	rlastSign bool
+// 	// )
 
-	// for i := 0; i < frames; i++ {
-	// 	lsample := s[i*2]
-	// 	rsample := s[i*2+1]
+// 	// for i := 0; i < frames; i++ {
+// 	// 	lsample := s[i*2]
+// 	// 	rsample := s[i*2+1]
 
-	// 	lval := float64(lsample)
-	// 	rval := float64(rsample)
+// 	// 	lval := float64(lsample)
+// 	// 	rval := float64(rsample)
 
-	// 	lsum += lval * lval
-	// 	rsum += rval * rval
+// 	// 	lsum += lval * lval
+// 	// 	rsum += rval * rval
 
-	// 	lsign := lsample > 0
-	// 	rsign := rsample > 0
+// 	// 	lsign := lsample > 0
+// 	// 	rsign := rsample > 0
 
-	// 	if i > 0 && lsign != llastSign {
-	// 		lzcr++
-	// 	}
+// 	// 	if i > 0 && lsign != llastSign {
+// 	// 		lzcr++
+// 	// 	}
 
-	// 	if i > 0 && rsign != rlastSign {
-	// 		rzcr++
-	// 	}
+// 	// 	if i > 0 && rsign != rlastSign {
+// 	// 		rzcr++
+// 	// 	}
 
-	// 	llastSign = lsign
-	// 	rlastSign = rsign
-	// }
+// 	// 	llastSign = lsign
+// 	// 	rlastSign = rsign
+// 	// }
 
-	// lrms := math.Sqrt(lsum / float64(len(s)/2))
-	// rrms := math.Sqrt(rsum / float64(len(s)/2))
+// 	// lrms := math.Sqrt(lsum / float64(len(s)/2))
+// 	// rrms := math.Sqrt(rsum / float64(len(s)/2))
 
-	// if lrms > 100 && lzcr > 5 {
-	// 	ae.leftChannel = true
-	// } else if rrms > 100 && rzcr > 5 {
-	// 	ae.leftChannel = false
-	// }
+// 	// if lrms > 100 && lzcr > 5 {
+// 	// 	ae.leftChannel = true
+// 	// } else if rrms > 100 && rzcr > 5 {
+// 	// 	ae.leftChannel = false
+// 	// }
 
-	// switch ae.leftChannel {
-	// case true:
-	// 	for i := 0; i < frames && i < len(m); i++ {
-	// 		m[i] = s[i*2]
-	// 	}
-	// case false:
-	// 	for i := 0; i < frames && i < len(m); i++ {
-	// 		m[i] = s[i*2+1]
-	// 	}
-	// }
+// 	// switch ae.leftChannel {
+// 	// case true:
+// 	// 	for i := 0; i < frames && i < len(m); i++ {
+// 	// 		m[i] = s[i*2]
+// 	// 	}
+// 	// case false:
+// 	// 	for i := 0; i < frames && i < len(m); i++ {
+// 	// 		m[i] = s[i*2+1]
+// 	// 	}
+// 	// }
 
-}
+// }
