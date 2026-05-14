@@ -2,13 +2,14 @@ package main
 
 import (
 	"aloh-tui/internal/app"
+	"aloh-tui/pkg/logger"
 )
 
 var (
-	env     string = "local"
-	version string = "1.0.0"
+	//env     string = "dev"
+	version string = "1.0.1"
 )
 
 func main() {
-	app.Run(env, version)
+	app.Run(logger.DevEnv, version)
 }

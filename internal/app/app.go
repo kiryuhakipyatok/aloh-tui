@@ -24,7 +24,8 @@ func Run(env, version string) {
 	}
 
 	log := logger.NewLogger(env, appLogFilePath, version)
-
+	log.Info(env)
+	log.Info(version)
 	model, err := tui.NewModel(netwLogFilePath, nickFilePath, keysPath, log)
 	if err != nil {
 		l.Fatalf("failed to create model: %v", err)

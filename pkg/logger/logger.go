@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	localEnv = "local"
-	devEnv   = "dev"
-	prodEnv  = "prod"
-	testEnv  = "test"
+	LocalEnv = "local"
+	DevEnv   = "dev"
+	ProdEnv  = "prod"
+	TestEnv  = "test"
 )
 
 type Logger struct {
@@ -32,11 +32,11 @@ func NewLogger(env, logPath, version string) *Logger {
 	writer := io.Writer(logFile)
 
 	switch env {
-	case localEnv:
+	case LocalEnv:
 		log = slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	case devEnv:
+	case DevEnv:
 		log = slog.New(slog.NewJSONHandler(writer, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	case prodEnv:
+	case ProdEnv:
 		log = slog.New(slog.NewJSONHandler(writer, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	default:
 		log = slog.New(slog.NewJSONHandler(writer, &slog.HandlerOptions{Level: slog.LevelInfo}))

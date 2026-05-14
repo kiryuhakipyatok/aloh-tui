@@ -155,7 +155,7 @@ type AudioSetup struct {
 const (
 	frameSize        = 1920
 	frameLen         = 960
-	jitterSize       = 9600
+	jitterSize       = 13440
 	rnnoiseFrameSize = 480
 )
 
@@ -172,8 +172,17 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		return nil, err
 	}
 
-	if err = opusEncoder.SetBitrate(40000); err != nil {
+	if err = opusEncoder.SetBitrate(64000); err != nil {
 		log.Error("failed to set bitrate to opus encoder", logger.Err(err))
+		return nil, err
+	}
+
+	if err = opusEncoder.SetMaxBandwidth(opus.Fullband); err != nil {
+		log.Error("failed to set max bandwidth to opus encoder", logger.Err(err))
+		return nil, err
+	}
+	if err = opusEncoder.SetInBandFEC(true); err != nil {
+		log.Error("failed to set in band fec to opus encoder", logger.Err(err))
 		return nil, err
 	}
 
@@ -189,8 +198,8 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 
 	preprocessor.EnableDenoise(false)
 
-	lowShelfFilter := filter.NewLowShelfFilter(48000, 200, 3)
-	highShelfFilter := filter.NewHighShelfFilter(48000, 3000, 3)
+	lowShelfFilter := filter.NewLowShelfFilter(48000, 200, -5)
+	highShelfFilter := filter.NewHighShelfFilter(48000, 4500, 5)
 
 	ae := &audioEngine{
 		sounds: sounds{
@@ -232,7 +241,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		preprocessor:  preprocessor,
 		opusEncoder:   opusEncoder,
 		log:           sparseLogger,
-		threshold:     150,
+		threshold:     100,
 		rnnoise:       rnnoise,
 		micDataChan:   make(chan []byte, 100),
 	}
@@ -268,6 +277,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 			log.Error("failed to get devices info", logger.Err(err))
 			return nil, err
 		}
+		log.Debug("mic's info", logger.Attr("name", m.Name()), logger.Attr("formats", di.Formats))
 		format := di.Formats[0]
 		mi := MicrophoneInfo{
 			Index:      i,
@@ -285,6 +295,9 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 			micId = microphones[i].ID.Pointer()
 			ch = format.Channels
 			ae.CurrentMicrophone = mi
+			log.Debug("current mic's info", logger.Attr("name", mi.Name),
+				logger.Attr("sampleRate", format.SampleRate), logger.Attr("channels", format.Channels),
+				logger.Attr("format", format.Format))
 		}
 
 	}
@@ -328,6 +341,9 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		return nil, err
 	}
 
+	log.Debug("current capture device", logger.Attr("channels", captureDevice.CaptureChannels()),
+		logger.Attr("sampleRate", captureDevice.SampleRate()), logger.Attr("format", captureDevice.CaptureFormat()))
+
 	playbackDevice, err := malgo.InitDevice(ae.malgoCtx.Context, playbackConfig, ae.playbackCallback)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to init malgo playback device", logger.Err(err))
@@ -335,19 +351,22 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		return nil, err
 	}
 
+	log.Debug("current playback device", logger.Attr("channels", playbackDevice.PlaybackChannels()),
+		logger.Attr("sampleRate", playbackDevice.SampleRate()), logger.Attr("format", playbackDevice.PlaybackFormat()))
+
 	ae.captureDevice = captureDevice
 	ae.playbackDevice = playbackDevice
 
 	captureSampleRate := int(ae.captureDevice.SampleRate())
 	playbackSampleRate := int(ae.playbackDevice.SampleRate())
 
-	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 6)
+	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 7)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
 		return nil, err
 	}
 
-	playbackResampler, err := speexdsp.NewResampler(1, 48000, playbackSampleRate, 6)
+	playbackResampler, err := speexdsp.NewResampler(1, 48000, playbackSampleRate, 7)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to create new playback resampler", logger.Err(err))
 		return nil, err
@@ -475,7 +494,7 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 
 	captureSampleRate := int(captureDevice.SampleRate())
 
-	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 6)
+	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 7)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
 		return err
@@ -554,9 +573,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 		ae.mu.Unlock()
 
 		if pInputSamples != nil && netw != nil && connected && !ae.mutedMicro.Load() && !ae.muted.Load() {
-
 			nativeSamples := len(pInputSamples) / 2
-
 			if len(ae.micNativeBuffer) < nativeSamples {
 				ae.micNativeBuffer = make([]int16, nativeSamples)
 			}
@@ -589,12 +606,14 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 				copy(ae.pcmBuffer, chunk)
 
 				ae.mu.Lock()
-				if ae.aec.Load() && ae.playbackReady.Load() {
-					ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
-					ae.preprocessor.Run(ae.echolessBufferInt16s)
-					copy(ae.pcmBuffer, ae.echolessBufferInt16s)
-				} else {
-					ae.preprocessor.Run(ae.pcmBuffer)
+				if ae.aec.Load() {
+					if ae.playbackReady.Load() {
+						ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
+						ae.preprocessor.Run(ae.echolessBufferInt16s)
+						copy(ae.pcmBuffer, ae.echolessBufferInt16s)
+					} else {
+						ae.preprocessor.Run(ae.pcmBuffer)
+					}
 				}
 				ae.mu.Unlock()
 
@@ -611,7 +630,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 							ae.log.Error(0, "failed to denoise frame", logger.Err(err))
 						}
 
-						if vad > 0.50 {
+						if vad > 0.45 {
 							voiceDetected = true
 						}
 					}
@@ -655,7 +674,13 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 						ae.voiceHolder.Add(-1)
 					} else {
 						isVoice = false
-						ae.userIsSpeaking.Store(false)
+						if ae.userIsSpeaking.Load() {
+							if err := ae.opusEncoder.Reset(); err != nil {
+								ae.log.Error(0, "failed to reset opus state", logger.Err(err))
+							}
+							ae.userIsSpeaking.Store(false)
+						}
+
 					}
 				}
 
@@ -681,6 +706,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 
 				copy(ae.workMic, ae.workMic[frameLen:])
 				ae.workMic = ae.workMic[:len(ae.workMic)-frameLen]
+
 			}
 		} else {
 			ae.userIsSpeaking.Store(false)
@@ -1151,60 +1177,64 @@ func (ae *audioEngine) filter(samples []int16) {
 
 func (ae *audioEngine) stereoToMono(s []int16, m []int16) {
 	frames := len(s) / 2
-
-	var (
-		lsum      float64
-		lzcr      int
-		llastSign bool
-
-		rsum      float64
-		rzcr      int
-		rlastSign bool
-	)
-
-	for i := 0; i < frames; i++ {
-		lsample := s[i*2]
-		rsample := s[i*2+1]
-
-		lval := float64(lsample)
-		rval := float64(rsample)
-
-		lsum += lval * lval
-		rsum += rval * rval
-
-		lsign := lsample > 0
-		rsign := rsample > 0
-
-		if i > 0 && lsign != llastSign {
-			lzcr++
-		}
-
-		if i > 0 && rsign != rlastSign {
-			rzcr++
-		}
-
-		llastSign = lsign
-		rlastSign = rsign
+	for i := 0; i < frames && i < len(m); i++ {
+		m[i] = s[i*2]
 	}
+	// frames := len(s) / 2
 
-	lrms := math.Sqrt(lsum / float64(len(s)/2))
-	rrms := math.Sqrt(rsum / float64(len(s)/2))
+	// var (
+	// 	lsum      float64
+	// 	lzcr      int
+	// 	llastSign bool
 
-	if lrms > 100 && lzcr > 5 {
-		ae.leftChannel = true
-	} else if rrms > 100 && rzcr > 5 {
-		ae.leftChannel = false
-	}
+	// 	rsum      float64
+	// 	rzcr      int
+	// 	rlastSign bool
+	// )
 
-	switch ae.leftChannel {
-	case true:
-		for i := 0; i < frames && i < len(m); i++ {
-			m[i] = s[i*2]
-		}
-	case false:
-		for i := 0; i < frames && i < len(m); i++ {
-			m[i] = s[i*2+1]
-		}
-	}
+	// for i := 0; i < frames; i++ {
+	// 	lsample := s[i*2]
+	// 	rsample := s[i*2+1]
+
+	// 	lval := float64(lsample)
+	// 	rval := float64(rsample)
+
+	// 	lsum += lval * lval
+	// 	rsum += rval * rval
+
+	// 	lsign := lsample > 0
+	// 	rsign := rsample > 0
+
+	// 	if i > 0 && lsign != llastSign {
+	// 		lzcr++
+	// 	}
+
+	// 	if i > 0 && rsign != rlastSign {
+	// 		rzcr++
+	// 	}
+
+	// 	llastSign = lsign
+	// 	rlastSign = rsign
+	// }
+
+	// lrms := math.Sqrt(lsum / float64(len(s)/2))
+	// rrms := math.Sqrt(rsum / float64(len(s)/2))
+
+	// if lrms > 100 && lzcr > 5 {
+	// 	ae.leftChannel = true
+	// } else if rrms > 100 && rzcr > 5 {
+	// 	ae.leftChannel = false
+	// }
+
+	// switch ae.leftChannel {
+	// case true:
+	// 	for i := 0; i < frames && i < len(m); i++ {
+	// 		m[i] = s[i*2]
+	// 	}
+	// case false:
+	// 	for i := 0; i < frames && i < len(m); i++ {
+	// 		m[i] = s[i*2+1]
+	// 	}
+	// }
 
 }
