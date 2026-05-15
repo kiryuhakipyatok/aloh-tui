@@ -13,11 +13,11 @@ import (
 )
 
 var (
-	cDim       = lipgloss.Color("#75715E")
-	
-	cAccent    = lipgloss.Color("#FD971F")
-	cErr       = lipgloss.Color("#F92672")
-	cSubtext   = lipgloss.Color("#66D9EF")
+	cDim = lipgloss.Color("#75715E")
+
+	cAccent  = lipgloss.Color("#FD971F")
+	cErr     = lipgloss.Color("#F92672")
+	cSubtext = lipgloss.Color("#66D9EF")
 
 	cText = lipgloss.AdaptiveColor{Light: "#1A1919", Dark: "#F8F8F2"}
 
@@ -250,21 +250,27 @@ func (m Model) renderVoiceTab(w, h int, cText lipgloss.AdaptiveColor) string {
 	lblLeft := m.headerActiveStyle.Render("► active connections")
 
 	states := make([]string, 0, len(m.connections))
-
+	bars := make([]string, 0, len(m.connections))
 	speakingUsers := m.user.Engines.AudioEngine.FetchSpeakingUsers()
 	mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
 
 	for _, c := range m.connections {
 		state := ""
+		bar := lipgloss.NewStyle().Foreground(cText).Render(fmt.Sprintf("voice power %.1f: ", 0.0))
 		clearNick := ansi.Strip(c)
 		if _, ok := mutedUsers[clearNick]; ok {
 			state = " 🔇"
-		} else if _, ok := speakingUsers[clearNick]; ok {
+		} else if rms, ok := speakingUsers[clearNick]; ok {
 			state = " 🔊"
+			bar = lipgloss.NewStyle().Foreground(cText).Render(fmt.Sprintf("voice power %.1f: ", rms)) +
+				lipgloss.NewStyle().Foreground(m.subThemeColor).Render(strings.Repeat("█", int(rms)/100))
 		}
+		bars = append(bars, bar)
 		states = append(states, state)
 	}
 	rawStatesStr := strings.Join(states, "\n\n\n")
+	rawBarsStr := strings.Join(bars, "\n\n\n")
+
 	rawStatesW := lipgloss.Width(rawStatesStr)
 	m.connectionsList.SetSize(leftW-rawStatesW-4, h-2)
 	connsView := lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render(m.connectionsList.View()),
@@ -273,31 +279,45 @@ func (m Model) renderVoiceTab(w, h int, cText lipgloss.AdaptiveColor) string {
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", connsView)
 	leftPanel := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
-	lblRight := m.headerActiveStyle.Render("► details & controls")
-	statusText := "offline"
+	lblRight := m.headerActiveStyle.Render("► details")
+	statusText := "not connected"
 	statusColor := cDim
 	if m.connected {
 		statusText = "connected"
 		statusColor = m.themeColor
 	}
 
-	rightBox := lipgloss.JoinVertical(lipgloss.Left,
-		lblRight, "",
-		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("network status: ")+lipgloss.NewStyle().Foreground(statusColor).
-		Render(statusText), rightW),
-		"",
-		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("user management:"), rightW),
-		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(m.themeColor).
-			Render("ALT+UP/DN")+lipgloss.NewStyle().Foreground(cText).Render(" - adjust user volume")), rightW),
-		safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.NewStyle().Foreground(m.themeColor).
-			Render("ALT+Z")+lipgloss.NewStyle().Foreground(cText).Render("     - mute/mnmute user")), rightW),
-		"",
-	)
+	bottomRightLPart := lipgloss.NewStyle().PaddingLeft(2).Foreground(statusColor).Render("status: " + statusText)
+
+	bottomRightLWidth := lipgloss.Width(bottomRightLPart)
+
+	disc := ""
+
 	if m.connected {
-		rightBox = lipgloss.JoinVertical(lipgloss.Left, rightBox,
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cErr).Render("ENTER to disconnect"),
-		)
+		disc = lipgloss.NewStyle().Foreground(cErr).Render("ENTER to disconnect")
 	}
+
+	bottomRightRPart := lipgloss.NewStyle().
+		Foreground(cDim).
+		Width(rightW - bottomRightLWidth).
+		Align(lipgloss.Right).
+		Render(disc)
+
+	bottomRight := lipgloss.JoinHorizontal(lipgloss.Bottom, bottomRightLPart, bottomRightRPart)
+	middleHeight := h - lipgloss.Height(lblRight) - 1 - lipgloss.Height(bottomRight)
+	if middleHeight < 0 {
+		middleHeight = 0
+	}
+	barsContent := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(rawBarsStr), rightW)
+
+	middleBox := lipgloss.Place(rightW, middleHeight, lipgloss.Left, lipgloss.Top, barsContent)
+
+	rightBox := lipgloss.JoinVertical(lipgloss.Left,
+		lblRight,
+		"",
+		middleBox,
+		bottomRight,
+	)
 
 	rightPanel := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
@@ -592,7 +612,7 @@ func (m Model) renderHelpView(w, h int, cText lipgloss.AdaptiveColor) string {
 		renderShortcut("ALT+Z", "- toggle user's mute"),
 		renderShortcut("ALT+UP/DN", "- increase / decrease user's volume"), "",
 		sectionLbl.Render("chat controls:"),
-		renderShortcut("CTRL+P", "- paste image"),
+		renderShortcut("CTRL+P", "- paste smth"),
 	}
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightRows...)
@@ -616,7 +636,7 @@ func safeTruncate(s string, maxW int) string {
 	cleanStr := ansi.Strip(s)
 	runes := []rune(cleanStr)
 	if len(runes) > maxW {
-		return string(runes[:maxW-2]) + ".."
+		return lipgloss.NewStyle().Foreground(cErr).Render(string(runes[:maxW-2]) + "..")
 	}
 	return s
 }

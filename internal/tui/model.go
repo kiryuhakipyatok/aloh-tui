@@ -50,6 +50,7 @@ type micItem struct {
 	name       string
 	channels   uint32
 	sampleRate uint32
+	format     string
 	current    string
 }
 
@@ -57,7 +58,7 @@ func (mi micItem) Title() string {
 	return mi.name
 }
 func (mi micItem) Description() string {
-	return fmt.Sprintf("channels: %d, sample rate: %d, %s", mi.channels, mi.sampleRate, mi.current)
+	return fmt.Sprintf("channels: %d, sample rate: %d, format: %s, %s", mi.channels, mi.sampleRate, mi.format, mi.current)
 }
 func (mi micItem) FilterValue() string {
 	return mi.name
@@ -473,7 +474,7 @@ func (m *Model) setupMicrohonesList() {
 		microphones := make([]list.Item, len(ms))
 
 		for i, v := range ms {
-			mi := micItem{name: v.Name, channels: v.Channels, sampleRate: v.SampleRate, current: ""}
+			mi := micItem{name: v.Name, channels: v.Channels, sampleRate: v.SampleRate, format: v.Format, current: ""}
 
 			if i == m.user.Engines.AudioEngine.GetCurrentMicrophone().Name {
 				mi.current = lipgloss.NewStyle().Foreground(m.themeColor).Render("CURRENT")

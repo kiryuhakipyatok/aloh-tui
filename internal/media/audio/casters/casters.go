@@ -19,6 +19,18 @@ func MixBytesToInt16(int16s []int16, b []byte) {
 	}
 }
 
+func MixToInt16(int16s []int16, tomix []int16) {
+	for i := 0; i < len(tomix) && i < len(int16s); i++ {
+		mixed := int32(int16s[i]) + int32(tomix[i])
+		if mixed > math.MaxInt16 {
+			mixed = math.MaxInt16
+		} else if mixed < math.MinInt16 {
+			mixed = math.MinInt16
+		}
+		int16s[i] = int16(mixed)
+	}
+}
+
 func Int16ToBytes(int16s []int16, b []byte) {
 	samples := len(int16s)
 	for i := 0; i < samples && i < len(b); i++ {

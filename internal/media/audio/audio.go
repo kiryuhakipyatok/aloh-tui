@@ -36,7 +36,7 @@ type AudioEngine interface {
 	MuteUnmuteUser(nickname string) (bool, error)
 	SetMuteState(nickname string, mute bool)
 	FetchUsersMutes() map[string]struct{}
-	FetchSpeakingUsers() map[string]struct{}
+	FetchSpeakingUsers() map[string]float64
 	GetCurrentMicrophone() MicrophoneInfo
 	UserIsSpeaking() bool
 	OnOffHardDenoice() bool
@@ -54,6 +54,8 @@ type usersAudio struct {
 	muted             atomic.Bool
 	volumeCoefficient float32
 	decodedBuffer     []byte
+	rms               float64
+	samples           []int16
 }
 
 type audioEngine struct {
@@ -146,6 +148,7 @@ type MicrophoneInfo struct {
 	Name       string
 	Channels   uint32
 	SampleRate uint32
+	Format     string
 }
 
 type AudioSetup struct {
@@ -161,6 +164,15 @@ const (
 	frameLen         = 960
 	jitterSize       = 13440
 	rnnoiseFrameSize = 480
+)
+
+const (
+	int16f   = "int16"
+	float32f = "float32"
+	int8f    = "int8"
+	int24f   = "int24"
+	int32f   = "int32"
+	unk      = "unknown"
 )
 
 func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
@@ -289,6 +301,21 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 			Name:       m.Name(),
 			SampleRate: format.SampleRate,
 			Channels:   format.Channels,
+		}
+
+		switch format.Format {
+		case malgo.FormatU8:
+			mi.Format = int8f
+		case malgo.FormatS16:
+			mi.Format = int16f
+		case malgo.FormatS24:
+			mi.Format = int24f
+		case malgo.FormatS32:
+			mi.Format = int32f
+		case malgo.FormatF32:
+			mi.Format = float32f
+		default:
+			mi.Format = unk
 		}
 		micsInfo[m.Name()] = mi
 
@@ -510,24 +537,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 
 					casters.Float32ToInt16(ae.pcmBuffer, ae.denoicedBuffer)
 				} else {
-					var (
-						sum      float64
-						zcr      int
-						lastSign bool
-					)
-
-					for i, sample := range ae.pcmBuffer {
-						val := float64(sample)
-						sum += val * val
-
-						sign := sample > 0
-						if i > 0 && sign != lastSign {
-							zcr++
-						}
-						lastSign = sign
-					}
-
-					rms := math.Sqrt(sum / float64(len(ae.pcmBuffer)))
+					rms, zcr := getRmsAndZcr(ae.pcmBuffer)
 
 					if rms > ae.threshold || (rms > 15 && zcr > 100) {
 						voiceDetected = true
@@ -642,7 +652,9 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 						readLen = uaLen
 					}
 
-					casters.MixBytesToInt16(ae.workMix, ua.data[:readLen])
+					casters.BytesS16ToInt16(ua.samples, ua.data[:readLen])
+					ua.rms, _ = getRmsAndZcr(ua.samples)
+					casters.MixToInt16(ae.workMix, ua.samples)
 
 					ua.data = ua.data[readLen:]
 
@@ -858,6 +870,7 @@ func (ae *audioEngine) SetMuteState(nickname string, mute bool) {
 			decoder:           opusDecoder,
 			volumeCoefficient: 1,
 			decodedBuffer:     make([]byte, 5760),
+			samples:           make([]int16, frameLen),
 		}
 
 		ua.muted.Store(mute)
@@ -888,6 +901,7 @@ func (ae *audioEngine) PlayUserVoice(nickname string, userVoiceByte []byte) {
 			decoder:           opusDecoder,
 			volumeCoefficient: 1,
 			decodedBuffer:     make([]byte, 5760),
+			samples:           make([]int16, frameLen),
 		}
 
 		ae.usersAudio[nickname] = ua
@@ -935,6 +949,7 @@ func (ae *audioEngine) SetVolume(nickname string, vc float32) {
 			decoder:           opusDecoder,
 			volumeCoefficient: vc,
 			decodedBuffer:     make([]byte, 5760),
+			samples:           make([]int16, frameLen),
 		}
 
 		ae.usersAudio[nickname] = ua
@@ -954,13 +969,13 @@ func (ae *audioEngine) SetNetworking(netw networking.Networking) error {
 	return nil
 }
 
-func (ae *audioEngine) FetchSpeakingUsers() map[string]struct{} {
+func (ae *audioEngine) FetchSpeakingUsers() map[string]float64 {
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
-	speakers := make(map[string]struct{}, len(ae.usersAudio))
+	speakers := make(map[string]float64, len(ae.usersAudio))
 	for n, ua := range ae.usersAudio {
 		if ua.isSpeaking.Load() {
-			speakers[n] = struct{}{}
+			speakers[n] = ua.rms
 		}
 	}
 	return speakers
@@ -1150,12 +1165,28 @@ func (ae *audioEngine) UpdateMicrophones() error {
 			return err
 		}
 		format := di.Formats[0]
-		micsInfo[m.Name()] = MicrophoneInfo{
+		mi := MicrophoneInfo{
 			Index:      i,
 			Name:       m.Name(),
 			SampleRate: format.SampleRate,
 			Channels:   format.Channels,
 		}
+
+		switch format.Format {
+		case malgo.FormatU8:
+			mi.Format = int8f
+		case malgo.FormatS16:
+			mi.Format = int16f
+		case malgo.FormatS24:
+			mi.Format = int24f
+		case malgo.FormatS32:
+			mi.Format = int32f
+		case malgo.FormatF32:
+			mi.Format = float32f
+		default:
+			mi.Format = unk
+		}
+		micsInfo[m.Name()] = mi
 	}
 	ae.Microphones = micsInfo
 	return nil
