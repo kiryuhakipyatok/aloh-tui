@@ -39,7 +39,8 @@ type Devices struct {
 }
 
 type Setup struct {
-	Denoise              bool                  `json:"denoise"`
+	HardDenoise          bool                  `json:"hard-denoise"`
+	SoftDenoise          bool                  `json:"soft-denoise"`
 	AEC                  bool                  `json:"aec"`
 	Filter               bool                  `json:"filter"`
 	UsersSetup           map[string]UsersSetup `json:"users-setup"`

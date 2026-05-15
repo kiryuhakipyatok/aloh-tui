@@ -813,8 +813,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case 0:
 						if i, ok := m.settingsList.SelectedItem().(settingsItem); ok {
 							switch i.id {
-							case DENOISE:
-								cmds = append(cmds, commands.OnOffDenoiceCmd(m.user))
+							case HARD_DENOISE:
+								cmds = append(cmds, commands.OnOffHardDenoiceCmd(m.user))
+							case SOFT_DENOISE:
+								cmds = append(cmds, commands.OnOffSoftDenoiceCmd(m.user))
 							case AEC:
 								cmds = append(cmds, commands.OnOffAECCmd(m.user))
 							case EQUALIZER:
@@ -827,7 +829,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								return m, nil
 							}
 
-							cmds = append(cmds, m.updateSettingsItemList(i.name))
+							cmds = append(cmds, m.updateSettingsItemList(i.id))
 						}
 					}
 

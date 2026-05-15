@@ -1,10 +1,9 @@
 //go:build linux
 
-package audio
-
+package backends
 import "github.com/gen2brain/malgo"
 
-var audioBackends = []malgo.Backend{
+var AudioBackends = []malgo.Backend{
 	malgo.BackendPulseaudio,
 	malgo.BackendAlsa,
 }

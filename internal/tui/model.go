@@ -78,11 +78,12 @@ func (oi onlineItem) FilterValue() string {
 }
 
 const (
-	DENOISE   = 0
-	AEC       = 1
-	EQUALIZER = 2
-	AUDIO_N   = 3
-	DESKTOP_N = 4
+	HARD_DENOISE = iota
+	SOFT_DENOISE
+	AEC
+	EQUALIZER
+	AUDIO_N
+	DESKTOP_N
 )
 
 type settingsItem struct {
@@ -299,10 +300,11 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 				return nil, err
 			}
 			audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
-				Microphone: user.Data.Devices.Microphone,
-				Aec:        user.Data.Setup.AEC,
-				Denoice:    user.Data.Setup.Denoise,
-				Filtered:   user.Data.Setup.Filter,
+				Microphone:  user.Data.Devices.Microphone,
+				Aec:         user.Data.Setup.AEC,
+				HardDenoice: user.Data.Setup.HardDenoise,
+				SoftDenoice: userData.Setup.SoftDenoise,
+				Filtered:    user.Data.Setup.Filter,
 			})
 			if err != nil {
 				log.Error("failed to create audio engine", logger.Err(err))
@@ -539,10 +541,16 @@ func (m *Model) setupOnlineList() {
 func (m *Model) setupSettingsList() {
 	settings := []list.Item{
 		settingsItem{
-			id:          DENOISE,
-			name:        "denoise",
-			description: "reduce noise",
-			enabled:     m.user.Data.Setup.Denoise,
+			id:          HARD_DENOISE,
+			name:        "hard denoise",
+			description: "reduce noise hard",
+			enabled:     m.user.Data.Setup.HardDenoise,
+		},
+		settingsItem{
+			id:          SOFT_DENOISE,
+			name:        "soft denoise",
+			description: "reduce noise soft",
+			enabled:     m.user.Data.Setup.SoftDenoise,
 		},
 		settingsItem{
 			id:          AEC,
@@ -622,7 +630,7 @@ func (m *Model) updateMicrophonesItemList(microphone string) tea.Cmd {
 	return cmd
 }
 
-func (m *Model) updateSettingsItemList(setting string) tea.Cmd {
+func (m *Model) updateSettingsItemList(settingId uint) tea.Cmd {
 	var cmd tea.Cmd
 	items := m.settingsList.Items()
 	for i, v := range items {
@@ -630,7 +638,7 @@ func (m *Model) updateSettingsItemList(setting string) tea.Cmd {
 		if !ok {
 			continue
 		}
-		if s.name == setting {
+		if s.id == settingId {
 			s.enabled = !s.enabled
 			cmd = m.settingsList.SetItem(i, s)
 			return cmd
