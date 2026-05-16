@@ -5,6 +5,7 @@ import (
 	"aloh-tui/internal/entities"
 	"aloh-tui/internal/notifications"
 	"aloh-tui/internal/tui/commands"
+	"aloh-tui/internal/tui/components/lists"
 	"aloh-tui/internal/tui/components/states"
 	"aloh-tui/internal/tui/components/windows"
 	"aloh-tui/internal/utils"
@@ -278,7 +279,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.syncTabState()
 
 			if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-				m.setupMicrohonesList()
 				t := time.Now().Format("15:04:05")
 				m.user.Networking.ChatCallback(func(id string, data []byte) {
 
@@ -295,6 +295,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
 				})
 			}
+
+			m.setupMicrohonesList()
+			m.setupSettingsList()
 
 			cmds = append(cmds,
 				commands.WaitForChatMessageCmd(m.msgChan), commands.WaitForRawChatMessageCmd(m.rawMsgChan),
@@ -332,7 +335,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			imageWidget := termimg.NewImageWidgetFromImage(img)
 			imageWidget.SetProtocol(termimg.Auto)
-			imageWidget.SetSizeWithCorrection(size.X, size.Y)
+			imageWidget.SetSizeWithCorrection(int(float64(size.X)*1.5), int(float64(size.Y)*1.5))
 			textMsg, err = imageWidget.Render()
 			if err != nil {
 				m.err = err
@@ -386,8 +389,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.PeerConnectedMsg:
-		color := lipgloss.Color(randomcolor.GetRandomColorInHex())
+		hex := randomcolor.GetRandomColorInHex()
+		color := lipgloss.Color(hex)
 		nickname := lipgloss.NewStyle().Foreground(color).Render(msg.Nickname)
+		m.usersColors[msg.Nickname] = userColors{
+			mainColor: color,
+			subColor:  lipgloss.Color(utils.DarkenHex(hex, 0.7)),
+		}
 		m.connections = append(m.connections, nickname)
 		m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: nickname + " joined the chat!"})
 		if !m.connected {
@@ -515,15 +523,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "alt+z", "alt+Z", "alt+я", "alt+Я":
 			if m.isLoggedIn() && m.activeTab == 2 && m.connected {
-				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
-					cmds = append(cmds, commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.nickname)), m.updateConnectionItemList(i.nickname, i.volumeCoefficient, !i.muted))
+				if i, ok := m.connectionsList.SelectedItem().(lists.ConnectionItem); ok {
+					cmds = append(cmds, commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.Nickname)),
+						m.updateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted))
 				}
 			}
 
 		case "alt+up":
 			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
-				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
-					vc := i.volumeCoefficient
+				if i, ok := m.connectionsList.SelectedItem().(lists.ConnectionItem); ok {
+					vc := i.VolumeCoefficient
 					if vc >= MAX_VOLUME {
 						return m, nil
 					}
@@ -531,14 +540,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if vc > MAX_VOLUME {
 						vc = MAX_VOLUME
 					}
-					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
+					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.Nickname), vc),
+						m.updateConnectionItemList(i.Nickname, vc, i.Muted))
 				}
 			}
 
 		case "alt+down":
 			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
-				if i, ok := m.connectionsList.SelectedItem().(connectionItem); ok {
-					vc := i.volumeCoefficient
+				if i, ok := m.connectionsList.SelectedItem().(lists.ConnectionItem); ok {
+					vc := i.VolumeCoefficient
 					if vc <= MIN_VOLUME {
 						return m, nil
 					}
@@ -546,7 +556,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if vc < MIN_VOLUME {
 						vc = MIN_VOLUME
 					}
-					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.nickname), vc), m.updateConnectionItemList(i.nickname, vc, i.muted))
+					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.Nickname), vc),
+						m.updateConnectionItemList(i.Nickname, vc, i.Muted))
 				}
 			}
 		case "alt+left":
@@ -712,8 +723,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						var nick string
 						switch m.sideState {
 						case 0:
-							if i, ok := m.onlineList.SelectedItem().(onlineItem); ok {
-								nick = i.name
+							if i, ok := m.onlineList.SelectedItem().(lists.OnlineItem); ok {
+								nick = i.Name
 							} else {
 								return m, nil
 							}
@@ -761,7 +772,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 						toSend = utils.SetThreeFirstByte([]byte{'i', 'm', 'g'}, m.imageBuffer)
 
-						imageWidget.SetSizeWithCorrection(size.X, size.Y)
+						imageWidget.SetSizeWithCorrection(int(float64(size.X)*1.5), int(float64(size.Y)*1.5))
 
 						rendered, err := imageWidget.Render()
 						if err != nil {
@@ -807,12 +818,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case 5:
 					switch m.sideState {
 					case 1:
-						if i, ok := m.microphonesList.SelectedItem().(micItem); ok {
-							cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.name), m.updateMicrophonesItemList(i.name))
+						if i, ok := m.microphonesList.SelectedItem().(lists.MicItem); ok {
+							cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.Name), m.updateMicrophonesItemList(i.Name))
 						}
 					case 0:
-						if i, ok := m.settingsList.SelectedItem().(settingsItem); ok {
-							switch i.id {
+						if i, ok := m.settingsList.SelectedItem().(lists.SettingsItem); ok {
+							switch i.Id {
 							case HARD_DENOISE:
 								cmds = append(cmds, commands.OnOffHardDenoiceCmd(m.user))
 							case SOFT_DENOISE:
@@ -829,7 +840,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								return m, nil
 							}
 
-							cmds = append(cmds, m.updateSettingsItemList(i.id))
+							cmds = append(cmds, m.updateSettingsItemList(i.Id))
 						}
 					}
 

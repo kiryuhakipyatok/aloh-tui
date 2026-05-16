@@ -6,27 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/charmbracelet/x/ansi"
 )
-
-func Difference(a, b []string) []string {
-	bMap := make(map[string]struct{})
-	for _, item := range b {
-		bMap[ansi.Strip(item)] = struct{}{}
-	}
-
-	var diff []string
-
-	for _, item := range a {
-
-		if _, ok := bMap[ansi.Strip(item)]; !ok {
-			diff = append(diff, item)
-		}
-	}
-
-	return diff
-}
 
 func SetupFiles() (nlP, alP, nP, kP string, err error) {
 	binPath, err := os.Executable()

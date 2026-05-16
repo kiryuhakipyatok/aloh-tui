@@ -3,26 +3,50 @@ package commands
 import (
 	"aloh-tui/internal/networking"
 	"slices"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/sync/errgroup"
 )
 
 type OnlineMsg struct {
-	Online []string
+	Online map[string][]string
 	Err    error
 }
 
 func FetchOnlineCmd(netw networking.Networking, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		onlineMsg := OnlineMsg{}
-		Online, Err := netw.FetchCurrentOnline()
-		if Err != nil {
-			onlineMsg.Err = Err
+		online, err := netw.FetchCurrentOnline()
+		if err != nil {
+			onlineMsg.Err = err
+			return onlineMsg
 		}
 
-		onlineMsg.Online = slices.DeleteFunc(Online, func(v string) bool {
+		online = slices.DeleteFunc(online, func(v string) bool {
 			return v == nickname
 		})
+
+		onlineMsg.Online = make(map[string][]string, len(online))
+		var wg errgroup.Group
+		wg.SetLimit(15)
+		var mu sync.Mutex
+		for _, v := range online {
+			wg.Go(func() error {
+				sessions, err := netw.FetchCurrentConnects(v)
+				if err != nil {
+					return err
+				}
+				mu.Lock()
+				onlineMsg.Online[v] = sessions
+				mu.Unlock()
+				return nil
+			})
+		}
+
+		if err := wg.Wait(); err != nil {
+			onlineMsg.Err = err
+		}
 
 		return onlineMsg
 	}

@@ -257,7 +257,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		preprocessor:  preprocessor,
 		opusEncoder:   opusEncoder,
 		log:           sparseLogger,
-		threshold:     100,
+		threshold:     150,
 		rnnoise:       rnnoise,
 		micDataChan:   make(chan []byte, 100),
 	}
@@ -1006,7 +1006,10 @@ func (ae *audioEngine) SetDisconnected() {
 }
 
 func (ae *audioEngine) FetchMicrophones() map[string]MicrophoneInfo {
-	return ae.Microphones
+	ae.mu.Lock()
+	mics := ae.Microphones
+	ae.mu.Unlock()
+	return mics
 }
 
 func (ae *audioEngine) ChangeMicrophone(microphone string) error {
@@ -1032,11 +1035,13 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 		}
 	}
 
+	ae.mu.Lock()
 	micInfo, ok := ae.Microphones[microphone]
 	if ok && micId != nil {
 		ae.CurrentMicrophone = micInfo
 		ch = micInfo.Channels
 	}
+	ae.mu.Unlock()
 
 	if ae.captureDevice != nil {
 		ae.captureDevice.Stop()
@@ -1127,7 +1132,10 @@ func (ae *audioEngine) OnOffSoftDenoice() bool {
 }
 
 func (ae *audioEngine) GetCurrentMicrophone() MicrophoneInfo {
-	return ae.CurrentMicrophone
+	ae.mu.Lock()
+	curMic := ae.CurrentMicrophone
+	ae.mu.Unlock()
+	return curMic
 }
 
 func (ae *audioEngine) OnOffAEC() bool {
@@ -1188,6 +1196,8 @@ func (ae *audioEngine) UpdateMicrophones() error {
 		}
 		micsInfo[m.Name()] = mi
 	}
+	ae.mu.Lock()
 	ae.Microphones = micsInfo
+	ae.mu.Unlock()
 	return nil
 }

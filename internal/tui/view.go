@@ -222,7 +222,7 @@ func (m Model) View() string {
 			case 1:
 				uiContent = m.renderChatTab(windowInnerW, windowInnerH, cText)
 			case 2:
-				uiContent = m.renderVoiceTab(windowInnerW, windowInnerH, cText)
+				uiContent = m.renderVoiceTab(windowInnerW, windowInnerH)
 			case 3:
 				uiContent = m.renderVideoTab(windowInnerW, windowInnerH)
 			case 4:
@@ -243,7 +243,7 @@ func (m Model) View() string {
 	return lipgloss.NewStyle().Padding(padH, padW).Render(m.zone.Scan(screen))
 }
 
-func (m Model) renderVoiceTab(w, h int, cText lipgloss.AdaptiveColor) string {
+func (m Model) renderVoiceTab(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
@@ -256,14 +256,15 @@ func (m Model) renderVoiceTab(w, h int, cText lipgloss.AdaptiveColor) string {
 
 	for _, c := range m.connections {
 		state := ""
-		bar := lipgloss.NewStyle().Foreground(cText).Render(fmt.Sprintf("voice power %.1f: ", 0.0))
 		clearNick := ansi.Strip(c)
+		userColors := m.usersColors[clearNick]
+		bar := lipgloss.NewStyle().Foreground(userColors.subColor).Render(fmt.Sprintf("voice power %.1f: ", 0.0))
 		if _, ok := mutedUsers[clearNick]; ok {
 			state = " 🔇"
 		} else if rms, ok := speakingUsers[clearNick]; ok {
 			state = " 🔊"
-			bar = lipgloss.NewStyle().Foreground(cText).Render(fmt.Sprintf("voice power %.1f: ", rms)) +
-				lipgloss.NewStyle().Foreground(m.subThemeColor).Render(strings.Repeat("█", int(rms)/100))
+			bar = lipgloss.NewStyle().Foreground(userColors.subColor).Render(fmt.Sprintf("voice power %.1f: ", rms)) +
+				lipgloss.NewStyle().Foreground(userColors.mainColor).Render(strings.Repeat("█", int(rms)/100))
 		}
 		bars = append(bars, bar)
 		states = append(states, state)
@@ -298,7 +299,6 @@ func (m Model) renderVoiceTab(w, h int, cText lipgloss.AdaptiveColor) string {
 	}
 
 	bottomRightRPart := lipgloss.NewStyle().
-		Foreground(cDim).
 		Width(rightW - bottomRightLWidth).
 		Align(lipgloss.Right).
 		Render(disc)
@@ -308,7 +308,7 @@ func (m Model) renderVoiceTab(w, h int, cText lipgloss.AdaptiveColor) string {
 	if middleHeight < 0 {
 		middleHeight = 0
 	}
-	barsContent := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(rawBarsStr), rightW)
+	barsContent := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(rawBarsStr), rightW)
 
 	middleBox := lipgloss.Place(rightW, middleHeight, lipgloss.Left, lipgloss.Top, barsContent)
 
