@@ -269,6 +269,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.AuthMsg:
 		if msg.Err != nil {
+			if m.user.Networking != nil {
+				m.user.Networking.Close()
+			}
+			if m.user.Engines.AudioEngine != nil {
+				m.user.Engines.AudioEngine.Stop()
+			}
 			m.err = msg.Err
 			m.state = states.ERR_STATE
 			if msg.Typee != auth.DEFAULT {

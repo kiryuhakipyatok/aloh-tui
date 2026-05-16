@@ -45,7 +45,8 @@ func CastError(err error) string {
 			resErr = "offline"
 		}
 	}
-	if errors.Is(err, errs.ErrAuth) {
+
+	if errors.Is(err, errs.ErrAuth) || errors.Is(err, errs.ErrRegister) || errors.Is(err, errs.ErrLogin) {
 		resErr = err.Error()
 	}
 	return resErr

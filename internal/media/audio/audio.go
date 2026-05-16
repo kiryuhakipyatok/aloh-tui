@@ -94,7 +94,7 @@ type audioEngine struct {
 
 	notificationPos int
 
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	lifecycleMu sync.Mutex
 	switching   atomic.Bool
 
@@ -116,7 +116,7 @@ type audioEngine struct {
 	resampledWorkMic     []int16
 	monoCaptureBuffer    []int16
 
-	connected bool
+	connected atomic.Bool
 
 	echoCanceller     *speexdsp.EchoCanceller
 	preprocessor      *speexdsp.Preprocessor
@@ -343,8 +343,6 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 	captureConfig.Capture.Format = 0
 	if ch > 2 {
 		captureConfig.Capture.Channels = 2
-	} else {
-		captureConfig.Capture.Channels = 0
 	}
 	captureConfig.SampleRate = 0
 	captureConfig.Capture.DeviceID = micId
@@ -431,12 +429,11 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 
 		ae.captureReady.Store(true)
 
-		ae.mu.Lock()
-		connected := ae.connected
+		ae.mu.RLock()
 		netw := ae.netw
-		ae.mu.Unlock()
+		ae.mu.RUnlock()
 
-		if pInputSamples != nil && netw != nil && connected && !ae.mutedMicro.Load() && !ae.muted.Load() {
+		if pInputSamples != nil && netw != nil && ae.connected.Load() && !ae.mutedMicro.Load() && !ae.muted.Load() {
 			cf := ae.captureDevice.CaptureFormat()
 			var nativeSamples int
 			switch cf {
@@ -455,8 +452,8 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 				return
 			}
 
-			if len(ae.micNativeBuffer) < nativeSamples {
-				ae.micNativeBuffer = make([]int16, nativeSamples)
+			if cap(ae.micNativeBuffer) < nativeSamples {
+				ae.micNativeBuffer = make([]int16, nativeSamples+300)
 			}
 
 			switch cf {
@@ -584,6 +581,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 					select {
 					case ae.micDataChan <- packetToSend[:n]:
 					default:
+						ae.bytesBuffersPool.Put(packetToSend[:1000])
 					}
 				}
 
@@ -622,15 +620,21 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 
 					if len(ua.data) == 0 {
 						ua.framesCount++
-						if ua.framesCount > 5 {
+						if ua.framesCount <= 5 {
+							plcBuffer := ae.int16BuffersPool.Get().([]int16)
+
+							n, err := ua.decoder.Decode(nil, plcBuffer)
+							if err == nil && n > 0 {
+								setupVolume(ua.volumeCoefficient, plcBuffer[:n])
+								casters.MixToInt16(ae.workMix, plcBuffer[:n])
+							}
+							ae.int16BuffersPool.Put(plcBuffer[:4096])
+						} else {
 							ua.isSpeaking.Store(false)
+							ua.playing = false
 						}
-						ua.playing = false
-						ua.data = nil
-						continue
 					} else {
 						ua.framesCount = 0
-
 					}
 
 					if !ua.playing {
@@ -653,16 +657,16 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 					}
 
 					casters.BytesS16ToInt16(ua.samples, ua.data[:readLen])
-					ua.rms, _ = getRmsAndZcr(ua.samples)
+					ua.rms = getRms(ua.samples)
 					casters.MixToInt16(ae.workMix, ua.samples)
 
-					ua.data = ua.data[readLen:]
-
-					if len(ua.data) == 0 {
-						ua.data = nil
+					if readLen < len(ua.data) {
+						copied := copy(ua.data, ua.data[readLen:])
+						ua.data = ua.data[:copied]
+					} else {
+						ua.data = ua.data[:0]
 						ua.playing = false
 					}
-
 				}
 
 				if ae.notificationBytes != nil {
@@ -693,8 +697,8 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 					ae.playbackNativeBuffer = append(ae.playbackNativeBuffer, ae.workMix[:frameLen]...)
 				} else {
 					outLen := int(float64(frameLen)*(float64(ae.playbackDevice.SampleRate())/48000.0)) + 100
-					if len(ae.resampledWorkMix) < outLen {
-						ae.resampledWorkMix = make([]int16, outLen)
+					if cap(ae.resampledWorkMix) < outLen {
+						ae.resampledWorkMix = make([]int16, outLen+300)
 					}
 
 					_, out, err := ae.playbackResampler.ProcessInt(0, ae.workMix[:frameLen], ae.resampledWorkMix)
@@ -751,11 +755,10 @@ func (ae *audioEngine) sendVoice() {
 				continue
 			}
 
-			ae.mu.Lock()
-			connected := ae.connected
+			ae.mu.RLock()
 			netw := ae.netw
-			ae.mu.Unlock()
-			if connected && netw != nil {
+			ae.mu.RUnlock()
+			if ae.connected.Load() && netw != nil {
 				if err := ae.netw.SendVoiceData(voice); err != nil {
 					ae.log.Error(ae.errLogCount, "failed to send voice data", logger.Err(err))
 				}
@@ -970,8 +973,8 @@ func (ae *audioEngine) SetNetworking(netw networking.Networking) error {
 }
 
 func (ae *audioEngine) FetchSpeakingUsers() map[string]float64 {
-	ae.mu.Lock()
-	defer ae.mu.Unlock()
+	ae.mu.RLock()
+	defer ae.mu.RUnlock()
 	speakers := make(map[string]float64, len(ae.usersAudio))
 	for n, ua := range ae.usersAudio {
 		if ua.isSpeaking.Load() {
@@ -982,8 +985,8 @@ func (ae *audioEngine) FetchSpeakingUsers() map[string]float64 {
 }
 
 func (ae *audioEngine) FetchUsersMutes() map[string]struct{} {
-	ae.mu.Lock()
-	defer ae.mu.Unlock()
+	ae.mu.RLock()
+	defer ae.mu.RUnlock()
 	muters := make(map[string]struct{}, len(ae.usersAudio))
 	for n, ua := range ae.usersAudio {
 		if ua.muted.Load() {
@@ -994,21 +997,17 @@ func (ae *audioEngine) FetchUsersMutes() map[string]struct{} {
 }
 
 func (ae *audioEngine) SetConnected() {
-	ae.mu.Lock()
-	defer ae.mu.Unlock()
-	ae.connected = true
+	ae.connected.Store(true)
 }
 
 func (ae *audioEngine) SetDisconnected() {
-	ae.mu.Lock()
-	defer ae.mu.Unlock()
-	ae.connected = false
+	ae.connected.Store(false)
 }
 
 func (ae *audioEngine) FetchMicrophones() map[string]MicrophoneInfo {
-	ae.mu.Lock()
+	ae.mu.RLock()
 	mics := ae.Microphones
-	ae.mu.Unlock()
+	ae.mu.RUnlock()
 	return mics
 }
 
@@ -1043,21 +1042,10 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 	}
 	ae.mu.Unlock()
 
-	if ae.captureDevice != nil {
-		ae.captureDevice.Stop()
-		ae.captureDevice.Uninit()
-		ae.mu.Lock()
-		ae.captureDevice = nil
-		ae.voiceHolder.Store(0)
-		ae.mu.Unlock()
-	}
-
 	captureConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	captureConfig.Capture.Format = 0
 	if ch > 2 {
 		captureConfig.Capture.Channels = 2
-	} else {
-		captureConfig.Capture.Channels = 0
 	}
 	captureConfig.SampleRate = 0
 	captureConfig.Capture.DeviceID = micId
@@ -1069,6 +1057,15 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 	}
 	if err != nil {
 		return err
+	}
+
+	if ae.captureDevice != nil {
+		ae.captureDevice.Stop()
+		ae.captureDevice.Uninit()
+		ae.mu.Lock()
+		ae.captureDevice = nil
+		ae.voiceHolder.Store(0)
+		ae.mu.Unlock()
 	}
 
 	if err := ae.captureResampler.Close(); err != nil {
@@ -1132,9 +1129,9 @@ func (ae *audioEngine) OnOffSoftDenoice() bool {
 }
 
 func (ae *audioEngine) GetCurrentMicrophone() MicrophoneInfo {
-	ae.mu.Lock()
+	ae.mu.RLock()
 	curMic := ae.CurrentMicrophone
-	ae.mu.Unlock()
+	ae.mu.RUnlock()
 	return curMic
 }
 

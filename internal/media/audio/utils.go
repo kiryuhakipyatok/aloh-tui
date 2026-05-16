@@ -79,6 +79,17 @@ func (ae *audioEngine) stereoToMono(s []int16, m []int16) {
 
 }
 
+func getRms(buffer []int16) float64 {
+	var sum float64
+
+	for _, sample := range buffer {
+		val := float64(sample)
+		sum += val * val
+	}
+
+	return math.Sqrt(sum / float64(len(buffer)))
+}
+
 func getRmsAndZcr(buffer []int16) (rms float64, zcr int) {
 	var (
 		sum      float64

@@ -263,8 +263,8 @@ func (m Model) renderVoiceTab(w, h int) string {
 			state = " 🔇"
 		} else if rms, ok := speakingUsers[clearNick]; ok {
 			state = " 🔊"
-			bar = lipgloss.NewStyle().Foreground(userColors.subColor).Render(fmt.Sprintf("voice power %.1f: ", rms)) +
-				lipgloss.NewStyle().Foreground(userColors.mainColor).Render(strings.Repeat("█", int(rms)/100))
+			bar = lipgloss.NewStyle().Foreground(userColors.mainColor).Render(fmt.Sprintf("voice power %.1f: ", rms)) +
+				lipgloss.NewStyle().Foreground(userColors.subColor).Render(strings.Repeat("█", int(rms)/100))
 		}
 		bars = append(bars, bar)
 		states = append(states, state)
@@ -288,7 +288,7 @@ func (m Model) renderVoiceTab(w, h int) string {
 		statusColor = m.themeColor
 	}
 
-	bottomRightLPart := lipgloss.NewStyle().PaddingLeft(2).Foreground(statusColor).Render("status: " + statusText)
+	bottomRightLPart := lipgloss.NewStyle().Foreground(statusColor).Render("status: " + statusText)
 
 	bottomRightLWidth := lipgloss.Width(bottomRightLPart)
 
@@ -531,9 +531,6 @@ func (m Model) renderStartView(w, h int) string {
 
 	currentColor := pulse[m.animFrame%len(pulse)]
 	titleLogo := m.logoAnim[m.animFrame%len(m.logoAnim)]
-	if w < 80 || h < 25 {
-		titleLogo = titles.LITTLE_LOGO
-	}
 
 	logo := lipgloss.NewStyle().Foreground(m.themeColor).Render(titleLogo)
 	msg := lipgloss.NewStyle().Foreground(lipgloss.Color(currentColor)).Bold(true).Render(titles.START)
@@ -553,10 +550,16 @@ func (m Model) renderErrView(w, h int, cText lipgloss.AdaptiveColor) string {
 
 	lblRight := lipgloss.NewStyle().Foreground(cErr).Bold(true).Render("► resolution")
 	var rightContent string
-	if m.user.Networking == nil && m.user.Data.Personal.Nickname != "" {
-		m.regTextInputs[1].Width = max(1, rightW-4)
+	if m.user.Networking == nil && m.user.Data.Personal.Nickname == "" {
+		quote := ""
+		switch m.activeTab {
+		case 0:
+			quote = "please re-enter unique credentials to register"
+		case 1:
+			quote = "please re-enter your unique credentials to login"
+		}
 		rightContent = lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("please re-enter credentials"),
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(quote),
 		)
 	} else {
 		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("check logs")

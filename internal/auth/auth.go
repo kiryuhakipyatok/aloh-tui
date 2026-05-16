@@ -30,15 +30,22 @@ func Auth(nickname, keysPath string, typee uint, password []byte) ([]byte, error
 		payload  []byte
 		status   bool
 		authType string
+		errAuth  error
 	)
 
 	switch typee {
 	case LOGIN:
 		authType = "SSH-2.0-aloh-login"
+		errAuth = errs.ErrLogin
 	case REGISTER:
 		authType = "SSH-2.0-aloh-register"
+		errAuth = errs.ErrRegister
 	case DEFAULT:
 		authType = "SSH-2.0-aloh-default"
+		errAuth = errs.ErrAuth
+	default:
+		authType = "SSH-2.0-aloh-default"
+		errAuth = errs.ErrAuth
 	}
 
 	kp, err := ssh.InitKeys(keysPath)
@@ -62,7 +69,7 @@ func Auth(nickname, keysPath string, typee uint, password []byte) ([]byte, error
 	})
 	if err != nil {
 		if authErr(err.Error()) {
-			return nil, errs.ErrAuth
+			return nil, errAuth
 		}
 		return nil, err
 	}
@@ -73,7 +80,7 @@ func Auth(nickname, keysPath string, typee uint, password []byte) ([]byte, error
 	case LOGIN:
 		status, payload, err = client.SendRequest("key", true, keyBytes)
 		if err != nil {
-			return nil, err
+			return nil, errAuth
 		}
 		if !status {
 			return nil, castErr(payload)
@@ -81,7 +88,7 @@ func Auth(nickname, keysPath string, typee uint, password []byte) ([]byte, error
 	case REGISTER:
 		status, payload, err = client.SendRequest("pswrd", true, password)
 		if err != nil {
-			return nil, err
+			return nil, errAuth
 		}
 		if !status {
 			return nil, castErr(payload)
