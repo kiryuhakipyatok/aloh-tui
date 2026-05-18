@@ -42,14 +42,17 @@ func (m Model) syncTabState() Model {
 	m.curWindow = windows.DEF_WINDOW
 	m.cursor = 0
 	if !m.isLoggedIn() {
+		//if m.state != states.LOAD_STATE {
 		switch m.activeTab {
 		case 0:
 			m.state = states.REG_STATE
 		case 1:
 			m.state = states.LOGIN_STATE
 		}
+		//}
 		m.focusInputs()
 	} else {
+
 		switch m.activeTab {
 		case 0:
 			if m.connected {
@@ -462,10 +465,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, commands.TickCmd())
 
 	case commands.AnimTickMsg:
-		if m.curWindow == windows.START_WINDOW {
-			m.animFrame++
-			return m, commands.AnimTickCmd()
-		}
+		//if m.curWindow == windows.START_WINDOW || (m.activeTab == 2 && m.isLoggedIn()) {
+		m.animFrame++
+		return m, commands.AnimTickCmd()
+	//}
+	case commands.PulseTickMsg:
+		//if m.curWindow == windows.START_WINDOW || (m.activeTab == 2 && m.isLoggedIn()) {
+		m.pulseFrame++
+		return m, commands.PulseTickCmd()
+		//}
 
 	case tea.KeyMsg:
 		switch msg.String() {

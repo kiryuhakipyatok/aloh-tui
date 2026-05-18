@@ -14,7 +14,7 @@ func (oi OnlineItem) Title() string {
 	return oi.Name
 }
 func (oi OnlineItem) Description() string {
-	desc := "solo"
+	desc := "alone"
 	if len(oi.Connections) > 0 {
 		desc = fmt.Sprintf("with: %s", strings.Join(oi.Connections, "  ·  "))
 	}

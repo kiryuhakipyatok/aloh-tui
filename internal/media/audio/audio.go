@@ -319,7 +319,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		}
 		micsInfo[m.Name()] = mi
 
-		if di.IsDefault == 1 {
+		if di.IsDefault == 1 { 
 			ae.CurrentMicrophone = mi
 			ch = format.Channels
 		}
@@ -527,7 +527,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 							ae.log.Error(0, "failed to denoise frame", logger.Err(err))
 						}
 
-						if vad > 0.40 {
+						if vad > 0.45 {
 							voiceDetected = true
 						}
 					}
@@ -602,7 +602,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 
 func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 	data := func(pOutputSample, pInputSamples []byte, framecount uint32) {
-
+		
 		if pOutputSample != nil {
 			ae.playbackReady.Store(true)
 			for i := range pOutputSample {
@@ -610,6 +610,7 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 			}
 
 			nativeSamples := len(pOutputSample) / 2
+			
 
 			for len(ae.playbackNativeBuffer) < nativeSamples {
 				for i := 0; i < frameLen; i++ {

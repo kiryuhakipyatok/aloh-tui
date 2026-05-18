@@ -43,7 +43,9 @@ type Model struct {
 
 	activeTab int
 
-	logoAnim []string
+	logoAnim    []string
+	notConnAnim []string
+	aloneAnim   []string
 
 	state   uint
 	prState uint
@@ -104,7 +106,8 @@ type Model struct {
 
 	log *logger.Logger
 
-	animFrame int
+	animFrame  int
+	pulseFrame int
 
 	headerActiveStyle lipgloss.Style
 	themeColor        lipgloss.Color
@@ -134,7 +137,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		regTextInputs: make([]textinput.Model, 3),
 		logingInput:   make([]textinput.Model, 2),
-		logoAnim:      make([]string, 0, 3),
+		logoAnim:      make([]string, 0, 4),
+		notConnAnim:   make([]string, 0, 4),
 		messages:      []commands.ChatMessage{},
 
 		defaultThemeColor: "#A6E22E",
@@ -161,6 +165,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	}
 
 	m.logoAnim = []string{titles.BIG_LOGO1, titles.BIG_LOGO2, titles.BIG_LOGO3, titles.BIG_LOGO2}
+	m.notConnAnim = []string{titles.NOT_CONN1, titles.NOT_CONN2, titles.NOT_CONN3, titles.NOT_CONN2}
+	m.aloneAnim = []string{titles.ALONE1, titles.ALONE2, titles.ALONE3, titles.ALONE2}
 
 	user := entities.User{
 		Paths: entities.Paths{
@@ -321,7 +327,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
-	cmds = append(cmds, commands.AnimTickCmd(), m.spinner.Tick)
+	cmds = append(cmds, commands.AnimTickCmd(), commands.PulseTickCmd(), m.spinner.Tick)
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
 		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan),
 			commands.WaitForRawChatMessageCmd(m.rawMsgChan),

@@ -10,6 +10,8 @@ type TickMsg time.Time
 
 type AnimTickMsg time.Time
 
+type PulseTickMsg time.Time
+
 type UpdateTickMsg time.Time
 
 func TickCmd() tea.Cmd {
@@ -19,7 +21,13 @@ func TickCmd() tea.Cmd {
 }
 
 func AnimTickCmd() tea.Cmd {
-	return tea.Tick(time.Millisecond*175, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Millisecond*210, func(t time.Time) tea.Msg {
 		return AnimTickMsg(t)
+	})
+}
+
+func PulseTickCmd() tea.Cmd {
+	return tea.Tick(time.Millisecond*140, func(t time.Time) tea.Msg {
+		return PulseTickMsg(t)
 	})
 }

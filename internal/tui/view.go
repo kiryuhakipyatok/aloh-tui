@@ -263,40 +263,65 @@ func (m Model) renderVoiceTab(w, h int) string {
 			state = " 🔇"
 		} else if rms, ok := speakingUsers[clearNick]; ok {
 			state = " 🔊"
-			bar = lipgloss.NewStyle().Foreground(userColors.mainColor).Render(fmt.Sprintf("voice power %.1f: ", rms)) +
-				lipgloss.NewStyle().Foreground(userColors.subColor).Render(strings.Repeat("█", int(rms)/100))
+			bar = lipgloss.NewStyle().Foreground(userColors.mainColor).Render(fmt.Sprintf("voice power %.1f:", rms)) +
+				lipgloss.NewStyle().Foreground(userColors.subColor).Render(strings.Repeat("▐", int(rms)/100))
 		}
 		bars = append(bars, bar)
 		states = append(states, state)
 	}
 	rawStatesStr := strings.Join(states, "\n\n\n")
 	rawBarsStr := strings.Join(bars, "\n\n\n")
+	leftMiddleHeight := h - lipgloss.Height(lblLeft) - 2
+	if leftMiddleHeight < 0 {
+		leftMiddleHeight = 0
+	}
+	var leftMiddleSect string
+	if !m.connected {
+		pulse := whitePulse
+		if !lipgloss.HasDarkBackground() {
+			pulse = blackPulse
+		}
+		aloneLogo := m.aloneAnim[m.animFrame%len(m.aloneAnim)]
+		currentColor := pulse[m.pulseFrame%len(pulse)]
+		textStyle := lipgloss.NewStyle().MaxWidth(leftW).Foreground(lipgloss.Color(currentColor)).Render(aloneLogo)
+		leftMiddleSect = lipgloss.Place(
+			rightW,
+			leftMiddleHeight,
+			lipgloss.Center,
+			lipgloss.Center,
+			textStyle,
+		)
+	} else {
+		rawStatesW := lipgloss.Width(rawStatesStr)
+		m.connectionsList.SetSize(leftW-rawStatesW-4, h-2)
+		textStyle := lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.JoinHorizontal(lipgloss.Left, m.connectionsList.View(), rawStatesStr))
+		leftMiddleSect = lipgloss.Place(
+			rightW,
+			leftMiddleHeight,
+			lipgloss.Left,
+			lipgloss.Top,
+			textStyle,
+		)
+	}
 
-	rawStatesW := lipgloss.Width(rawStatesStr)
-	m.connectionsList.SetSize(leftW-rawStatesW-4, h-2)
-	connsView := lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render(m.connectionsList.View()),
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(rawStatesStr))
-
-	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", connsView)
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", leftMiddleSect)
 	leftPanel := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	lblRight := m.headerActiveStyle.Render("► details")
+	voicePowerLbl := ""
 	statusText := "not connected"
 	statusColor := cDim
+	disc := ""
 	if m.connected {
+		voicePowerLbl = lipgloss.NewStyle().PaddingLeft(2).Width(rightW).Align(lipgloss.Center).Foreground(cDim).Render("voice powers")
 		statusText = "connected"
 		statusColor = m.themeColor
+		disc = lipgloss.NewStyle().Foreground(cErr).PaddingRight(1).Render("ENTER to disconnect")
 	}
 
 	bottomRightLPart := lipgloss.NewStyle().Foreground(statusColor).Render("status: " + statusText)
 
 	bottomRightLWidth := lipgloss.Width(bottomRightLPart)
-
-	disc := ""
-
-	if m.connected {
-		disc = lipgloss.NewStyle().Foreground(cErr).Render("ENTER to disconnect")
-	}
 
 	bottomRightRPart := lipgloss.NewStyle().
 		Width(rightW - bottomRightLWidth).
@@ -304,18 +329,42 @@ func (m Model) renderVoiceTab(w, h int) string {
 		Render(disc)
 
 	bottomRight := lipgloss.JoinHorizontal(lipgloss.Bottom, bottomRightLPart, bottomRightRPart)
-	middleHeight := h - lipgloss.Height(lblRight) - 1 - lipgloss.Height(bottomRight)
-	if middleHeight < 0 {
-		middleHeight = 0
+	rightMiddleHeight := h - lipgloss.Height(lblRight) - lipgloss.Height(bottomRight) - lipgloss.Height(voicePowerLbl)
+	if rightMiddleHeight < 0 {
+		rightMiddleHeight = 0
 	}
-	barsContent := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(rawBarsStr), rightW)
+	var rightMiddleSect string
+	if !m.connected {
+		pulse := whitePulse
+		if !lipgloss.HasDarkBackground() {
+			pulse = blackPulse
+		}
+		currentColor := pulse[m.pulseFrame%len(pulse)]
+		notConnLogo := m.notConnAnim[m.animFrame%len(m.notConnAnim)]
+		textStyle := lipgloss.NewStyle().MaxWidth(rightW).Foreground(lipgloss.Color(currentColor)).Render(notConnLogo)
+		rightMiddleSect = lipgloss.Place(
+			rightW,
+			rightMiddleHeight,
+			lipgloss.Center,
+			lipgloss.Center,
+			textStyle,
+		)
+	} else {
+		barsContent := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(rawBarsStr), rightW)
 
-	middleBox := lipgloss.Place(rightW, middleHeight, lipgloss.Left, lipgloss.Top, barsContent)
+		rightMiddleSect = lipgloss.Place(
+			rightW,
+			rightMiddleHeight,
+			lipgloss.Left,
+			lipgloss.Top,
+			barsContent,
+		)
+	}
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left,
 		lblRight,
-		"",
-		middleBox,
+		voicePowerLbl,
+		rightMiddleSect,
 		bottomRight,
 	)
 
@@ -443,84 +492,111 @@ func (m Model) renderLoginTab(w, h int) string {
 }
 
 func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
-	m.chatTextInput.Width = max(1, w-4)
-	inputView := lipgloss.NewStyle().PaddingLeft(2).Render(m.chatTextInput.View())
-
-	cons := make([]string, 0, len(m.connections))
-	speakingUsers := m.user.Engines.AudioEngine.FetchSpeakingUsers()
-	mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
-
-	for _, c := range m.connections {
-		state := ""
-		clearNick := ansi.Strip(c)
-		if _, ok := mutedUsers[clearNick]; ok {
-			state = " 🔇"
-		} else if _, ok := speakingUsers[clearNick]; ok {
-			state = " 🔊"
-		}
-		cons = append(cons, c+state)
-	}
-
-	rawConnStr := strings.Join(cons, "  ·  ")
-	if rawConnStr == "" {
-		rawConnStr = "no active connections"
-	}
-	connsView := lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate(rawConnStr, w-2))
-
 	coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Personal.Nickname)
-
 	usersAudioState := lipgloss.NewStyle().PaddingLeft(2).Render(coloredUserNickname)
 
-	var chatParts []string
 	if m.user.Engines.AudioEngine.UserIsSpeaking() {
 		usersAudioState = lipgloss.NewStyle().PaddingLeft(2).Render(coloredUserNickname + " 🔊")
 	}
-
 	if m.muteState != "" {
 		usersAudioState += lipgloss.NewStyle().PaddingLeft(2).Render(m.muteState)
 	}
-	chatParts = append(chatParts, usersAudioState, connsView, "")
+	topSect := usersAudioState
 
-	usedH := 0
-	for _, p := range chatParts {
-		usedH += lipgloss.Height(p)
+	m.chatTextInput.Width = max(1, w-4)
+
+	bottomSect := lipgloss.NewStyle().PaddingLeft(2).Render(m.chatTextInput.View())
+
+	middleH := h - lipgloss.Height(topSect) - lipgloss.Height(bottomSect)
+	if middleH < 0 {
+		middleH = 0
 	}
-	usedH += lipgloss.Height(inputView) + 1
 
-	historyMaxH := max(0, h-usedH)
-	var historyBox string
+	var middleSect string
 
-	if historyMaxH > 0 {
-		var allMsgsLines []string
-		msgStyle := lipgloss.NewStyle().Width(w - 2).MaxWidth(w - 2).PaddingLeft(2)
+	if !m.connected {
+		pulse := whitePulse
+		if !lipgloss.HasDarkBackground() {
+			pulse = blackPulse
+		}
+		aloneLogo := m.aloneAnim[m.animFrame%len(m.aloneAnim)]
+		currentColor := pulse[m.pulseFrame%len(pulse)]
 
-		for _, msg := range m.messages {
-			t := lipgloss.NewStyle().Foreground(cDim).Render(msg.Time)
-			n := lipgloss.NewStyle().Foreground(cSubtext).Bold(true).Render(msg.Nickname + ":")
+		textStyle := lipgloss.NewStyle().
+			MaxWidth(w).
+			Foreground(lipgloss.Color(currentColor)).
+			Bold(true).
+			Render(aloneLogo)
 
-			var renderedMsg string
+		middleSect = lipgloss.Place(
+			w,
+			middleH,
+			lipgloss.Center,
+			lipgloss.Center,
+			textStyle,
+		)
+	} else {
+		cons := make([]string, 0, len(m.connections))
+		speakingUsers := m.user.Engines.AudioEngine.FetchSpeakingUsers()
+		mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
 
-			if strings.HasPrefix(msg.Text, "\n") {
-				txt := msg.Text
-				renderedMsg = lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("%s %s %s", t, n, txt))
-			} else {
-				txt := lipgloss.NewStyle().Foreground(c).Render(msg.Text)
-				renderedMsg = msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
+		for _, c := range m.connections {
+			state := ""
+			clearNick := ansi.Strip(c)
+			if _, ok := mutedUsers[clearNick]; ok {
+				state = " 🔇"
+			} else if _, ok := speakingUsers[clearNick]; ok {
+				state = " 🔊"
 			}
-			allMsgsLines = append(allMsgsLines, strings.Split(renderedMsg, "\n")...)
+			cons = append(cons, c+state)
 		}
 
-		lenAll := len(allMsgsLines)
-		m.chatOffset = min(m.chatOffset, max(0, lenAll-historyMaxH))
-		startIdx := max(0, lenAll-historyMaxH-m.chatOffset)
-		endIdx := max(0, lenAll-m.chatOffset)
+		rawConnStr := lipgloss.NewStyle().Foreground(cDim).Render("with: ") + strings.Join(cons, "  ·  ")
 
-		visibleMsgs := allMsgsLines[startIdx:endIdx]
-		historyBox = lipgloss.Place(w, historyMaxH, lipgloss.Left, lipgloss.Bottom, strings.Join(visibleMsgs, "\n"))
+		connView := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(rawConnStr), w-2)
+
+		historyMaxH := middleH - lipgloss.Height(connView) - 1
+		if historyMaxH < 0 {
+			historyMaxH = 0
+		}
+
+		var historyBox string
+		if historyMaxH > 0 {
+			var allMsgsLines []string
+			msgStyle := lipgloss.NewStyle().Width(w - 2).MaxWidth(w - 2).PaddingLeft(2)
+
+			for _, msg := range m.messages {
+				t := lipgloss.NewStyle().Foreground(cDim).Render(msg.Time)
+				n := lipgloss.NewStyle().Foreground(cSubtext).Bold(true).Render(msg.Nickname + ":")
+
+				var renderedMsg string
+				if strings.HasPrefix(msg.Text, "\n") {
+					txt := msg.Text
+					renderedMsg = lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("%s %s %s", t, n, txt))
+				} else {
+					txt := lipgloss.NewStyle().Foreground(c).Render(msg.Text)
+					renderedMsg = msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
+				}
+				allMsgsLines = append(allMsgsLines, strings.Split(renderedMsg, "\n")...)
+			}
+
+			lenAll := len(allMsgsLines)
+			m.chatOffset = min(m.chatOffset, max(0, lenAll-historyMaxH))
+			startIdx := max(0, lenAll-historyMaxH-m.chatOffset)
+			endIdx := max(0, lenAll-m.chatOffset)
+
+			visibleMsgs := allMsgsLines[startIdx:endIdx]
+
+			historyBox = lipgloss.Place(w, historyMaxH, lipgloss.Left, lipgloss.Bottom, strings.Join(visibleMsgs, "\n"))
+		}
+
+		middleContent := lipgloss.JoinVertical(lipgloss.Left, connView, "", historyBox)
+		middleSect = lipgloss.Place(w, middleH, lipgloss.Left, lipgloss.Top, middleContent)
 	}
 
-	chatParts = append(chatParts, historyBox, "", inputView)
-	return m.zone.Mark("chatW", lipgloss.JoinVertical(lipgloss.Left, chatParts...))
+	finalView := lipgloss.JoinVertical(lipgloss.Left, topSect, middleSect, bottomSect)
+
+	return m.zone.Mark("chatW", finalView)
 }
 
 func (m Model) renderStartView(w, h int) string {
@@ -529,7 +605,7 @@ func (m Model) renderStartView(w, h int) string {
 		pulse = blackPulse
 	}
 
-	currentColor := pulse[m.animFrame%len(pulse)]
+	currentColor := pulse[m.pulseFrame%len(pulse)]
 	titleLogo := m.logoAnim[m.animFrame%len(m.logoAnim)]
 
 	logo := lipgloss.NewStyle().Foreground(m.themeColor).Render(titleLogo)
