@@ -174,6 +174,16 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			KeysPath:     keysPath,
 			DataFilePath: dataFilePath,
 		},
+		Data: entities.Data{
+			Statistics: entities.Statistics{
+				FavoriteUser: entities.FavoriteUser{
+					Nickname: "nobody",
+				},
+				FavoriteMsg: entities.FavoriteMsg{
+					Msg: "none",
+				},
+			},
+		},
 	}
 
 	userDataBytes, err := os.ReadFile(user.Paths.DataFilePath)

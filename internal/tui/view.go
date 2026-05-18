@@ -447,7 +447,26 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	lblRight := m.headerActiveStyle.Render("► statistics")
-	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate("no statistics available", rightW)))
+	rightBox := lipgloss.JoinVertical(lipgloss.Left,
+		lblRight, "",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("amount of friends:")+
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfFriends)),
+		"",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("max time in connecion:")+
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%d", m.user.Data.Statistics.MaxTimeInConnetion)),
+		"",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("amount of messages:")+
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfMessages)),
+		"",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("minutes in connections:")+
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfMinutesInConnections)),
+		"",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("favorite user:")+
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%s (%d connectios)", m.user.Data.Statistics.FavoriteUser.Nickname, m.user.Data.Statistics.FavoriteUser.AmountOfConnections)),
+		"",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("favorite message:")+
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%s (%d sendings)", m.user.Data.Statistics.FavoriteMsg.Msg, m.user.Data.Statistics.FavoriteMsg.AmountOfSending)),
+	)
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
 	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))

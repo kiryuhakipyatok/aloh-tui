@@ -13,9 +13,10 @@ type User struct {
 }
 
 type Data struct {
-	Personal Personal `json:"personalData"`
-	Devices  Devices  `json:"devices"`
-	Setup    Setup    `json:"setup"`
+	Personal   Personal `json:"personalData"`
+	Devices    Devices  `json:"devices"`
+	Setup      Setup    `json:"setup"`
+	Statistics Statistics
 }
 
 type Personal struct {
@@ -52,4 +53,23 @@ type Setup struct {
 type UsersSetup struct {
 	VolumeCoefficient float32 `json:"volume-coeficent"`
 	Muted             bool    `json:"muted"`
+}
+
+type Statistics struct {
+	AmountOfFriends              uint         `json:"amount-of-friends"`
+	MaxTimeInConnetion           uint         `json:"max-time-in-connections"`
+	AmountOfMessages             uint         `json:"amount-of-messages"`
+	AmountOfMinutesInConnections uint         `json:"minutes-in-connections"`
+	FavoriteUser                 FavoriteUser `json:"favorite-user"`
+	FavoriteMsg                  FavoriteMsg  `json:"favorite-msg"`
+}
+
+type FavoriteMsg struct {
+	Msg             string `json:"msg"`
+	AmountOfSending uint   `json:"amount-of-sending"`
+}
+
+type FavoriteUser struct {
+	Nickname            string `json:"nickname"`
+	AmountOfConnections uint   `json:"amount-of-connections"`
 }
