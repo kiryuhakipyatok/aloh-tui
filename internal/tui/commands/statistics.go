@@ -59,3 +59,13 @@ func CountMaxTimeInConnectionCmd(user *entities.User, stop chan struct{}) tea.Cm
 		return msg
 	}
 }
+
+func IncreaseAmountOfConnectionsByUser(user *entities.User, nickname string) tea.Cmd {
+	return func() tea.Msg {
+		msg := StatiscticsMsg{}
+		if err := user.IncreaseAmountOfConnectionsByUser(nickname); err != nil {
+			msg.Err = err
+		}
+		return msg
+	}
+}

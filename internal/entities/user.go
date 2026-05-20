@@ -26,17 +26,15 @@ func NewUser(logFilePath, keysPath, dataFilePath, defColor string) *User {
 		},
 		Data: Data{
 			Setup: Setup{
-				UsersSetup:           make(map[string]UsersSetup, 0),
+				UsersSetup:           make(map[string]*UsersSetup, 5),
 				ThemeColor:           defColor,
 				AudioNotifications:   true,
 				DesktopNotifications: true,
+				BestFriendTag:       "👑",
 			},
 			Statistics: Statistics{
-				FavoriteUser: FavoriteUser{
+				BestFriend: BestFriend{
 					Nickname: "nobody",
-				},
-				FavoriteMsg: FavoriteMsg{
-					Msg: "none",
 				},
 			},
 		},
@@ -88,6 +86,20 @@ func (u *User) IncreaseAmountOfConnections() error {
 	u.Data.Statistics.AmountOfConnections++
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (u *User) IncreaseAmountOfConnectionsByUser(nickname string) error {
+	if uc, ok := u.Data.Setup.UsersSetup[nickname]; ok {
+		uc.AmountOfConnections++
+		if uc.AmountOfConnections > u.Data.Statistics.BestFriend.AmountOfConnections {
+			u.Data.Statistics.BestFriend.AmountOfConnections = uc.AmountOfConnections
+			u.Data.Statistics.BestFriend.Nickname = nickname
+		}
+		if err := u.UpdateUserJSON(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -145,37 +157,33 @@ type Devices struct {
 }
 
 type Setup struct {
-	HardDenoise          bool                  `json:"hard-denoise"`
-	SoftDenoise          bool                  `json:"soft-denoise"`
-	AEC                  bool                  `json:"aec"`
-	Filter               bool                  `json:"filter"`
-	UsersSetup           map[string]UsersSetup `json:"users-setup"`
-	ThemeColor           string                `json:"theme-color"`
-	DesktopNotifications bool                  `json:"desktop-notifications"`
-	AudioNotifications   bool                  `json:"audio-notifications"`
+	HardDenoise          bool                   `json:"hard-denoise"`
+	SoftDenoise          bool                   `json:"soft-denoise"`
+	AEC                  bool                   `json:"aec"`
+	Filter               bool                   `json:"filter"`
+	UsersSetup           map[string]*UsersSetup `json:"users-setup"`
+	ThemeColor           string                 `json:"theme-color"`
+	DesktopNotifications bool                   `json:"desktop-notifications"`
+	AudioNotifications   bool                   `json:"audio-notifications"`
+	BestFriendTag       string                 `json:"best-friend-tag"`
 }
 
 type UsersSetup struct {
-	VolumeCoefficient float32 `json:"volume-coeficent"`
-	Muted             bool    `json:"muted"`
+	VolumeCoefficient   float32 `json:"volume-coeficent"`
+	Muted               bool    `json:"muted"`
+	AmountOfConnections uint    `json:"amount-of-connections"`
 }
 
 type Statistics struct {
-	AmountOfFriends              uint         `json:"amount-of-friends"`
-	MaxTimeInConnetion           uint         `json:"max-time-in-connections"`
-	AmountOfMessages             uint         `json:"amount-of-messages"`
-	AmountOfMinutesInConnections uint         `json:"minutes-in-connections"`
-	AmountOfConnections          uint         `json:"amount-of-connections"`
-	FavoriteUser                 FavoriteUser `json:"favorite-user"`
-	FavoriteMsg                  FavoriteMsg  `json:"favorite-msg"`
+	AmountOfFriends              uint        `json:"amount-of-friends"`
+	MaxTimeInConnetion           uint        `json:"max-time-in-connections"`
+	AmountOfMessages             uint        `json:"amount-of-messages"`
+	AmountOfMinutesInConnections uint        `json:"minutes-in-connections"`
+	AmountOfConnections          uint        `json:"amount-of-connections"`
+	BestFriend                   BestFriend  `json:"best-friend"`
 }
 
-type FavoriteMsg struct {
-	Msg             string `json:"msg"`
-	AmountOfSending uint   `json:"amount-of-sending"`
-}
-
-type FavoriteUser struct {
+type BestFriend struct {
 	Nickname            string `json:"nickname"`
 	AmountOfConnections uint   `json:"amount-of-connections"`
 }

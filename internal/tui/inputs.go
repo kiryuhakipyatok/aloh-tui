@@ -25,8 +25,8 @@ func (m *Model) focusInputs() {
 		m.logingInput[m.cursor].Focus()
 		m.logingInput[m.cursor].PromptStyle = ps
 	case states.PROFILE_STATE:
-		m.themeColorInput.Focus()
-		m.themeColorInput.PromptStyle = ps
+		m.profileInputs[m.cursor].Focus()
+		m.profileInputs[m.cursor].PromptStyle = ps
 	}
 }
 
@@ -51,7 +51,10 @@ func (m *Model) unfocusInputs() {
 	m.chatTextInput.PromptStyle = lipgloss.NewStyle()
 	m.chatTextInput.TextStyle = lipgloss.NewStyle()
 
-	m.themeColorInput.Blur()
-	m.themeColorInput.PromptStyle = lipgloss.NewStyle()
-	m.themeColorInput.TextStyle = lipgloss.NewStyle()
+	for i := range m.profileInputs {
+		m.profileInputs[i].Blur()
+		m.profileInputs[i].PromptStyle = lipgloss.NewStyle()
+		m.profileInputs[i].TextStyle = lipgloss.NewStyle()
+	}
+
 }

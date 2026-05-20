@@ -88,7 +88,7 @@ func (m Model) syncTabState() Model {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	var cmds []tea.Cmd
+	cmds := make([]tea.Cmd, 0, 5)
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -161,7 +161,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// 		return m, nil
 	// 	}
 
-	case commands.ChangeThemeMsg:
+	case commands.ThemeColorMsg:
 		err := msg.Err
 		if err != nil {
 			m.err = err
@@ -187,9 +187,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.connectionsList.SetDelegate(m.connectionsDelegate)
 			m.onlineList.SetDelegate(m.onlineDelegate)
 
-			m.state = m.prState
-			m.unfocusInputs()
-			return m, m.updateMicrophonesItemList(m.user.Data.Devices.Microphone)
+			if m.state == states.LOAD_STATE {
+				m.state = m.prState
+			}
+
+			cmd = m.updateMicrophonesItemList(m.user.Data.Devices.Microphone)
+			return m, cmd
+		}
+
+	case commands.BFTagMsg:
+		err := msg.Err
+		if err != nil {
+			m.err = err
+			m.state = states.ERR_STATE
+		} else {
+			if m.state == states.LOAD_STATE {
+				m.state = m.prState
+			}
+			cmd = m.updateConnectionsList()
+			return m, cmd
 		}
 
 	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg,
@@ -208,12 +224,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			err = m.Err
 		case commands.StatiscticsMsg:
 			err = m.Err
+		case commands.BFTagMsg:
+			err = m.Err
 		}
 
 		if err != nil {
 			m.err = err
 			m.state = states.ERR_STATE
 		} else {
+			if m.state == states.LOAD_STATE {
+				m.state = m.prState
+			}
 			m.focusInputs()
 			return m, textinput.Blink
 		}
@@ -246,7 +267,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, commands.CountMaxTimeInConnectionCmd(m.user, m.stopCountMinutesChan),
 				commands.IncreaseAmountOfConnectionsCmd(m.user), textinput.Blink)
 			m.activeTab = 1
-			m.log.Info("connected msg")
 		}
 
 	case commands.SendInChatMsg:
@@ -388,7 +408,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = states.ERR_STATE
 		} else {
 			m.online = msg.Online
-			return m, m.updateOnlineList()
+			cmd = m.updateOnlineList()
+			return m, cmd
 		}
 
 	case commands.ChangeMicrophoneMessage:
@@ -402,7 +423,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
 		} else {
-			return m, m.updateMicrophonesList()
+			cmd = m.updateMicrophonesList()
+			return m, cmd
 		}
 
 	case commands.PeerConnectedMsg:
@@ -416,7 +438,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.connections = append(m.connections, nickname)
 		m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: nickname + " joined the chat!"})
 
-		cmds = append(cmds, commands.SetupUserVolumeCmd(m.user, msg.Nickname),
+		if _, ok := m.user.Data.Setup.UsersSetup[msg.Nickname]; !ok {
+			m.user.Data.Setup.UsersSetup[msg.Nickname] = &entities.UsersSetup{
+				VolumeCoefficient: 1,
+			}
+
+			if err := m.user.UpdateUserJSON(); err != nil {
+				m.err = err
+				m.state = states.ERR_STATE
+				return m, nil
+			}
+
+		}
+
+		cmds = append(cmds, commands.IncreaseAmountOfConnectionsByUser(m.user, msg.Nickname), commands.SetupUserVolumeCmd(m.user, msg.Nickname),
 			commands.SetupUserMuteCmd(m.user, msg.Nickname), m.updateConnectionsList(),
 			commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
 			commands.WaitForPeerConnectionCmd(m.peerConnectionsChan))
@@ -427,7 +462,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.user.Engines.AudioEngine != nil {
 				m.user.Engines.AudioEngine.SetConnected()
 			}
-			m.log.Info("peer connected msg")
 		}
 
 		if m.activeTab == 0 || m.prState == states.CONN_STATE {
@@ -716,8 +750,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.isLoggedIn() || (m.activeTab != 0 && m.activeTab != 2 && m.activeTab != 5) {
 				if m.activeTab == 0 && m.cursor < len(m.regTextInputs)-1 {
 					m.cursor++
-				} else if m.activeTab == 1 && m.cursor < len(m.logingInput)-1 {
-					m.cursor++
+				} else {
+					switch m.activeTab {
+					case 1:
+						if m.cursor < len(m.logingInput)-1 {
+							m.cursor++
+						}
+					case 4:
+						if m.cursor < len(m.profileInputs)-1 {
+							m.cursor++
+						}
+					}
 				}
 
 				m.focusInputs()
@@ -799,7 +842,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						m.prState = m.state
 						m.state = states.LOAD_STATE
-						m.log.Info("enter pressed to connect")
 						cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, nick))
 					}
 
@@ -868,21 +910,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						cmds = append(cmds, commands.LeaveCmd(m.user.Networking, m.user.Engines.AudioEngine))
 					}
 				case 4:
-					m.prState = m.state
-					m.state = states.LOAD_STATE
-					newColor := m.themeColorInput.Value()
-					if newColor == "d" {
-						newColor = m.defaultThemeColor
-					} else if !strings.HasPrefix(newColor, "#") {
-						newColor = "#" + newColor
-					}
-					if len(newColor) != 7 {
-						break
+					switch m.cursor {
+					case 0:
+						newColor := m.profileInputs[0].Value()
+						if newColor == "" {
+
+							return m, nil
+						}
+						if newColor == "d" {
+							newColor = m.defaultThemeColor
+						} else if !strings.HasPrefix(newColor, "#") {
+							newColor = "#" + newColor
+						}
+						if len(newColor) != 7 {
+							return m, nil
+						}
+						m.prState = m.state
+						m.state = states.LOAD_STATE
+						cmds = append(cmds, commands.ChangeThemeColorCmd(m.user, newColor))
+					case 1:
+						newBFTag := strings.TrimSpace(m.profileInputs[1].Value())
+						m.prState = m.state
+						m.state = states.LOAD_STATE
+						cmds = append(cmds, commands.ChangeBFTagCmd(m.user, newBFTag))
 					}
 
-					cmds = append(cmds, commands.ChangeThemeCmd(m.user, newColor))
-					m.themeColorInput.Reset()
-					m.unfocusInputs()
+					m.profileInputs[m.cursor].Reset()
 				case 5:
 					switch m.sideState {
 					case 1:
@@ -951,8 +1004,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmds = append(cmds, cmd)
 				}
 			case 4:
-				m.themeColorInput, cmd = m.themeColorInput.Update(msg)
-				cmds = append(cmds, cmd)
+				for i := range m.profileInputs {
+					m.profileInputs[i], cmd = m.profileInputs[i].Update(msg)
+					cmds = append(cmds, cmd)
+				}
 			case 5:
 				if m.sideState == 1 {
 					m.microphonesList, cmd = m.microphonesList.Update(msg)

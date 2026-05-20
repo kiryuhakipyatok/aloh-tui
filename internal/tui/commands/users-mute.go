@@ -21,7 +21,7 @@ func MuteUnmuteUserCmd(user *entities.User, nickname string) tea.Cmd {
 
 		us, ok := user.Data.Setup.UsersSetup[nickname]
 		if !ok {
-			us = entities.UsersSetup{}
+			us = &entities.UsersSetup{}
 		}
 
 		us.Muted = res

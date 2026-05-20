@@ -8,15 +8,20 @@ import (
 type OnlineItem struct {
 	Name        string
 	Connections []string
+	BFTag          string
 }
 
 func (oi OnlineItem) Title() string {
-	return oi.Name
+	name := oi.Name
+	if oi.BFTag != "" {
+		name = oi.BFTag + " " + name
+	}
+	return name
 }
 func (oi OnlineItem) Description() string {
 	desc := "alone"
 	if len(oi.Connections) > 0 {
-		desc = fmt.Sprintf("with: %s", strings.Join(oi.Connections, "  ·  "))
+		desc = strings.TrimSpace(fmt.Sprintf("with: %s", strings.Join(oi.Connections, "  ·  ")))
 	}
 	return desc
 }

@@ -442,7 +442,10 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(m.user.Data.Personal.RegisterTime),
 		"",
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("theme color: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.ThemeColor)),
-		lipgloss.NewStyle().PaddingLeft(2).Render(m.themeColorInput.View()),
+		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[0].View()),
+		"",
+		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("best friend tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.BestFriendTag)),
+		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[1].View()),
 	)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
@@ -465,11 +468,8 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 		"",
 		renderStatisctic("amount of connections: ", fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfConnections)),
 		"",
-		renderStatisctic("favorite user: ", fmt.Sprintf("%s (%d connections)", m.user.Data.Statistics.FavoriteUser.Nickname,
-			m.user.Data.Statistics.FavoriteUser.AmountOfConnections)),
-		"",
-		renderStatisctic("favorite message: ", fmt.Sprintf("%s (%d sending)", m.user.Data.Statistics.FavoriteMsg.Msg,
-			m.user.Data.Statistics.FavoriteMsg.AmountOfSending)),
+		renderStatisctic("best friend: ", fmt.Sprintf("%s (%d connections)", m.user.Data.Statistics.BestFriend.Nickname,
+			m.user.Data.Statistics.BestFriend.AmountOfConnections)),
 	)
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
@@ -564,14 +564,23 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 		mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
 
 		for _, c := range m.connections {
-			state := ""
+			var (
+				state string
+				bf    string
+				res   string
+			)
 			clearNick := ansi.Strip(c)
 			if _, ok := mutedUsers[clearNick]; ok {
 				state = " 🔇"
 			} else if _, ok := speakingUsers[clearNick]; ok {
 				state = " 🔊"
 			}
-			cons = append(cons, c+state)
+
+			if clearNick == m.user.Data.Statistics.BestFriend.Nickname {
+				bf = m.user.Data.Setup.BestFriendTag + " "
+			}
+			res = bf + c + state
+			cons = append(cons, res)
 		}
 
 		rawConnStr := lipgloss.NewStyle().Foreground(cDim).Render("with: ") + strings.Join(cons, "  ·  ")

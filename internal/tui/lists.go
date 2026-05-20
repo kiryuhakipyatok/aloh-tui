@@ -59,12 +59,12 @@ func (m *Model) setupConnestionsList() {
 
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle()
 	delegate.ShowDescription = true
 	delegate.SetSpacing(1)
 	m.connectionsDelegate = delegate
 	m.connectionsList = list.New(conns, delegate, m.width/2, m.height-4)
 	m.connectionsList.DisableQuitKeybindings()
-	m.connectionsList.Select(0)
 	m.connectionsList.SetShowStatusBar(false)
 	m.connectionsList.SetShowTitle(false)
 	m.connectionsList.SetFilteringEnabled(false)
@@ -73,15 +73,7 @@ func (m *Model) setupConnestionsList() {
 }
 
 func (m *Model) setupOnlineList() {
-	names := make([]string, 0, len(m.online))
-	slices.Sort(names)
 	online := make([]list.Item, len(m.online))
-	for _, name := range names {
-		online = append(online, lists.OnlineItem{
-			Name:        name,
-			Connections: m.online[name],
-		})
-	}
 
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
@@ -261,10 +253,16 @@ func (m *Model) updateOnlineList() tea.Cmd {
 	slices.Sort(names)
 
 	newItems := make([]list.Item, 0, len(names))
+
 	for _, name := range names {
+		var bf string
+		if m.user.Data.Statistics.BestFriend.Nickname == name {
+			bf = m.user.Data.Setup.BestFriendTag
+		}
 		newItems = append(newItems, lists.OnlineItem{
 			Name:        name,
 			Connections: m.online[name],
+			BFTag:       bf,
 		})
 	}
 
@@ -283,15 +281,21 @@ func (m *Model) updateConnectionsList() tea.Cmd {
 	for _, name := range names {
 		var vc float32 = 1
 		var muted bool
-		us, ok := m.user.Data.Setup.UsersSetup[ansi.Strip(name)]
+		clearName := ansi.Strip(name)
+		us, ok := m.user.Data.Setup.UsersSetup[clearName]
 		if ok {
 			vc = us.VolumeCoefficient
 			muted = us.Muted
+		}
+		var bf string
+		if m.user.Data.Statistics.BestFriend.Nickname == clearName {
+			bf = m.user.Data.Setup.BestFriendTag
 		}
 		newItems = append(newItems, lists.ConnectionItem{
 			Nickname:          name,
 			VolumeCoefficient: vc,
 			Muted:             muted,
+			BFTag:             bf,
 		})
 	}
 

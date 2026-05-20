@@ -59,6 +59,8 @@ type Model struct {
 	chatTextInput  textinput.Model
 	logingInput    []textinput.Model
 
+	profileInputs []textinput.Model
+
 	defaultThemeColor string
 
 	imageBuffer []byte
@@ -113,8 +115,6 @@ type Model struct {
 	themeColor        lipgloss.Color
 	subThemeColor     lipgloss.Color
 
-	themeColorInput textinput.Model
-
 	stopCountMinutesChan chan struct{}
 
 	err error
@@ -141,6 +141,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		logingInput:   make([]textinput.Model, 2),
 		logoAnim:      make([]string, 0, 4),
 		notConnAnim:   make([]string, 0, 4),
+		profileInputs: make([]textinput.Model, 2),
 		messages:      []commands.ChatMessage{},
 
 		defaultThemeColor: "#A6E22E",
@@ -172,7 +173,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	m.notConnAnim = []string{titles.NOT_CONN1, titles.NOT_CONN2, titles.NOT_CONN3, titles.NOT_CONN2}
 	m.aloneAnim = []string{titles.ALONE1, titles.ALONE2, titles.ALONE3, titles.ALONE2}
 
-	user := entities.NewUser(logFilePath,keysPath, dataFilePath, m.defaultThemeColor)
+	user := entities.NewUser(logFilePath, keysPath, dataFilePath, m.defaultThemeColor)
 
 	userDataBytes, err := os.ReadFile(user.Paths.DataFilePath)
 	if err != nil {
@@ -189,8 +190,6 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			return nil, err
 		}
 	}
-
-	log.Info("userdata", user.Data)
 
 	m.themeColor = lipgloss.Color(user.Data.Setup.ThemeColor)
 	m.subThemeColor = lipgloss.Color(utils.DarkenHex(user.Data.Setup.ThemeColor, 0.7))
@@ -307,9 +306,17 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	chatInput.Placeholder = "type a message..."
 	m.chatTextInput = chatInput
 
-	themeColorInput := textinput.New()
-	themeColorInput.Placeholder = "new color in hex, d to default"
-	m.themeColorInput = themeColorInput
+	for i := range m.profileInputs {
+		ti := textinput.New()
+		ti.CharLimit = 32
+		switch i {
+		case 0:
+			ti.Placeholder = "new color in hex, d to default"
+		case 1:
+			ti.Placeholder = "new best friend tag"
+		}
+		m.profileInputs[i] = ti
+	}
 
 	log.Info("model created successfully")
 
@@ -320,11 +327,11 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
 	cmds = append(cmds, commands.AnimTickCmd(), commands.PulseTickCmd(), m.spinner.Tick)
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-		cmds = append(cmds, commands.WaitForChatMessageCmd(m.msgChan),
+		cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
+			commands.WaitForChatMessageCmd(m.msgChan),
 			commands.WaitForRawChatMessageCmd(m.rawMsgChan),
 			commands.WaitForPeerConnectionCmd(m.peerConnectionsChan),
 			commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan),
-			commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
 			commands.TickCmd(), tea.EnableMouseCellMotion)
 		return tea.Batch(cmds...)
 	}

@@ -17,7 +17,9 @@ func SetUserVolumeCmd(user *entities.User, nickname string, volumeCoeficent floa
 
 		us, ok := user.Data.Setup.UsersSetup[nickname]
 		if !ok {
-			us = entities.UsersSetup{}
+			us = &entities.UsersSetup{
+				VolumeCoefficient: 1,
+			}
 		}
 
 		us.VolumeCoefficient = volumeCoeficent
