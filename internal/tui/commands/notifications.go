@@ -4,8 +4,7 @@ import (
 	"aloh-tui/internal/entities"
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/notifications"
-	"encoding/json"
-	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -14,13 +13,15 @@ type NotificationMessage struct {
 	Err error
 }
 
-func NotifyCmd(time, nickname, msg string) tea.Cmd {
+func NotifyCmd(nickname, msg string) tea.Cmd {
 	return func() tea.Msg {
-		if err := notifications.Notify(time, nickname, msg); err != nil {
-			return NotificationMessage{Err: err}
+		cmsg := NotificationMessage{}
+		t := time.Now().Format("15:04:05")
+		if err := notifications.Notify(t, nickname, msg); err != nil {
+			cmsg.Err = err
 		}
 
-		return NotificationMessage{Err: nil}
+		return cmsg
 	}
 }
 
@@ -33,34 +34,26 @@ func PlayNotificationCmd(ae audio.AudioEngine) tea.Cmd {
 
 func OnOffAudioNotifications(user *entities.User) tea.Cmd {
 	return func() tea.Msg {
+		cmsg := NotificationMessage{}
 		user.Data.Setup.AudioNotifications = !user.Data.Setup.AudioNotifications
 
-		userData, err := json.Marshal(user.Data)
-		if err != nil {
-			return NotificationMessage{Err: err}
+		if err := user.UpdateUserJSON(); err != nil {
+			cmsg.Err = err
 		}
 
-		if err := os.WriteFile(user.Paths.DataFilePath, userData, 0644); err != nil {
-			return NotificationMessage{Err: err}
-		}
-
-		return NotificationMessage{Err: nil}
+		return cmsg
 	}
 }
 
 func OnOffDesktopNotifications(user *entities.User) tea.Cmd {
 	return func() tea.Msg {
+		cmsg := NotificationMessage{}
 		user.Data.Setup.DesktopNotifications = !user.Data.Setup.DesktopNotifications
 
-		userData, err := json.Marshal(user.Data)
-		if err != nil {
-			return NotificationMessage{Err: err}
+		if err := user.UpdateUserJSON(); err != nil {
+			cmsg.Err = err
 		}
 
-		if err := os.WriteFile(user.Paths.DataFilePath, userData, 0644); err != nil {
-			return NotificationMessage{Err: err}
-		}
-
-		return NotificationMessage{Err: nil}
+		return cmsg
 	}
 }

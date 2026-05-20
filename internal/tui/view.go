@@ -67,7 +67,7 @@ func (m Model) View() string {
 		return m.spinner.View() + "loading..."
 	}
 
-	padW, padH := 2, 1
+	padW, padH := 2, 0
 	usableW := m.width - (padW * 2)
 	usableH := m.height - (padH * 2)
 
@@ -97,7 +97,7 @@ func (m Model) View() string {
 	footer := lipgloss.JoinHorizontal(lipgloss.Bottom, leftPart, rightPart)
 	footerH := lipgloss.Height(footer)
 
-	logo := lipgloss.NewStyle().Foreground(m.themeColor).Render(titles.A)
+	logo := lipgloss.NewStyle().Foreground(m.themeColor).PaddingTop(1).Render(titles.A)
 	logoH := lipgloss.Height(logo)
 
 	var tabs []string
@@ -199,7 +199,7 @@ func (m Model) View() string {
 	tabsRow := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 
 	windowInnerW := usableW - 4
-	windowInnerH := gridH - lipgloss.Height(tabsRow) - 2
+	windowInnerH := gridH - lipgloss.Height(tabsRow) - 1
 
 	var uiContent string
 	switch m.state {
@@ -237,7 +237,7 @@ func (m Model) View() string {
 
 	tabWindow := lipgloss.JoinVertical(lipgloss.Left, tabsRow, contentBox)
 
-	finalLayout := lipgloss.JoinVertical(lipgloss.Left, "", logo, tabWindow, "", footer)
+	finalLayout := lipgloss.JoinVertical(lipgloss.Left, logo, tabWindow, footer)
 	screen := lipgloss.Place(usableW, usableH, lipgloss.Left, lipgloss.Top, finalLayout)
 
 	return lipgloss.NewStyle().Padding(padH, padW).Render(m.zone.Scan(screen))
@@ -446,26 +446,30 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 	)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
+	renderStatisctic := func(title, data string) string {
+		k := lipgloss.NewStyle().Foreground(cDim).Width(27).Render(title)
+		d := lipgloss.NewStyle().Foreground(cText).Render(data)
+		return safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(k+d), leftW)
+	}
+
 	lblRight := m.headerActiveStyle.Render("► statistics")
 	rightBox := lipgloss.JoinVertical(lipgloss.Left,
 		lblRight, "",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("amount of friends:")+
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfFriends)),
+		renderStatisctic("amount of friends: ", fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfFriends)),
 		"",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("max time in connecion:")+
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%d", m.user.Data.Statistics.MaxTimeInConnetion)),
+		renderStatisctic("max time in connection: ", fmt.Sprintf("%d minutes", m.user.Data.Statistics.MaxTimeInConnetion)),
 		"",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("amount of messages:")+
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfMessages)),
+		renderStatisctic("amount of messages: ", fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfMessages)),
 		"",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("minutes in connections:")+
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfMinutesInConnections)),
+		renderStatisctic("minutes in connections: ", fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfMinutesInConnections)),
 		"",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("favorite user:")+
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%s (%d connectios)", m.user.Data.Statistics.FavoriteUser.Nickname, m.user.Data.Statistics.FavoriteUser.AmountOfConnections)),
+		renderStatisctic("amount of connections: ", fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfConnections)),
 		"",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("favorite message:")+
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%s (%d sendings)", m.user.Data.Statistics.FavoriteMsg.Msg, m.user.Data.Statistics.FavoriteMsg.AmountOfSending)),
+		renderStatisctic("favorite user: ", fmt.Sprintf("%s (%d connections)", m.user.Data.Statistics.FavoriteUser.Nickname,
+			m.user.Data.Statistics.FavoriteUser.AmountOfConnections)),
+		"",
+		renderStatisctic("favorite message: ", fmt.Sprintf("%s (%d sending)", m.user.Data.Statistics.FavoriteMsg.Msg,
+			m.user.Data.Statistics.FavoriteMsg.AmountOfSending)),
 	)
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
@@ -512,13 +516,13 @@ func (m Model) renderLoginTab(w, h int) string {
 
 func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 	coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Personal.Nickname)
-	usersAudioState := lipgloss.NewStyle().PaddingLeft(2).Render(coloredUserNickname)
+	usersAudioState := coloredUserNickname
 
 	if m.user.Engines.AudioEngine.UserIsSpeaking() {
-		usersAudioState = lipgloss.NewStyle().PaddingLeft(2).Render(coloredUserNickname + " 🔊")
+		usersAudioState = coloredUserNickname + " 🔊"
 	}
 	if m.muteState != "" {
-		usersAudioState += lipgloss.NewStyle().PaddingLeft(2).Render(m.muteState)
+		usersAudioState += m.muteState
 	}
 	topSect := usersAudioState
 
@@ -572,7 +576,7 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 
 		rawConnStr := lipgloss.NewStyle().Foreground(cDim).Render("with: ") + strings.Join(cons, "  ·  ")
 
-		connView := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(rawConnStr), w-2)
+		connView := safeTruncate(lipgloss.NewStyle().Foreground(cDim).Render(rawConnStr), w-2)
 
 		historyMaxH := middleH - lipgloss.Height(connView) - 1
 		if historyMaxH < 0 {

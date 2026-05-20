@@ -12,9 +12,10 @@ type ConnectToUserMsg struct {
 
 func ConnectToUserCmd(netw networking.Networking, nickname string) tea.Cmd {
 	return func() tea.Msg {
+		msg := ConnectToUserMsg{}
 		if err := netw.ConnectToUser(nickname); err != nil {
-			return ConnectToUserMsg{err}
+			msg.Err = err
 		}
-		return ConnectToUserMsg{}
+		return msg
 	}
 }

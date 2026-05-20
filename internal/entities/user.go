@@ -3,6 +3,10 @@ package entities
 import (
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
+	"encoding/json"
+	"os"
+	"sync"
+	"time"
 )
 
 type User struct {
@@ -10,13 +14,114 @@ type User struct {
 	Paths      Paths
 	Networking networking.Networking
 	Engines    Engines
+	mu         sync.Mutex
+}
+
+func NewUser(logFilePath, keysPath, dataFilePath, defColor string) *User {
+	return &User{
+		Paths: Paths{
+			LogFilePath:  logFilePath,
+			KeysPath:     keysPath,
+			DataFilePath: dataFilePath,
+		},
+		Data: Data{
+			Setup: Setup{
+				UsersSetup:           make(map[string]UsersSetup, 0),
+				ThemeColor:           defColor,
+				AudioNotifications:   true,
+				DesktopNotifications: true,
+			},
+			Statistics: Statistics{
+				FavoriteUser: FavoriteUser{
+					Nickname: "nobody",
+				},
+				FavoriteMsg: FavoriteMsg{
+					Msg: "none",
+				},
+			},
+		},
+	}
+}
+
+func (u *User) UpdateUserJSON() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	userData, err := json.Marshal(u.Data)
+	if err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(u.Paths.DataFilePath, userData, 0644); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (u *User) IncreaseAmountOfFriends() error {
+	u.Data.Statistics.AmountOfFriends++
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) DecreaseAmountOfFriends() error {
+	if u.Data.Statistics.AmountOfFriends > 0 {
+		u.Data.Statistics.AmountOfFriends--
+	}
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) IncreaseAmountOfMessages() error {
+	u.Data.Statistics.AmountOfMessages++
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) IncreaseAmountOfConnections() error {
+	u.Data.Statistics.AmountOfConnections++
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) CountMaxTimeInConnection(stop chan struct{}) error {
+	var currentTime uint
+	defer func() error {
+		if currentTime > u.Data.Statistics.MaxTimeInConnetion {
+			u.Data.Statistics.MaxTimeInConnetion = currentTime
+			if err := u.UpdateUserJSON(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}()
+	for {
+		select {
+		case <-stop:
+			return nil
+		case <-time.After(time.Minute * 1):
+			currentTime++
+			u.Data.Statistics.AmountOfMinutesInConnections++
+			if err := u.UpdateUserJSON(); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 type Data struct {
-	Personal   Personal `json:"personalData"`
-	Devices    Devices  `json:"devices"`
-	Setup      Setup    `json:"setup"`
-	Statistics Statistics
+	Personal   Personal   `json:"personalData"`
+	Devices    Devices    `json:"devices"`
+	Setup      Setup      `json:"setup"`
+	Statistics Statistics `json:"statistics"`
 }
 
 type Personal struct {
@@ -60,6 +165,7 @@ type Statistics struct {
 	MaxTimeInConnetion           uint         `json:"max-time-in-connections"`
 	AmountOfMessages             uint         `json:"amount-of-messages"`
 	AmountOfMinutesInConnections uint         `json:"minutes-in-connections"`
+	AmountOfConnections          uint         `json:"amount-of-connections"`
 	FavoriteUser                 FavoriteUser `json:"favorite-user"`
 	FavoriteMsg                  FavoriteMsg  `json:"favorite-msg"`
 }

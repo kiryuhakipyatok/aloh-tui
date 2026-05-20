@@ -2,8 +2,6 @@ package commands
 
 import (
 	"aloh-tui/internal/entities"
-	"encoding/json"
-	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -14,6 +12,7 @@ type UsersVolumeMsg struct {
 
 func SetUserVolumeCmd(user *entities.User, nickname string, volumeCoeficent float32) tea.Cmd {
 	return func() tea.Msg {
+		msg := UsersVolumeMsg{}
 		user.Engines.AudioEngine.SetVolume(nickname, volumeCoeficent)
 
 		us, ok := user.Data.Setup.UsersSetup[nickname]
@@ -25,16 +24,11 @@ func SetUserVolumeCmd(user *entities.User, nickname string, volumeCoeficent floa
 
 		user.Data.Setup.UsersSetup[nickname] = us
 
-		userData, err := json.Marshal(user.Data)
-		if err != nil {
-			return UsersVolumeMsg{Err: err}
+		if err := user.UpdateUserJSON(); err != nil {
+			msg.Err = err
 		}
 
-		if err := os.WriteFile(user.Paths.DataFilePath, userData, 0644); err != nil {
-			return UsersVolumeMsg{Err: err}
-		}
-
-		return UsersVolumeMsg{Err: nil}
+		return msg
 	}
 }
 

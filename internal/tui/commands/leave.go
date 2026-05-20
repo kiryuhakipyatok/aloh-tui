@@ -16,10 +16,14 @@ type LeaveMsg struct {
 func LeaveCmd(netw networking.Networking, ae audio.AudioEngine) tea.Cmd {
 	return func() tea.Msg {
 		t := time.Now().Format("15:04:05")
-		if Err := netw.DisconnectFromUsers(); Err != nil {
-			return LeaveMsg{Time: t, Err: Err}
+		msg := LeaveMsg{
+			Time: t,
+		}
+
+		if err := netw.DisconnectFromUsers(); err != nil {
+			msg.Err = err
 		}
 		ae.PlayNotification()
-		return LeaveMsg{Time: t}
+		return msg
 	}
 }

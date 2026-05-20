@@ -115,6 +115,8 @@ type Model struct {
 
 	themeColorInput textinput.Model
 
+	stopCountMinutesChan chan struct{}
+
 	err error
 }
 
@@ -147,6 +149,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		online: make(map[string][]string, 5),
 
+		stopCountMinutesChan: make(chan struct{}, 1),
+
 		usersColors: make(map[string]userColors, 5),
 
 		zone: bz.New(),
@@ -168,23 +172,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	m.notConnAnim = []string{titles.NOT_CONN1, titles.NOT_CONN2, titles.NOT_CONN3, titles.NOT_CONN2}
 	m.aloneAnim = []string{titles.ALONE1, titles.ALONE2, titles.ALONE3, titles.ALONE2}
 
-	user := entities.User{
-		Paths: entities.Paths{
-			LogFilePath:  logFilePath,
-			KeysPath:     keysPath,
-			DataFilePath: dataFilePath,
-		},
-		Data: entities.Data{
-			Statistics: entities.Statistics{
-				FavoriteUser: entities.FavoriteUser{
-					Nickname: "nobody",
-				},
-				FavoriteMsg: entities.FavoriteMsg{
-					Msg: "none",
-				},
-			},
-		},
-	}
+	user := entities.NewUser(logFilePath,keysPath, dataFilePath, m.defaultThemeColor)
 
 	userDataBytes, err := os.ReadFile(user.Paths.DataFilePath)
 	if err != nil {
@@ -194,24 +182,13 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		}
 	}
 
-	userData := entities.Data{
-		Setup: entities.Setup{
-			UsersSetup:           make(map[string]entities.UsersSetup, 0),
-			ThemeColor:           m.defaultThemeColor,
-			AudioNotifications:   true,
-			DesktopNotifications: true,
-		},
-	}
-
 	if len(userDataBytes) > 1 {
 		log.Info("userdata.json file is not empty")
-		if err := json.Unmarshal(userDataBytes, &userData); err != nil {
+		if err := json.Unmarshal(userDataBytes, &user.Data); err != nil {
 			log.Error("failed to unmarshal userdata.json file", logger.Err(err))
 			return nil, err
 		}
 	}
-
-	user.Data = userData
 
 	log.Info("userdata", user.Data)
 
@@ -219,12 +196,12 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	m.subThemeColor = lipgloss.Color(utils.DarkenHex(user.Data.Setup.ThemeColor, 0.7))
 	m.headerActiveStyle = lipgloss.NewStyle().Foreground(m.themeColor).Bold(true)
 
-	if userData.Personal.Nickname != "" && userData.Personal.RegisterTime != "" {
+	if user.Data.Personal.Nickname != "" && user.Data.Personal.RegisterTime != "" {
 
-		logNickname := logger.Attr("nickname", userData.Personal.Nickname)
+		logNickname := logger.Attr("nickname", user.Data.Personal.Nickname)
 
 		log.Info("authorize user with existing user data", logNickname)
-		if _, err := auth.Auth(userData.Personal.Nickname, keysPath, auth.DEFAULT, nil); err != nil {
+		if _, err := auth.Auth(user.Data.Personal.Nickname, keysPath, auth.DEFAULT, nil); err != nil {
 			log.Error("err when auth", logger.Err(err))
 			if !errors.Is(err, errs.ErrAuth) {
 				log.Error("err auth", logger.Err(err))
@@ -235,7 +212,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			}
 		} else {
 			log.Info("user authorized successfully, networking setting...", logNickname)
-			networking, err := networking.NewNetworking(userData.Personal.Nickname, user.Paths.LogFilePath)
+			networking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
 			if err != nil {
 				log.Error("failed to create networking", logger.Err(err), logNickname)
 				return nil, err
@@ -244,7 +221,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 				Microphone:  user.Data.Devices.Microphone,
 				Aec:         user.Data.Setup.AEC,
 				HardDenoice: user.Data.Setup.HardDenoise,
-				SoftDenoice: userData.Setup.SoftDenoise,
+				SoftDenoice: user.Data.Setup.SoftDenoise,
 				Filtered:    user.Data.Setup.Filter,
 			})
 			if err != nil {
@@ -258,18 +235,22 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			}
 
 			log.Info("setting netwoking callbacks...", logNickname)
-			t := time.Now().Format("15:04:05")
+
 			networking.ChatCallback(func(id string, data []byte) {
+				t := time.Now().Format("15:04:05")
 				m.rawMsgChan <- commands.RawChatMessage{Time: t, Nickname: id, Data: data}
 
 			})
 			networking.VoiceCallback(func(id string, data []byte) {
+
 				audioEngine.PlayUserVoice(id, data)
 			})
 			networking.PeerConnectedCallback(func(id string) {
+				t := time.Now().Format("15:04:05")
 				m.peerConnectionsChan <- commands.PeerConnectedMsg{Nickname: id, Time: t}
 			})
 			networking.PeerDisconnectedCallback(func(id string) {
+				t := time.Now().Format("15:04:05")
 				m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
 			})
 
@@ -279,7 +260,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		}
 	}
 
-	m.user = &user
+	m.user = user
 
 	if m.user.Engines.AudioEngine != nil {
 		m.setupMicrohonesList()

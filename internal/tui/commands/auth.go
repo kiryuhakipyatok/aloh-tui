@@ -8,7 +8,6 @@ import (
 	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
 	"encoding/json"
-	"os"
 	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,21 +20,28 @@ type AuthMsg struct {
 
 func AuthCmd(user *entities.User, appLogger *logger.Logger, password []byte) tea.Cmd {
 	return func() tea.Msg {
+		msg := AuthMsg{
+			Typee: auth.DEFAULT,
+		}
+
 		payload, err := auth.Auth(user.Data.Personal.Nickname, user.Paths.KeysPath, auth.DEFAULT, password)
 		if err != nil {
-			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+			msg.Err = err
+			return msg
 		}
 
 		pd := entities.Personal{}
 		if err := json.Unmarshal(payload, &pd); err != nil {
-			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+			msg.Err = err
+			return msg
 		}
 
 		user.Data.Personal = pd
 
 		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
 		if err != nil {
-			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+			msg.Err = err
+			return msg
 		}
 
 		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
@@ -46,41 +52,45 @@ func AuthCmd(user *entities.User, appLogger *logger.Logger, password []byte) tea
 			Filtered:    user.Data.Setup.Filter,
 		})
 		if err != nil {
-			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+			msg.Err = err
+			return msg
 		}
 
 		if err := audioEngine.SetNetworking(netwroking); err != nil {
-			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+			msg.Err = err
+			return msg
 		}
 
 		user.Engines.AudioEngine = audioEngine
 		user.Networking = netwroking
 
-		userData, err := json.Marshal(user.Data)
-		if err != nil {
-			return AuthMsg{Typee: auth.DEFAULT, Err: err}
+		if err := user.UpdateUserJSON(); err != nil {
+			msg.Err = err
+			return msg
 		}
 
-		if err := os.WriteFile(user.Paths.DataFilePath, userData, 0644); err != nil {
-			return AuthMsg{Typee: auth.DEFAULT, Err: err}
-		}
-
-		return AuthMsg{Typee: auth.DEFAULT, Err: nil}
+		return msg
 	}
 }
 
 func RegisterCmd(user *entities.User, appLogger *logger.Logger, password, repPassword []byte) tea.Cmd {
 	return func() tea.Msg {
+		msg := AuthMsg{
+			Typee: auth.REGISTER,
+		}
 		if !slices.Equal(password, repPassword) {
-			return AuthMsg{Typee: auth.REGISTER, Err: errs.ErrPasswordsNotEqual}
+			msg.Err = errs.ErrPasswordsNotEqual
+			return msg
 		}
 		if _, err := auth.Auth(user.Data.Personal.Nickname, user.Paths.KeysPath, auth.REGISTER, password); err != nil {
-			return AuthMsg{Typee: auth.REGISTER, Err: err}
+			msg.Err = err
+			return msg
 		}
 		user.Data.Setup.SoftDenoise = true
 		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
 		if err != nil {
-			return AuthMsg{Typee: auth.REGISTER, Err: err}
+			msg.Err = err
+			return msg
 		}
 
 		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
@@ -91,43 +101,46 @@ func RegisterCmd(user *entities.User, appLogger *logger.Logger, password, repPas
 			Filtered:    user.Data.Setup.Filter,
 		})
 		if err != nil {
-			return AuthMsg{Typee: auth.REGISTER, Err: err}
+			msg.Err = err
+			return msg
 		}
 
 		user.Data.Devices.Microphone = audioEngine.GetCurrentMicrophone().Name
 
 		if err := audioEngine.SetNetworking(netwroking); err != nil {
-			return AuthMsg{Typee: auth.REGISTER, Err: err}
+			msg.Err = err
+			return msg
 		}
 
 		user.Engines.AudioEngine = audioEngine
 		user.Networking = netwroking
 
-		userData, err := json.Marshal(user.Data)
-		if err != nil {
-			return AuthMsg{Typee: auth.REGISTER, Err: err}
+		if err := user.UpdateUserJSON(); err != nil {
+			msg.Err = err
+			return msg
 		}
 
-		if err := os.WriteFile(user.Paths.DataFilePath, userData, 0644); err != nil {
-			return AuthMsg{Typee: auth.REGISTER, Err: err}
-		}
-
-		return AuthMsg{Typee: auth.REGISTER, Err: nil}
+		return msg
 	}
 }
 
 func LoginCmd(user *entities.User, appLogger *logger.Logger, secret []byte) tea.Cmd {
 	return func() tea.Msg {
+		msg := AuthMsg{
+			Typee: auth.LOGIN,
+		}
 		regTime, err := auth.Auth(user.Data.Personal.Nickname, user.Paths.KeysPath, auth.LOGIN, secret)
 		if err != nil {
-			return AuthMsg{Typee: auth.LOGIN, Err: err}
+			msg.Err = err
+			return msg
 		}
 		user.Data.Personal.RegisterTime = string(regTime)
 		user.Data.Setup.SoftDenoise = true
 
 		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
 		if err != nil {
-			return AuthMsg{Typee: auth.LOGIN, Err: err}
+			msg.Err = err
+			return msg
 		}
 
 		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
@@ -138,25 +151,22 @@ func LoginCmd(user *entities.User, appLogger *logger.Logger, secret []byte) tea.
 			Filtered:    user.Data.Setup.Filter,
 		})
 		if err != nil {
-			return AuthMsg{Typee: auth.LOGIN, Err: err}
+			msg.Err = err
+			return msg
 		}
 		user.Data.Devices.Microphone = audioEngine.GetCurrentMicrophone().Name
 		if err := audioEngine.SetNetworking(netwroking); err != nil {
-			return AuthMsg{Typee: auth.LOGIN, Err: err}
+			msg.Err = err
+			return msg
 		}
 
 		user.Engines.AudioEngine = audioEngine
 		user.Networking = netwroking
 
-		userData, err := json.Marshal(user.Data)
-		if err != nil {
-			return AuthMsg{Typee: auth.LOGIN, Err: err}
+		if err := user.UpdateUserJSON(); err != nil {
+			msg.Err = err
 		}
 
-		if err := os.WriteFile(user.Paths.DataFilePath, userData, 0644); err != nil {
-			return AuthMsg{Typee: auth.LOGIN, Err: err}
-		}
-
-		return AuthMsg{Typee: auth.LOGIN, Err: nil}
+		return msg
 	}
 }

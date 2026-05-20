@@ -16,18 +16,18 @@ type OnlineMsg struct {
 
 func FetchOnlineCmd(netw networking.Networking, nickname string) tea.Cmd {
 	return func() tea.Msg {
-		onlineMsg := OnlineMsg{}
+		msg := OnlineMsg{}
 		online, err := netw.FetchCurrentOnline()
 		if err != nil {
-			onlineMsg.Err = err
-			return onlineMsg
+			msg.Err = err
+			return msg
 		}
 
 		online = slices.DeleteFunc(online, func(v string) bool {
 			return v == nickname
 		})
 
-		onlineMsg.Online = make(map[string][]string, len(online))
+		msg.Online = make(map[string][]string, len(online))
 		var wg errgroup.Group
 		wg.SetLimit(15)
 		var mu sync.Mutex
@@ -38,16 +38,16 @@ func FetchOnlineCmd(netw networking.Networking, nickname string) tea.Cmd {
 					return err
 				}
 				mu.Lock()
-				onlineMsg.Online[v] = sessions
+				msg.Online[v] = sessions
 				mu.Unlock()
 				return nil
 			})
 		}
 
 		if err := wg.Wait(); err != nil {
-			onlineMsg.Err = err
+			msg.Err = err
 		}
 
-		return onlineMsg
+		return msg
 	}
 }

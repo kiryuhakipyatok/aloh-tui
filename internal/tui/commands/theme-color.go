@@ -2,8 +2,6 @@ package commands
 
 import (
 	"aloh-tui/internal/entities"
-	"encoding/json"
-	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -14,18 +12,12 @@ type ChangeThemeMsg struct {
 
 func ChangeThemeCmd(user *entities.User, newThemeColor string) tea.Cmd {
 	return func() tea.Msg {
+		msg := ChangeThemeMsg{}
 		user.Data.Setup.ThemeColor = newThemeColor
 
-		userData, err := json.Marshal(user.Data)
-		if err != nil {
-			return ChangeThemeMsg{Err: err}
+		if err := user.UpdateUserJSON(); err != nil {
+			msg.Err = err
 		}
-
-		if err := os.WriteFile(user.Paths.DataFilePath, userData, 0644); err != nil {
-			return ChangeThemeMsg{Err: err}
-		}
-		return ChangeThemeMsg{
-			Err: nil,
-		}
+		return msg
 	}
 }

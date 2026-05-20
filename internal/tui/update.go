@@ -3,7 +3,6 @@ package tui
 import (
 	"aloh-tui/internal/auth"
 	"aloh-tui/internal/entities"
-	"aloh-tui/internal/notifications"
 	"aloh-tui/internal/tui/commands"
 	"aloh-tui/internal/tui/components/lists"
 	"aloh-tui/internal/tui/components/states"
@@ -129,6 +128,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						m.sideState = 0
 						m = m.syncTabState()
+						m.unfocusInputs()
 						return m, nil
 					}
 					m = m.syncTabState()
@@ -192,7 +192,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.updateMicrophonesItemList(m.user.Data.Devices.Microphone)
 		}
 
-	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg, commands.MuteUnmuteUserMsg:
+	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg,
+		commands.MuteUnmuteUserMsg, commands.StatiscticsMsg:
 		var err error
 		switch m := msg.(type) {
 		case commands.OnOffDenoiceMsg:
@@ -204,6 +205,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case commands.UsersVolumeMsg:
 			err = m.Err
 		case commands.MuteUnmuteUserMsg:
+			err = m.Err
+		case commands.StatiscticsMsg:
 			err = m.Err
 		}
 
@@ -235,12 +238,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-		} else {
+		} else if !m.connected {
 			m.connected = true
-			m.user.Engines.AudioEngine.SetConnected()
+			if m.user.Engines.AudioEngine != nil {
+				m.user.Engines.AudioEngine.SetConnected()
+			}
+			cmds = append(cmds, commands.CountMaxTimeInConnectionCmd(m.user, m.stopCountMinutesChan),
+				commands.IncreaseAmountOfConnectionsCmd(m.user), textinput.Blink)
 			m.activeTab = 1
-			m = m.syncTabState()
-			return m, textinput.Blink
+			m.log.Info("connected msg")
 		}
 
 	case commands.SendInChatMsg:
@@ -250,24 +256,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.activeTab = 1
 			m = m.syncTabState()
-			return m, textinput.Blink
+			cmds = append(cmds, commands.IncreaseAmountOfMessagesCmd(m.user), textinput.Blink)
+			return m, tea.Batch(cmds...)
 		}
 
 	case commands.LeaveMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-		} else {
+		} else if m.connected {
 			m.connected = false
-			m.user.Engines.AudioEngine.SetDisconnected()
+			select {
+			case m.stopCountMinutesChan <- struct{}{}:
+			default:
+			}
 			m.messages = []commands.ChatMessage{}
 			m.connections = []string{}
 			m.user.Engines.AudioEngine.PlayNotification()
 			m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: "you disconnected!"})
 
-			m.activeTab = 0
 			m = m.syncTabState()
 			return m, textinput.Blink
+
 		}
 
 	case commands.AuthMsg:
@@ -288,9 +298,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.syncTabState()
 
 			if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-				t := time.Now().Format("15:04:05")
 				m.user.Networking.ChatCallback(func(id string, data []byte) {
-
+					t := time.Now().Format("15:04:05")
 					m.rawMsgChan <- commands.RawChatMessage{Time: t, Nickname: id, Data: data}
 
 				})
@@ -298,9 +307,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.user.Engines.AudioEngine.PlayUserVoice(id, data)
 				})
 				m.user.Networking.PeerConnectedCallback(func(id string) {
+					t := time.Now().Format("15:04:05")
 					m.peerConnectionsChan <- commands.PeerConnectedMsg{Nickname: id, Time: t}
 				})
 				m.user.Networking.PeerDisconnectedCallback(func(id string) {
+					t := time.Now().Format("15:04:05")
 					m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
 				})
 			}
@@ -358,16 +369,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.msgChan <- commands.ChatMessage{Nickname: msg.Nickname, Time: msg.Time, Text: textMsg}
 
 		if m.user.Data.Setup.AudioNotifications {
-			m.user.Engines.AudioEngine.PlayNotification()
+			cmds = append(cmds, commands.PlayNotificationCmd(m.user.Engines.AudioEngine))
 		}
 		if m.user.Data.Setup.DesktopNotifications {
-			if err := notifications.Notify(msg.Time, msg.Nickname, textForDesktopNotification); err != nil {
-				m.err = err
-				m.state = states.ERR_STATE
-				return m, commands.WaitForRawChatMessageCmd(m.rawMsgChan)
-			}
+			cmds = append(cmds, commands.NotifyCmd(m.user.Data.Personal.Nickname, textForDesktopNotification))
 		}
-		return m, commands.WaitForRawChatMessageCmd(m.rawMsgChan)
+		cmds = append(cmds, commands.WaitForRawChatMessageCmd(m.rawMsgChan))
+		return m, tea.Batch(cmds...)
 
 	case commands.ChatMessage:
 		msg.Nickname = m.coloredNickname(msg.Nickname)
@@ -407,20 +415,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.connections = append(m.connections, nickname)
 		m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: nickname + " joined the chat!"})
+
+		cmds = append(cmds, commands.SetupUserVolumeCmd(m.user, msg.Nickname),
+			commands.SetupUserMuteCmd(m.user, msg.Nickname), m.updateConnectionsList(),
+			commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
+			commands.WaitForPeerConnectionCmd(m.peerConnectionsChan))
 		if !m.connected {
 			m.connected = true
+			cmds = append(cmds, commands.CountMaxTimeInConnectionCmd(m.user, m.stopCountMinutesChan),
+				commands.IncreaseAmountOfConnectionsCmd(m.user))
 			if m.user.Engines.AudioEngine != nil {
 				m.user.Engines.AudioEngine.SetConnected()
 			}
+			m.log.Info("peer connected msg")
 		}
 
-		cmds = append(cmds, commands.SetupUserVolumeCmd(m.user, msg.Nickname),
-			commands.SetupUserMuteCmd(m.user, msg.Nickname), m.updateConnectionsList(), commands.WaitForPeerConnectionCmd(m.peerConnectionsChan))
 		if m.activeTab == 0 || m.prState == states.CONN_STATE {
 			m.activeTab = 1
 			m = m.syncTabState()
 		}
-		m.user.Engines.AudioEngine.PlayNotification()
 
 	case commands.PeerDisconnectedMsg:
 		var colored string
@@ -431,16 +444,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return false
 		})
-		if len(m.connections) == 0 {
-			m.connected = false
-			if m.user.Engines.AudioEngine != nil {
-				m.user.Engines.AudioEngine.SetDisconnected()
-			}
-		}
 
 		m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: colored + " disconnected!"})
-		cmds = append(cmds, m.updateConnectionsList(), commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan))
-		m.user.Engines.AudioEngine.PlayNotification()
+		cmds = append(cmds, m.updateConnectionsList(),
+			commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
+			commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan))
+		if len(m.connections) == 0 && m.connected {
+			m.connected = false
+			select {
+			case m.stopCountMinutesChan <- struct{}{}:
+			default:
+			}
+
+			if m.user.Engines.AudioEngine != nil {
+				if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
+					m.err = err
+					m.state = states.ERR_STATE
+				}
+			}
+		}
 
 	case spinner.TickMsg:
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -607,7 +629,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case "tab", "right":
+		case "tab":
+			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
+				maxTabs := 2
+				if m.isLoggedIn() {
+					maxTabs = 6
+				}
+				if m.activeTab+1 >= maxTabs {
+					m.activeTab = 0
+				} else {
+					m.activeTab++
+				}
+				m = m.syncTabState()
+				m.sideState = 0
+				return m, textinput.Blink
+			}
+			if m.curWindow == windows.START_WINDOW {
+				m.state = states.LOAD_STATE
+				m.curWindow = windows.DEF_WINDOW
+				m = m.syncTabState()
+				m.focusInputs()
+				return m, textinput.Blink
+			}
+
+		case "right":
 			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
 				maxTabs := 2
 				if m.isLoggedIn() {
@@ -754,6 +799,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						m.prState = m.state
 						m.state = states.LOAD_STATE
+						m.log.Info("enter pressed to connect")
 						cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, nick))
 					}
 
@@ -801,14 +847,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					if val != "" && m.user.Networking != nil {
 						cmds = append(cmds, commands.SendInChatCmd(m.user.Networking, toSend))
+						t := time.Now().Format("15:04:05")
 						m.messages = append(m.messages, commands.ChatMessage{
-							Time:     time.Now().Format("15:04:05"),
+							Time:     t,
 							Nickname: lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Personal.Nickname),
 							Text:     val})
 						m.chatTextInput.Reset()
 					}
 				case 2:
 					if m.connected {
+						if m.user.Engines.AudioEngine != nil {
+							if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
+								m.err = err
+								m.state = states.ERR_STATE
+								return m, nil
+							}
+						}
 						m.prState = m.state
 						m.state = states.LOAD_STATE
 						cmds = append(cmds, commands.LeaveCmd(m.user.Networking, m.user.Engines.AudioEngine))

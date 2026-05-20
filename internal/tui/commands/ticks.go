@@ -6,13 +6,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type TickMsg time.Time
-
-type AnimTickMsg time.Time
-
-type PulseTickMsg time.Time
-
-type UpdateTickMsg time.Time
+type (
+	TickMsg       time.Time
+	AnimTickMsg   time.Time
+	PulseTickMsg  time.Time
+	UpdateTickMsg time.Time
+)
 
 func TickCmd() tea.Cmd {
 	return tea.Tick(time.Millisecond*1000, func(t time.Time) tea.Msg {

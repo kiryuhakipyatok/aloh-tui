@@ -26,7 +26,7 @@ type AudioEngine interface {
 	Stop()
 	SetNetworking(netw networking.Networking) error
 	SetConnected()
-	SetDisconnected()
+	SetDisconnected() error
 	ChangeMicrophone(microphone string) error
 	FetchMicrophones() map[string]MicrophoneInfo
 	UpdateMicrophones() error
@@ -319,7 +319,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		}
 		micsInfo[m.Name()] = mi
 
-		if di.IsDefault == 1 { 
+		if di.IsDefault == 1 {
 			ae.CurrentMicrophone = mi
 			ch = format.Channels
 		}
@@ -602,7 +602,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 
 func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 	data := func(pOutputSample, pInputSamples []byte, framecount uint32) {
-		
+
 		if pOutputSample != nil {
 			ae.playbackReady.Store(true)
 			for i := range pOutputSample {
@@ -610,7 +610,6 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 			}
 
 			nativeSamples := len(pOutputSample) / 2
-			
 
 			for len(ae.playbackNativeBuffer) < nativeSamples {
 				for i := 0; i < frameLen; i++ {
@@ -753,6 +752,7 @@ func (ae *audioEngine) sendVoice() {
 			return
 		case voice := <-ae.micDataChan:
 			if ae.mutedMicro.Load() {
+				ae.bytesBuffersPool.Put(voice[:1000])
 				continue
 			}
 
@@ -1001,8 +1001,29 @@ func (ae *audioEngine) SetConnected() {
 	ae.connected.Store(true)
 }
 
-func (ae *audioEngine) SetDisconnected() {
+func (ae *audioEngine) SetDisconnected() error {
 	ae.connected.Store(false)
+	ae.voiceHolder.Store(0)
+	ae.userIsSpeaking.Store(false)
+	// ae.micNativeBuffer = ae.micNativeBuffer[:0]
+	// ae.workMic = ae.workMic[:0]
+	// ae.resampledWorkMic = ae.resampledWorkMic[:0]
+	// ae.monoCaptureBuffer = ae.monoCaptureBuffer
+	if ae.opusEncoder != nil {
+		if err := ae.opusEncoder.Reset(); err != nil {
+			return err
+		}
+	}
+
+	ae.mu.Lock()
+	for _, ua := range ae.usersAudio {
+		ua.data = ua.data[:0]
+		ua.playing = false
+		ua.framesCount = 0
+		ua.isSpeaking.Store(false)
+	}
+	ae.mu.Unlock()
+	return nil
 }
 
 func (ae *audioEngine) FetchMicrophones() map[string]MicrophoneInfo {
