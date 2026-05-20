@@ -32,7 +32,7 @@ func Run(env, version string) {
 	if err := clipboard.Init(); err != nil {
 		l.Fatalf("failed to init clipboard: %v", err)
 	}
-	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithFPS(120))
 	if _, err := p.Run(); err != nil {
 		l.Fatalf("failed to run model: %v", err)
 	}
