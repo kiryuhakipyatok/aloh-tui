@@ -1,14 +1,16 @@
 package commands
 
 import (
-	"aloh-tui/internal/auth"
 	"aloh-tui/internal/entities"
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
+	"aloh-tui/internal/sshclient"
 	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
+	"context"
 	"encoding/json"
 	"slices"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -18,25 +20,43 @@ type AuthMsg struct {
 	Err   error
 }
 
-func AuthCmd(user *entities.User, appLogger *logger.Logger, password []byte) tea.Cmd {
+func AuthCmd(user *entities.User, eventsChan chan sshclient.Event, appLogger *logger.Logger, password []byte) tea.Cmd {
 	return func() tea.Msg {
 		msg := AuthMsg{
-			Typee: auth.DEFAULT,
+			Typee: sshclient.DEFAULT,
 		}
 
-		payload, err := auth.Auth(user.Data.Personal.Nickname, user.Paths.KeysPath, auth.DEFAULT, password)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+
+		client, personalData, err := sshclient.AuthSSHClient(ctx, appLogger, sshclient.SSHClientSetup{
+			Nickname:   user.Data.Personal.Nickname,
+			KeysPath:   user.Paths.KeysPath,
+			Typee:      sshclient.DEFAULT,
+			EventsChan: eventsChan,
+			Password:   password,
+		})
 		if err != nil {
 			msg.Err = err
 			return msg
 		}
+		var pd struct {
+			Nickname     string               `json:"nickname"`
+			RegisterTime time.Time            `json:"registerTime"`
+			FriendsReqs  []entities.FriendReq `json:"friendsReqs"`
+			Friends      []string             `json:"friends"`
+		}
 
-		pd := entities.Personal{}
-		if err := json.Unmarshal(payload, &pd); err != nil {
+		if err := json.Unmarshal(personalData, &pd); err != nil {
 			msg.Err = err
 			return msg
 		}
 
-		user.Data.Personal = pd
+		user.Data.Personal.Nickname = pd.Nickname
+		user.Data.Personal.RegisterTime = pd.RegisterTime.Local().Format("2006-01-02")
+		user.Data.Personal.FriendsReqs = pd.FriendsReqs
+		user.Data.Personal.Friends = pd.Friends
+		user.SSHClient = client
 
 		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
 		if err != nil {
@@ -73,20 +93,30 @@ func AuthCmd(user *entities.User, appLogger *logger.Logger, password []byte) tea
 	}
 }
 
-func RegisterCmd(user *entities.User, appLogger *logger.Logger, password, repPassword []byte) tea.Cmd {
+func RegisterCmd(user *entities.User, eventsChan chan sshclient.Event, appLogger *logger.Logger, password, repPassword []byte) tea.Cmd {
 	return func() tea.Msg {
 		msg := AuthMsg{
-			Typee: auth.REGISTER,
+			Typee: sshclient.REGISTER,
 		}
 		if !slices.Equal(password, repPassword) {
 			msg.Err = errs.ErrPasswordsNotEqual
 			return msg
 		}
-		if _, err := auth.Auth(user.Data.Personal.Nickname, user.Paths.KeysPath, auth.REGISTER, password); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		client, _, err := sshclient.AuthSSHClient(ctx, appLogger, sshclient.SSHClientSetup{
+			Nickname:   user.Data.Personal.Nickname,
+			KeysPath:   user.Paths.KeysPath,
+			Typee:      sshclient.REGISTER,
+			EventsChan: eventsChan,
+			Password:   password,
+		})
+		if err != nil {
 			msg.Err = err
 			return msg
 		}
 		user.Data.Setup.SoftDenoise = true
+		user.SSHClient = client
 		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
 		if err != nil {
 			msg.Err = err
@@ -124,17 +154,43 @@ func RegisterCmd(user *entities.User, appLogger *logger.Logger, password, repPas
 	}
 }
 
-func LoginCmd(user *entities.User, appLogger *logger.Logger, secret []byte) tea.Cmd {
+func LoginCmd(user *entities.User, eventsChan chan sshclient.Event, appLogger *logger.Logger, secret []byte) tea.Cmd {
 	return func() tea.Msg {
 		msg := AuthMsg{
-			Typee: auth.LOGIN,
+			Typee: sshclient.LOGIN,
 		}
-		regTime, err := auth.Auth(user.Data.Personal.Nickname, user.Paths.KeysPath, auth.LOGIN, secret)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		client, personalData, err := sshclient.AuthSSHClient(ctx, appLogger, sshclient.SSHClientSetup{
+			Nickname:   user.Data.Personal.Nickname,
+			KeysPath:   user.Paths.KeysPath,
+			Typee:      sshclient.LOGIN,
+			EventsChan: eventsChan,
+			Password:   nil,
+		})
 		if err != nil {
 			msg.Err = err
 			return msg
 		}
-		user.Data.Personal.RegisterTime = string(regTime)
+
+		var pd struct {
+			Nickname     string               `json:"nickname"`
+			RegisterTime time.Time            `json:"registerTime"`
+			FriendsReqs  []entities.FriendReq `json:"friendsReqs"`
+			Friends      []string             `json:"friends"`
+		}
+
+		if err := json.Unmarshal(personalData, &pd); err != nil {
+			msg.Err = err
+			return msg
+		}
+
+		user.Data.Personal.Nickname = pd.Nickname
+		user.Data.Personal.RegisterTime = pd.RegisterTime.Local().Format("2006-01-02")
+		user.Data.Personal.FriendsReqs = pd.FriendsReqs
+		user.Data.Personal.Friends = pd.Friends
+		user.SSHClient = client
+
 		user.Data.Setup.SoftDenoise = true
 
 		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)

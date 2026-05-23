@@ -14,9 +14,14 @@ func (m *Model) focusInputs() {
 		m.regTextInputs[m.cursor].Focus()
 		m.regTextInputs[m.cursor].PromptStyle = ps
 	case states.CONN_STATE:
-		if m.sideState == 1 {
-			m.connTextInputs.Focus()
-			m.connTextInputs.PromptStyle = ps
+		if m.sideState == states.RIGHT_STATE {
+			m.friendsInputs[0].Focus()
+			m.friendsInputs[0].PromptStyle = ps
+		}
+	case states.FRIEND_STATE:
+		if m.sideState == states.RIGHT_STATE {
+			m.friendsInputs[1].Focus()
+			m.friendsInputs[1].PromptStyle = ps
 		}
 	case states.CHAT_STATE:
 		m.chatTextInput.Focus()
@@ -25,8 +30,10 @@ func (m *Model) focusInputs() {
 		m.logingInput[m.cursor].Focus()
 		m.logingInput[m.cursor].PromptStyle = ps
 	case states.PROFILE_STATE:
-		m.profileInputs[m.cursor].Focus()
-		m.profileInputs[m.cursor].PromptStyle = ps
+		if m.cursor < len(m.profileInputs) {
+			m.profileInputs[m.cursor].Focus()
+			m.profileInputs[m.cursor].PromptStyle = ps
+		}
 	}
 }
 
@@ -37,9 +44,11 @@ func (m *Model) unfocusInputs() {
 		m.regTextInputs[i].TextStyle = lipgloss.NewStyle()
 	}
 
-	m.connTextInputs.Blur()
-	m.connTextInputs.PromptStyle = lipgloss.NewStyle()
-	m.connTextInputs.TextStyle = lipgloss.NewStyle()
+	for i := range m.friendsInputs {
+		m.friendsInputs[i].Blur()
+		m.friendsInputs[i].PromptStyle = lipgloss.NewStyle()
+		m.friendsInputs[i].TextStyle = lipgloss.NewStyle()
+	}
 
 	for i := range m.logingInput {
 		m.logingInput[i].Blur()

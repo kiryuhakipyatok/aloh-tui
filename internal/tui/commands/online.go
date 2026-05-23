@@ -2,11 +2,8 @@ package commands
 
 import (
 	"aloh-tui/internal/networking"
-	"slices"
-	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"golang.org/x/sync/errgroup"
 )
 
 type OnlineMsg struct {
@@ -14,40 +11,55 @@ type OnlineMsg struct {
 	Err    error
 }
 
-func FetchOnlineCmd(netw networking.Networking, nickname string) tea.Cmd {
+func FetchOnlineFriendsCmd(netw networking.Networking, nicknames []string) tea.Cmd {
 	return func() tea.Msg {
 		msg := OnlineMsg{}
-		online, err := netw.FetchCurrentOnline()
+		online, err := netw.FetchOnlineFriends(nicknames)
 		if err != nil {
 			msg.Err = err
 			return msg
 		}
 
-		online = slices.DeleteFunc(online, func(v string) bool {
-			return v == nickname
-		})
-
-		msg.Online = make(map[string][]string, len(online))
-		var wg errgroup.Group
-		wg.SetLimit(15)
-		var mu sync.Mutex
-		for _, v := range online {
-			wg.Go(func() error {
-				sessions, err := netw.FetchCurrentConnects(v)
-				if err != nil {
-					return err
-				}
-				mu.Lock()
-				msg.Online[v] = sessions
-				mu.Unlock()
-				return nil
-			})
-		}
-
-		if err := wg.Wait(); err != nil {
-			msg.Err = err
-		}
+		msg.Online = online
 
 		return msg
 	}
 }
+
+// func FetchOnlineCmd(netw networking.Networking, nickname string) tea.Cmd {
+// 	return func() tea.Msg {
+// 		msg := OnlineMsg{}
+// 		online, err := netw.FetchCurrentOnline()
+// 		if err != nil {
+// 			msg.Err = err
+// 			return msg
+// 		}
+
+// 		online = slices.DeleteFunc(online, func(v string) bool {
+// 			return v == nickname
+// 		})
+
+// 		msg.Online = make(map[string][]string, len(online))
+// 		var wg errgroup.Group
+// 		wg.SetLimit(15)
+// 		var mu sync.Mutex
+// 		for _, v := range online {
+// 			wg.Go(func() error {
+// 				sessions, err := netw.FetchCurrentConnects(v)
+// 				if err != nil {
+// 					return err
+// 				}
+// 				mu.Lock()
+// 				msg.Online[v] = sessions
+// 				mu.Unlock()
+// 				return nil
+// 			})
+// 		}
+
+// 		if err := wg.Wait(); err != nil {
+// 			msg.Err = err
+// 		}
+
+// 		return msg
+// 	}
+// }

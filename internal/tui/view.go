@@ -218,7 +218,7 @@ func (m Model) View() string {
 		} else {
 			switch m.activeTab {
 			case 0:
-				uiContent = m.renderConnectTab(windowInnerW, windowInnerH)
+				uiContent = m.renderFriendsTab(windowInnerW, windowInnerH)
 			case 1:
 				uiContent = m.renderChatTab(windowInnerW, windowInnerH, cText)
 			case 2:
@@ -285,7 +285,7 @@ func (m Model) renderVoiceTab(w, h int) string {
 		currentColor := pulse[m.pulseFrame%len(pulse)]
 		textStyle := lipgloss.NewStyle().MaxWidth(leftW).Foreground(lipgloss.Color(currentColor)).Render(aloneLogo)
 		leftMiddleSect = lipgloss.Place(
-			rightW,
+			leftW,
 			leftMiddleHeight,
 			lipgloss.Center,
 			lipgloss.Center,
@@ -378,35 +378,67 @@ func (m Model) renderVideoTab(w, h int) string {
 	return m.zone.Mark("videoW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, safeTruncate(lipgloss.NewStyle().Foreground(cDim).Render("~ video functionality coming soon ~"), w)))
 }
 
-func (m Model) renderConnectTab(w, h int) string {
+func (m Model) renderFriendsTab(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblLeft := m.headerActiveStyle.Render("► online friends")
-	m.onlineList.SetSize(leftW-2, h-2)
-	onlineView := lipgloss.JoinHorizontal(lipgloss.Left, lipgloss.NewStyle().PaddingLeft(2).Render(m.onlineList.View()))
+	lblTopLeft := m.headerActiveStyle.Render("► online friends")
 
-	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(onlineView))
+	leftTopContent := lipgloss.NewStyle().PaddingLeft(2).Render("zero friends online")
+	if len(m.onlineList.Items()) > 0 {
+		m.onlineList.SetSize(leftW-2, h-2)
+
+		leftTopContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.onlineList.View())
+	}
+
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblTopLeft, "", leftTopContent)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
-	lblRight := m.headerActiveStyle.Render("► connect")
-	var rightContent string
+	lblTopRight := m.headerActiveStyle.Render("► connect to friend")
+
+	rightTopH := (h - 3) / 2
+	rightBotH := h - rightTopH - 3
+
+	var rightTopContent string
 	if m.state == states.LOAD_STATE && m.prState == states.CONN_STATE {
-		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(m.spinner.View() + "connecting to friend...")
+		rightTopContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(m.spinner.View() + "connecting to friend...")
 	} else if m.connected {
-		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(m.themeColor).Render("you are already connected.\ngo to voice tab to manage")
+		rightTopContent = safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(m.themeColor).
+			Render("you are already connected.\ngo to voice tab to manage"), rightW)
 	} else {
-		m.connTextInputs.Width = max(1, rightW-4)
-		rightContent = lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("enter nickname:"), "",
-			lipgloss.NewStyle().PaddingLeft(2).Render(m.connTextInputs.View()),
+		m.friendsInputs[0].Width = max(1, rightW-4)
+		rightTopContent = lipgloss.JoinVertical(lipgloss.Left,
+			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("enter nickname to:"),
+			"",
+			lipgloss.NewStyle().PaddingLeft(2).Render(m.friendsInputs[0].View()),
 		)
 	}
-	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", rightContent)
+
+	lblBottomRight := m.headerActiveStyle.Render("► add new friend")
+	var rightBottomContent string
+	if m.state == states.LOAD_STATE && m.prState == states.FRIEND_STATE {
+		rightBottomContent = safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(m.spinner.View()+"sending friend request..."), rightW)
+	} else {
+		m.friendsInputs[1].Width = max(1, rightW-4)
+		rightBottomContent = lipgloss.JoinVertical(lipgloss.Left,
+			safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("enter nickname to:"), rightW),
+			"",
+			lipgloss.NewStyle().PaddingLeft(2).Render(m.friendsInputs[1].View()),
+		)
+	}
+
+	rightTopBox := lipgloss.JoinVertical(lipgloss.Left, lblTopRight, "", rightTopContent)
+	rightTop := lipgloss.Place(rightW, rightTopH, lipgloss.Left, lipgloss.Top, rightTopBox)
+	rightBotBox := lipgloss.JoinVertical(lipgloss.Left, lblBottomRight, "", rightBottomContent)
+	rightBot := lipgloss.Place(rightW, rightBotH, lipgloss.Left, lipgloss.Top, rightBotBox)
+	dividerHorizPane := lipgloss.Place(rightW, 1, lipgloss.Center, lipgloss.Center, lipgloss.NewStyle().Foreground(cDim).Render(horizLine(rightW)))
+	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightTop, dividerHorizPane, rightBot)
+
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
-	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
-	return m.zone.Mark("friendsW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
+	dividerVertPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+
+	return m.zone.Mark("friendsW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerVertPane, rightPane))
 }
 
 func (m Model) renderSettingsView(w, h int) string {
@@ -432,9 +464,10 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblLeft := m.headerActiveStyle.Render("► profile info")
-	leftBox := lipgloss.JoinVertical(lipgloss.Left,
-		lblLeft, "",
+	leftTopH := (h - 3) / 2
+	leftBotH := h - leftTopH - 3
+	lblTopLeft := m.headerActiveStyle.Render("► profile info")
+	leftTopBox := lipgloss.JoinVertical(lipgloss.Left, lblTopLeft, "",
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("nickname:"),
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(m.user.Data.Personal.Nickname),
 		"",
@@ -447,6 +480,23 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("best friend tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.BestFriendTag)),
 		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[1].View()),
 	)
+
+	lblBotLeft := m.headerActiveStyle.Render("► friend requests")
+	var leftBotContent string
+	if m.state == states.LOAD_STATE && m.prState == states.PROFILE_STATE {
+		leftBotContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.spinner.View() + "accepting friend request...")
+	} else if len(m.friendsReqsList.Items()) <= 0 {
+		leftBotContent = lipgloss.NewStyle().PaddingLeft(2).Render("zero friend request")
+	} else {
+		m.friendsReqsList.SetSize(leftW-2, leftBotH-2)
+		leftBotContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.friendsReqsList.View())
+	}
+	leftBotBox := lipgloss.JoinVertical(lipgloss.Left, lblBotLeft, "", leftBotContent)
+	leftBot := lipgloss.Place(leftW, leftTopH, lipgloss.Left, lipgloss.Top, leftBotBox)
+	leftTop := lipgloss.Place(leftW, leftBotH, lipgloss.Left, lipgloss.Top, leftTopBox)
+	dividerHorizPane := lipgloss.Place(leftW, 1, lipgloss.Center, lipgloss.Center, lipgloss.NewStyle().Foreground(cDim).Render(horizLine(leftW)))
+
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, leftTop, dividerHorizPane, leftBot)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	renderStatisctic := func(title, data string) string {
@@ -456,9 +506,15 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 	}
 
 	lblRight := m.headerActiveStyle.Render("► statistics")
+	friendsView := "zero friends"
+	if len(m.user.Data.Personal.Friends) > 0 {
+		friendsView = strings.Join(m.user.Data.Personal.Friends, ", ")
+	}
 	rightBox := lipgloss.JoinVertical(lipgloss.Left,
 		lblRight, "",
-		renderStatisctic("amount of friends: ", fmt.Sprintf("%d", m.user.Data.Statistics.AmountOfFriends)),
+		renderStatisctic("amount of friends: ", fmt.Sprintf("%d", len(m.user.Data.Personal.Friends))),
+		"",
+		renderStatisctic("friends: ", friendsView),
 		"",
 		renderStatisctic("max time in connection: ", fmt.Sprintf("%d minutes", m.user.Data.Statistics.MaxTimeInConnetion)),
 		"",
@@ -738,6 +794,12 @@ func vertLine(h int) string {
 		return ""
 	}
 	return strings.Repeat("│\n", h-1) + "│"
+}
+func horizLine(w int) string {
+	if w <= 0 {
+		return ""
+	}
+	return strings.Repeat("—", w-1) + "—"
 }
 
 func safeTruncate(s string, maxW int) string {

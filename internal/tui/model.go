@@ -1,10 +1,10 @@
 package tui
 
 import (
-	"aloh-tui/internal/auth"
 	"aloh-tui/internal/entities"
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
+	"aloh-tui/internal/sshclient"
 	"aloh-tui/internal/tui/commands"
 	"aloh-tui/internal/tui/components/states"
 	"aloh-tui/internal/tui/components/titles"
@@ -12,6 +12,7 @@ import (
 	"aloh-tui/internal/utils"
 	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -54,12 +55,13 @@ type Model struct {
 
 	curWindow uint
 
-	regTextInputs  []textinput.Model
-	connTextInputs textinput.Model
-	chatTextInput  textinput.Model
-	logingInput    []textinput.Model
-
+	regTextInputs []textinput.Model
+	chatTextInput textinput.Model
+	logingInput   []textinput.Model
+	friendsInputs []textinput.Model
 	profileInputs []textinput.Model
+
+	eventsChan chan sshclient.Event
 
 	defaultThemeColor string
 
@@ -81,6 +83,8 @@ type Model struct {
 
 	muteState string
 
+	friendsReqs []entities.FriendReq
+
 	messages []commands.ChatMessage
 
 	zone *bz.Manager
@@ -97,6 +101,8 @@ type Model struct {
 	onlineDelegate      list.DefaultDelegate
 	settingsList        list.Model
 	settingsDelegate    list.DefaultDelegate
+	friendsReqsList     list.Model
+	friendsReqsDelegate list.DefaultDelegate
 
 	connected bool
 
@@ -142,13 +148,17 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		logoAnim:      make([]string, 0, 4),
 		notConnAnim:   make([]string, 0, 4),
 		profileInputs: make([]textinput.Model, 2),
-		messages:      []commands.ChatMessage{},
+		friendsInputs: make([]textinput.Model, 2),
+		messages:      make([]commands.ChatMessage, 0, 20),
+
+		eventsChan: make(chan sshclient.Event, 50),
 
 		defaultThemeColor: "#A6E22E",
 
 		spinner: sp,
 
-		online: make(map[string][]string, 5),
+		online:      make(map[string][]string, 5),
+		friendsReqs: make([]entities.FriendReq, 0, 3),
 
 		stopCountMinutesChan: make(chan struct{}, 1),
 
@@ -156,7 +166,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		zone: bz.New(),
 
-		connections: make([]string, 0),
+		connections: make([]string, 0, 3),
 
 		userColor: randomcolor.GetRandomColorInHex(),
 
@@ -200,17 +210,47 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		logNickname := logger.Attr("nickname", user.Data.Personal.Nickname)
 
 		log.Info("authorize user with existing user data", logNickname)
-		if _, err := auth.Auth(user.Data.Personal.Nickname, keysPath, auth.DEFAULT, nil); err != nil {
-			log.Error("err when auth", logger.Err(err))
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		client, personalData, err := sshclient.AuthSSHClient(ctx, appLogger, sshclient.SSHClientSetup{
+			Nickname:   user.Data.Personal.Nickname,
+			KeysPath:   user.Paths.KeysPath,
+			Typee:      sshclient.DEFAULT,
+			EventsChan: m.eventsChan,
+			Password:   nil,
+		})
+		if err != nil {
+			log.Error("err when sshclient", logger.Err(err))
 			if !errors.Is(err, errs.ErrAuth) {
-				log.Error("err auth", logger.Err(err))
+				log.Error("err sshclient", logger.Err(err))
 				m.err = err
 				m.state = states.ERR_STATE
 				user.Data.Personal.Nickname = ""
 				user.Data.Personal.RegisterTime = ""
 			}
 		} else {
+			var pd struct {
+				Nickname     string               `json:"nickname"`
+				RegisterTime time.Time            `json:"registerTime"`
+				FriendsReqs  []entities.FriendReq `json:"friendsReqs"`
+				Friends      []string             `json:"friends"`
+			}
+
+			if err := json.Unmarshal(personalData, &pd); err != nil {
+				log.Error("failed to unmarshal users's personal data", logger.Err(err), logNickname)
+				return nil, err
+			}
+
+			m.friendsReqs = pd.FriendsReqs
+			log.Info("len", len(m.friendsReqs))
+
+			user.Data.Personal.Nickname = pd.Nickname
+			user.Data.Personal.RegisterTime = pd.RegisterTime.Local().Format("2006-01-02")
+			user.Data.Personal.FriendsReqs = pd.FriendsReqs
+			user.Data.Personal.Friends = pd.Friends
+			user.SSHClient = client
 			log.Info("user authorized successfully, networking setting...", logNickname)
+
 			networking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
 			if err != nil {
 				log.Error("failed to create networking", logger.Err(err), logNickname)
@@ -252,7 +292,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 				t := time.Now().Format("15:04:05")
 				m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
 			})
-
+			user.SSHClient = client
 			user.Engines.AudioEngine = audioEngine
 			user.Networking = networking
 
@@ -268,6 +308,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	m.setupConnestionsList()
 	m.setupOnlineList()
+	m.setupFriendsReqsList()
 
 	for i := range m.regTextInputs {
 		ti := textinput.New()
@@ -298,9 +339,17 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		m.logingInput[i] = ti
 	}
 
-	connTextInput := textinput.New()
-	connTextInput.Placeholder = "enter nickname"
-	m.connTextInputs = connTextInput
+	for i := range m.friendsInputs {
+		ti := textinput.New()
+		ti.CharLimit = 32
+		switch i {
+		case 0:
+			ti.Placeholder = "connect to friend"
+		case 1:
+			ti.Placeholder = "send friend request"
+		}
+		m.friendsInputs[i] = ti
+	}
 
 	chatInput := textinput.New()
 	chatInput.Placeholder = "type a message..."
@@ -327,8 +376,10 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
 	cmds = append(cmds, commands.AnimTickCmd(), commands.PulseTickCmd(), m.spinner.Tick)
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-		cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
+		m.log.Info("friends", m.user.Data.Personal.Friends)
+		cmds = append(cmds, commands.FetchOnlineFriendsCmd(m.user.Networking, m.user.Data.Personal.Friends),
 			commands.WaitForChatMessageCmd(m.msgChan),
+			commands.WaitForEventMessageCmd(m.eventsChan),
 			commands.WaitForRawChatMessageCmd(m.rawMsgChan),
 			commands.WaitForPeerConnectionCmd(m.peerConnectionsChan),
 			commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan),
@@ -345,5 +396,9 @@ func (m *Model) Clean() {
 
 	if m.user.Networking != nil {
 		m.user.Networking.Close()
+	}
+
+	if m.user.SSHClient != nil {
+		m.user.SSHClient.Close()
 	}
 }

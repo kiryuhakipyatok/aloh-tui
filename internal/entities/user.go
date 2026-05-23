@@ -3,6 +3,7 @@ package entities
 import (
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
+	"aloh-tui/internal/sshclient"
 	"encoding/json"
 	"os"
 	"sync"
@@ -14,6 +15,7 @@ type User struct {
 	Paths      Paths
 	Networking networking.Networking
 	Engines    Engines
+	SSHClient  sshclient.SSHClient
 	mu         sync.Mutex
 }
 
@@ -30,7 +32,7 @@ func NewUser(logFilePath, keysPath, dataFilePath, defColor string) *User {
 				ThemeColor:           defColor,
 				AudioNotifications:   true,
 				DesktopNotifications: true,
-				BestFriendTag:       "👑",
+				BestFriendTag:        "👑",
 			},
 			Statistics: Statistics{
 				BestFriend: BestFriend{
@@ -56,18 +58,8 @@ func (u *User) UpdateUserJSON() error {
 	return nil
 }
 
-func (u *User) IncreaseAmountOfFriends() error {
-	u.Data.Statistics.AmountOfFriends++
-	if err := u.UpdateUserJSON(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (u *User) DecreaseAmountOfFriends() error {
-	if u.Data.Statistics.AmountOfFriends > 0 {
-		u.Data.Statistics.AmountOfFriends--
-	}
+func (u *User) IncreaseAmountOfFriends(nickanme string) error {
+	u.Data.Personal.Friends = append(u.Data.Personal.Friends, nickanme)
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -139,6 +131,13 @@ type Data struct {
 type Personal struct {
 	Nickname     string `json:"nickname"`
 	RegisterTime string `json:"registerTime"`
+	FriendsReqs  []FriendReq
+	Friends      []string
+}
+
+type FriendReq struct {
+	Nickname string    `json:"nickname"`
+	ReqTime  time.Time `json:"reqTime"`
 }
 
 type Paths struct {
@@ -165,7 +164,7 @@ type Setup struct {
 	ThemeColor           string                 `json:"theme-color"`
 	DesktopNotifications bool                   `json:"desktop-notifications"`
 	AudioNotifications   bool                   `json:"audio-notifications"`
-	BestFriendTag       string                 `json:"best-friend-tag"`
+	BestFriendTag        string                 `json:"best-friend-tag"`
 }
 
 type UsersSetup struct {
@@ -175,12 +174,12 @@ type UsersSetup struct {
 }
 
 type Statistics struct {
-	AmountOfFriends              uint        `json:"amount-of-friends"`
-	MaxTimeInConnetion           uint        `json:"max-time-in-connections"`
-	AmountOfMessages             uint        `json:"amount-of-messages"`
-	AmountOfMinutesInConnections uint        `json:"minutes-in-connections"`
-	AmountOfConnections          uint        `json:"amount-of-connections"`
-	BestFriend                   BestFriend  `json:"best-friend"`
+	AmountOfFriends              uint       `json:"amount-of-friends"`
+	MaxTimeInConnetion           uint       `json:"max-time-in-connections"`
+	AmountOfMessages             uint       `json:"amount-of-messages"`
+	AmountOfMinutesInConnections uint       `json:"minutes-in-connections"`
+	AmountOfConnections          uint       `json:"amount-of-connections"`
+	BestFriend                   BestFriend `json:"best-friend"`
 }
 
 type BestFriend struct {

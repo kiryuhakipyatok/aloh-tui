@@ -46,7 +46,8 @@ func CastError(err error) string {
 		}
 	}
 
-	if errors.Is(err, errs.ErrAuth) || errors.Is(err, errs.ErrRegister) || errors.Is(err, errs.ErrLogin) {
+	if errors.Is(err, errs.ErrAuth) || errors.Is(err, errs.ErrRegister) || errors.Is(err, errs.ErrLogin) ||
+	errors.Is(err, errs.ErrAlreadyExists) || errors.Is(err, errs.ErrNotFound) {
 		resErr = err.Error()
 	}
 	return resErr

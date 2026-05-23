@@ -1,4 +1,4 @@
-package ssh
+package sshclient
 
 import (
 	"path/filepath"

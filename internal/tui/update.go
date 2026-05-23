@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"aloh-tui/internal/auth"
 	"aloh-tui/internal/entities"
+	"aloh-tui/internal/sshclient"
 	"aloh-tui/internal/tui/commands"
 	"aloh-tui/internal/tui/components/lists"
 	"aloh-tui/internal/tui/components/states"
@@ -39,7 +39,6 @@ const (
 
 func (m Model) syncTabState() Model {
 	m.curWindow = windows.DEF_WINDOW
-	m.cursor = 0
 	if !m.isLoggedIn() {
 		//if m.state != states.LOAD_STATE {
 		switch m.activeTab {
@@ -57,10 +56,22 @@ func (m Model) syncTabState() Model {
 			if m.connected {
 				m.state = states.DEF_STATE
 			} else {
-				m.state = states.CONN_STATE
+				switch m.sideState {
+				case states.LEFT_STATE:
+					m.state = states.CONN_STATE
+					m.onlineList.Select(0)
+					m.unfocusInputs()
+				case states.RIGHT_STATE:
+					switch m.cursor {
+					case 0:
+						m.state = states.CONN_STATE
+					case 1:
+						m.state = states.FRIEND_STATE
+					}
+					m.focusInputs()
+				}
 			}
-			m.onlineList.Select(0)
-			m.unfocusInputs()
+
 		case 1:
 			m.state = states.CHAT_STATE
 			m.focusInputs()
@@ -72,7 +83,14 @@ func (m Model) syncTabState() Model {
 			}
 		case 4:
 			m.state = states.PROFILE_STATE
-			m.focusInputs()
+			if m.cursor < len(m.profileInputs) {
+				m.friendsReqsList.Select(-1)
+				m.focusInputs()
+			} else if m.cursor == len(m.profileInputs) {
+				m.friendsReqsList.Select(0)
+				m.unfocusInputs()
+			}
+
 		case 5:
 			m.microphonesList.Select(-1)
 			m.settingsList.Select(0)
@@ -103,7 +121,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = states.LOAD_STATE
 					m.curWindow = windows.DEF_WINDOW
 					if m.user.Data.Personal.Nickname != "" && m.user.Data.Personal.RegisterTime != "" && m.user.Networking == nil {
-						cmds = append(cmds, commands.AuthCmd(m.user, m.log, nil))
+						cmds = append(cmds, commands.AuthCmd(m.user, m.eventsChan, m.log, nil))
 					} else {
 						m = m.syncTabState()
 					}
@@ -126,7 +144,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else if m.zone.Get("settingsT").InBounds(msg) || m.zone.Get("settingsW").InBounds(msg) {
 						m.activeTab = 5
 					} else {
-						m.sideState = 0
+						m.sideState = states.LEFT_STATE
 						m = m.syncTabState()
 						m.unfocusInputs()
 						return m, nil
@@ -160,6 +178,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// 		//m.updateTick = false
 	// 		return m, nil
 	// 	}
+	case sshclient.Event:
+		nickname := msg.Data
+		switch msg.Type {
+		case sshclient.NEW_FRIEND:
+			m.friendsReqs = append(m.friendsReqs, entities.FriendReq{Nickname: nickname})
+			cmds = append(cmds, m.updateFriendsReqList())
+		case sshclient.ACCEPT_FRIEND:
+			cmds = append(cmds, commands.IncreaseAmountOfFriendsCmd(m.user, nickname))
+		}
+		cmds = append(cmds, commands.WaitForEventMessageCmd(m.eventsChan))
 
 	case commands.ThemeColorMsg:
 		err := msg.Err
@@ -182,10 +210,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.onlineDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 			m.onlineDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
+			m.friendsReqsDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+			m.friendsReqsDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+
 			m.microphonesList.SetDelegate(m.microphonesDelegate)
 			m.settingsList.SetDelegate(m.settingsDelegate)
 			m.connectionsList.SetDelegate(m.connectionsDelegate)
 			m.onlineList.SetDelegate(m.onlineDelegate)
+			m.friendsReqsList.SetDelegate(m.friendsReqsDelegate)
 
 			if m.state == states.LOAD_STATE {
 				m.state = m.prState
@@ -206,6 +238,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			cmd = m.updateConnectionsList()
 			return m, cmd
+		}
+
+	case commands.FriendsMsg:
+		err := msg.Err
+		if err != nil {
+			m.err = err
+			m.state = states.ERR_STATE
+		} else {
+			if m.state == states.LOAD_STATE {
+				m.state = m.prState
+			}
+			if msg.Typee != sshclient.NEW_FRIEND {
+				for i, fr := range m.friendsReqs {
+					if fr.Nickname == msg.Nickname {
+						m.friendsReqs = append(m.friendsReqs[:i], m.friendsReqs[i+1:]...)
+						break
+					}
+				}
+				cmd = m.updateFriendsReqList()
+				return m, cmd
+			}
 		}
 
 	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg,
@@ -310,7 +363,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-			if msg.Typee != auth.DEFAULT {
+			if msg.Typee != sshclient.DEFAULT {
 				m.user.Data.Personal = entities.Personal{}
 			}
 		} else {
@@ -341,9 +394,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			cmds = append(cmds,
 				commands.WaitForChatMessageCmd(m.msgChan), commands.WaitForRawChatMessageCmd(m.rawMsgChan),
+				commands.WaitForEventMessageCmd(m.eventsChan),
 				commands.WaitForPeerConnectionCmd(m.peerConnectionsChan),
 				commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan),
-				commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname),
+				commands.FetchOnlineFriendsCmd(m.user.Networking, m.user.Data.Personal.Friends),
 				commands.TickCmd(), textinput.Blink)
 		}
 
@@ -504,8 +558,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.TickMsg:
 		if m.state != states.LOAD_STATE {
-			if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" {
-				cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname))
+			if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" && len(m.user.Data.Personal.Friends) > 0 {
+				cmds = append(cmds, commands.FetchOnlineFriendsCmd(m.user.Networking, m.user.Data.Personal.Friends))
 			}
 			if m.user.Engines.AudioEngine != nil && m.activeTab == 5 {
 				cmds = append(cmds, commands.UpdateMicrophonesCmd(m.user))
@@ -598,6 +652,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.updateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted))
 				}
 			}
+		case "alt+x", "alt+X", "alt+ч", "alt+Ч":
+			if m.isLoggedIn() && m.activeTab == 4 && m.friendsReqsList.Index() >= 0 {
+				if i, ok := m.friendsReqsList.SelectedItem().(lists.FriendReqItem); ok {
+					cmds = append(cmds, commands.DenyFriendRequestCmd(m.user, i.Nickname))
+				}
+			}
 
 		case "alt+up":
 			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
@@ -632,8 +692,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "alt+left":
 			if m.isLoggedIn() && (m.activeTab == 0 || m.activeTab == 5) {
-				if m.sideState == 1 {
-					m.sideState = 0
+				if m.sideState == states.RIGHT_STATE {
+					m.sideState = states.LEFT_STATE
 					m.unfocusInputs()
 
 					switch m.activeTab {
@@ -648,12 +708,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "alt+right":
 			if m.isLoggedIn() && (m.activeTab == 0 || m.activeTab == 5) {
-				if m.sideState == 0 {
-					m.sideState = 1
+				if m.sideState == states.LEFT_STATE {
+					m.sideState = states.RIGHT_STATE
 
 					switch m.activeTab {
 					case 0:
 						m.onlineList.Select(-1)
+						m.friendsReqsList.Select(-1)
 						m.focusInputs()
 					case 5:
 						m.microphonesList.Select(0)
@@ -665,6 +726,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "tab":
 			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
+				m.cursor = 0
 				maxTabs := 2
 				if m.isLoggedIn() {
 					maxTabs = 6
@@ -675,7 +737,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.activeTab++
 				}
 				m = m.syncTabState()
-				m.sideState = 0
+				m.sideState = states.LEFT_STATE
 				return m, textinput.Blink
 			}
 			if m.curWindow == windows.START_WINDOW {
@@ -688,6 +750,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "right":
 			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
+				m.cursor = 0
 				maxTabs := 2
 				if m.isLoggedIn() {
 					maxTabs = 6
@@ -698,12 +761,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.activeTab++
 				}
 				m = m.syncTabState()
-				m.sideState = 0
+				m.sideState = states.LEFT_STATE
 				return m, textinput.Blink
 			}
 
 		case "shift+tab", "left":
 			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
+				m.cursor = 0
 				maxTabs := 2
 				if m.isLoggedIn() {
 					maxTabs = 6
@@ -714,7 +778,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.activeTab--
 				}
 				m = m.syncTabState()
-				m.sideState = 0
+				m.sideState = states.LEFT_STATE
 				return m, textinput.Blink
 			}
 
@@ -740,32 +804,73 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, textinput.Blink
 
 		case "up":
-			if (!m.isLoggedIn() || (m.activeTab != 0 && m.activeTab != 2 && m.activeTab != 5)) && m.cursor > 0 {
-				m.cursor--
-				m.focusInputs()
+			var changed bool
+			if !m.isLoggedIn() && m.cursor > 0 {
+				if m.cursor > 0 {
+					m.cursor--
+					changed = true
+				}
+
+			} else if m.cursor > 0 {
+				switch m.activeTab {
+				case 0:
+					if m.sideState == states.RIGHT_STATE {
+						m.cursor--
+						changed = true
+					}
+				case 4:
+					if m.cursor == len(m.profileInputs) {
+						if m.friendsReqsList.Index() <= 0 {
+							m.cursor--
+							changed = true
+						}
+					} else {
+						m.cursor--
+						changed = true
+					}
+				}
+			}
+			if changed {
+				m = m.syncTabState()
 				return m, textinput.Blink
 			}
 
 		case "down":
-			if !m.isLoggedIn() || (m.activeTab != 0 && m.activeTab != 2 && m.activeTab != 5) {
-				if m.activeTab == 0 && m.cursor < len(m.regTextInputs)-1 {
-					m.cursor++
-				} else {
-					switch m.activeTab {
-					case 1:
-						if m.cursor < len(m.logingInput)-1 {
-							m.cursor++
-						}
-					case 4:
-						if m.cursor < len(m.profileInputs)-1 {
-							m.cursor++
-						}
+			var changed bool
+			if !m.isLoggedIn() {
+				switch m.activeTab {
+				case 0:
+					if m.cursor < len(m.regTextInputs)-1 {
+						m.cursor++
+						changed = true
+					}
+				case 1:
+					if m.cursor < len(m.logingInput)-1 {
+						m.cursor++
+						changed = true
 					}
 				}
 
-				m.focusInputs()
+			} else {
+				switch m.activeTab {
+				case 0:
+					if m.sideState == states.RIGHT_STATE && m.cursor < len(m.friendsInputs)-1 {
+						m.cursor++
+						changed = true
+					}
+				case 4:
+					if m.cursor < len(m.profileInputs) {
+						m.cursor++
+						changed = true
+					}
+				}
+			}
+			if changed {
+				m = m.syncTabState()
 				return m, textinput.Blink
 			}
+			// m.focusInputs()
+			// return m, textinput.Blink
 
 		case "enter":
 			if m.state == states.LOAD_STATE {
@@ -802,7 +907,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					repPassword := m.regTextInputs[2].Value()
 					m.user.Data.Personal.RegisterTime = time.Now().Format("2006-01-02")
 
-					cmds = append(cmds, commands.RegisterCmd(m.user, m.log, []byte(password), []byte(repPassword)))
+					cmds = append(cmds, commands.RegisterCmd(m.user, m.eventsChan, m.log, []byte(password), []byte(repPassword)))
 					for i := range m.regTextInputs {
 						m.regTextInputs[i].Reset()
 					}
@@ -813,7 +918,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.user.Data.Personal.Nickname = m.logingInput[0].Value()
 					password := m.logingInput[1].Value()
 
-					cmds = append(cmds, commands.LoginCmd(m.user, m.log, []byte(password)))
+					cmds = append(cmds, commands.LoginCmd(m.user, m.eventsChan, m.log, []byte(password)))
 					for i := range m.logingInput {
 						m.logingInput[i].Reset()
 					}
@@ -824,25 +929,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if !m.connected {
 						var nick string
 						switch m.sideState {
-						case 0:
+						case states.LEFT_STATE:
 							if i, ok := m.onlineList.SelectedItem().(lists.OnlineItem); ok {
 								nick = i.Name
 							} else {
 								return m, nil
 							}
-						case 1:
-							if m.connTextInputs.Value() != "" {
-								nick = m.connTextInputs.Value()
-								m.connTextInputs.Reset()
-							} else {
-								return m, nil
+							m.prState = m.state
+							m.state = states.LOAD_STATE
+							cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, nick))
+						case states.RIGHT_STATE:
+							switch m.cursor {
+							case 0:
+								if m.friendsInputs[0].Value() != "" {
+									nick = m.friendsInputs[0].Value()
+									m.friendsInputs[0].Reset()
+								} else {
+									return m, nil
+								}
+								m.prState = m.state
+								m.state = states.LOAD_STATE
+								cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, nick))
+							case 1:
+								if m.friendsInputs[1].Value() != "" {
+									nick = m.friendsInputs[1].Value()
+									m.friendsInputs[1].Reset()
+								} else {
+									return m, nil
+								}
+								m.prState = m.state
+								m.state = states.LOAD_STATE
+								cmds = append(cmds, commands.SendFriendRequestCmd(m.user, nick))
 							}
+
+							m.friendsInputs[m.cursor].Reset()
 						default:
 							return m, nil
 						}
-						m.prState = m.state
-						m.state = states.LOAD_STATE
-						cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, nick))
 					}
 
 				case 1:
@@ -928,21 +1051,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.prState = m.state
 						m.state = states.LOAD_STATE
 						cmds = append(cmds, commands.ChangeThemeColorCmd(m.user, newColor))
+						m.profileInputs[0].Reset()
 					case 1:
 						newBFTag := strings.TrimSpace(m.profileInputs[1].Value())
 						m.prState = m.state
 						m.state = states.LOAD_STATE
 						cmds = append(cmds, commands.ChangeBFTagCmd(m.user, newBFTag))
+						m.profileInputs[1].Reset()
+					case 2:
+						if i, ok := m.friendsReqsList.SelectedItem().(lists.FriendReqItem); ok {
+							m.prState = m.state
+							nick := i.Nickname
+							m.state = states.LOAD_STATE
+							cmds = append(cmds, commands.AcceptFriendRequestCmd(m.user, nick))
+						}
 					}
 
-					m.profileInputs[m.cursor].Reset()
 				case 5:
 					switch m.sideState {
-					case 1:
+					case states.RIGHT_STATE:
 						if i, ok := m.microphonesList.SelectedItem().(lists.MicItem); ok {
 							cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.Name), m.updateMicrophonesItemList(i.Name))
 						}
-					case 0:
+					case states.LEFT_STATE:
 						if i, ok := m.settingsList.SelectedItem().(lists.SettingsItem); ok {
 							switch i.Id {
 							case HARD_DENOISE:
@@ -987,11 +1118,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			switch m.activeTab {
 			case 0:
-				if m.sideState == 1 {
-					m.connTextInputs, cmd = m.connTextInputs.Update(msg)
-					cmds = append(cmds, cmd)
+				if m.sideState == states.RIGHT_STATE {
+					for i := range m.friendsInputs {
+						m.friendsInputs[i], cmd = m.friendsInputs[i].Update(msg)
+						cmds = append(cmds, cmd)
+					}
 				}
-				if m.sideState == 0 {
+				if m.sideState == states.LEFT_STATE {
 					m.onlineList, cmd = m.onlineList.Update(msg)
 					cmds = append(cmds, cmd)
 				}
@@ -999,17 +1132,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatTextInput, cmd = m.chatTextInput.Update(msg)
 				cmds = append(cmds, cmd)
 			case 2:
-				if m.sideState == 0 {
+				if m.sideState == states.LEFT_STATE {
 					m.connectionsList, cmd = m.connectionsList.Update(msg)
 					cmds = append(cmds, cmd)
 				}
 			case 4:
-				for i := range m.profileInputs {
-					m.profileInputs[i], cmd = m.profileInputs[i].Update(msg)
+				if m.cursor < len(m.profileInputs) {
+					for i := range m.profileInputs {
+						m.profileInputs[i], cmd = m.profileInputs[i].Update(msg)
+						cmds = append(cmds, cmd)
+					}
+				} else if m.cursor == len(m.profileInputs) {
+					m.friendsReqsList, cmd = m.friendsReqsList.Update(msg)
 					cmds = append(cmds, cmd)
 				}
 			case 5:
-				if m.sideState == 1 {
+				if m.sideState == states.RIGHT_STATE {
 					m.microphonesList, cmd = m.microphonesList.Update(msg)
 					cmds = append(cmds, cmd)
 				} else {

@@ -4,6 +4,7 @@ import (
 	"aloh-tui/internal/tui/components/lists"
 	"cmp"
 	"slices"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -155,6 +156,54 @@ func (m *Model) setupSettingsList() {
 	m.settingsList.SetFilteringEnabled(false)
 	m.settingsList.SetShowFilter(false)
 	m.settingsList.SetShowHelp(false)
+}
+
+func (m *Model) setupFriendsReqsList() {
+	friendsReq := make([]list.Item, 0, len(m.friendsReqs))
+
+	for _, f := range m.friendsReqs {
+		friendsReq = append(friendsReq, lists.FriendReqItem{
+			Nickname: f.Nickname,
+			ReqTime:  f.ReqTime.Local().Format("2006-01-02"),
+		})
+	}
+
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+
+	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+	delegate.SetSpacing(0)
+	m.friendsReqsDelegate = delegate
+	m.friendsReqsList = list.New(friendsReq, delegate, m.width/2, m.height-4)
+	m.friendsReqsList.Select(-1)
+	m.friendsReqsList.DisableQuitKeybindings()
+	m.friendsReqsList.SetShowStatusBar(false)
+	m.friendsReqsList.SetShowTitle(false)
+	m.friendsReqsList.SetFilteringEnabled(false)
+	m.friendsReqsList.SetShowFilter(false)
+	m.friendsReqsList.SetShowHelp(false)
+}
+
+func (m *Model) updateFriendsReqList() tea.Cmd {
+	names := make([]string, 0, len(m.friendsReqs))
+	for _, f := range m.friendsReqs {
+		names = append(names, f.Nickname)
+	}
+
+	slices.Sort(names)
+
+	newItems := make([]list.Item, 0, len(names))
+
+	for _, name := range names {
+		t := time.Now().Format("2006-01-02")
+		newItems = append(newItems, lists.FriendReqItem{
+			Nickname: name,
+			ReqTime:  t,
+		})
+	}
+
+	return m.friendsReqsList.SetItems(newItems)
 }
 
 func (m *Model) updateConnectionItemList(nickname string, volume float32, muted bool) tea.Cmd {

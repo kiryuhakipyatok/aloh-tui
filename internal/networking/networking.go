@@ -7,6 +7,7 @@ import (
 type Networking interface {
 	FetchCurrentConnects(nickname string) ([]string, error)
 	FetchCurrentOnline() ([]string, error)
+	FetchOnlineFriends(friends []string) (map[string][]string, error)
 
 	ChatCallback(cb func(id string, data []byte))
 	VideoCallback(cb func(id string, data []byte))
@@ -54,6 +55,14 @@ func (n *networking) FetchCurrentOnline() ([]string, error) {
 		return nil, err
 	}
 	return online, nil
+}
+
+func (n *networking) FetchOnlineFriends(friends []string) (map[string][]string, error) {
+	frs, err := n.FetchFriends(friends)
+	if err != nil {
+		return nil, err
+	}
+	return frs, nil
 }
 
 func (n *networking) ChatCallback(cb func(id string, data []byte)) {
