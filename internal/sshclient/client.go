@@ -33,6 +33,7 @@ type SSHClient interface {
 	NewFriendReq(ctx context.Context, friendNickname string) error
 	AcceptFriendReq(ctx context.Context, friendNickname string) error
 	DenyFriendReq(ctx context.Context, friendNickname string) error
+	DeleteFromFriends(ctx context.Context, friendNickname string) error
 	Close()
 }
 
@@ -221,6 +222,22 @@ func (sc *sshClient) DenyFriendReq(ctx context.Context, friendNickname string) e
 		return ctx.Err()
 	default:
 		status, payload, err := sc.client.SendRequest("deny-friend", true, []byte(friendNickname))
+		if err != nil {
+			return err
+		}
+		if !status {
+			return castErr(payload)
+		}
+		return nil
+	}
+}
+
+func (sc *sshClient) DeleteFromFriends(ctx context.Context, friendNickname string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		status, payload, err := sc.client.SendRequest("delete-friend", true, []byte(friendNickname))
 		if err != nil {
 			return err
 		}

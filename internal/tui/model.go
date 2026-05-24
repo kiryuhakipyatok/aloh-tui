@@ -104,6 +104,8 @@ type Model struct {
 	friendsReqsList     list.Model
 	friendsReqsDelegate list.DefaultDelegate
 
+	tabsNotifications map[string]struct{}
+
 	connected bool
 
 	msgChan    chan commands.ChatMessage
@@ -120,6 +122,9 @@ type Model struct {
 	headerActiveStyle lipgloss.Style
 	themeColor        lipgloss.Color
 	subThemeColor     lipgloss.Color
+
+	defaultBFTag            string
+	defaultNotificationSign string
 
 	stopCountMinutesChan chan struct{}
 
@@ -147,13 +152,15 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		logingInput:   make([]textinput.Model, 2),
 		logoAnim:      make([]string, 0, 4),
 		notConnAnim:   make([]string, 0, 4),
-		profileInputs: make([]textinput.Model, 2),
-		friendsInputs: make([]textinput.Model, 2),
+		profileInputs: make([]textinput.Model, 3),
+		friendsInputs: make([]textinput.Model, 3),
 		messages:      make([]commands.ChatMessage, 0, 20),
 
 		eventsChan: make(chan sshclient.Event, 50),
 
-		defaultThemeColor: "#A6E22E",
+		defaultThemeColor:       "#A6E22E",
+		defaultBFTag:            "👑",
+		defaultNotificationSign: "🔔",
 
 		spinner: sp,
 
@@ -172,6 +179,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		log: appLogger,
 
+		tabsNotifications: make(map[string]struct{}, 6),
+
 		msgChan:    make(chan commands.ChatMessage, 100),
 		rawMsgChan: make(chan commands.RawChatMessage, 100),
 
@@ -184,6 +193,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	m.aloneAnim = []string{titles.ALONE1, titles.ALONE2, titles.ALONE3, titles.ALONE2}
 
 	user := entities.NewUser(logFilePath, keysPath, dataFilePath, m.defaultThemeColor)
+	user.Data.Setup.BestFriendTag = m.defaultBFTag
+	user.Data.Setup.NotificaionSign = m.defaultNotificationSign
 
 	userDataBytes, err := os.ReadFile(user.Paths.DataFilePath)
 	if err != nil {
@@ -347,6 +358,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			ti.Placeholder = "connect to friend"
 		case 1:
 			ti.Placeholder = "send friend request"
+		case 2:
+			ti.Placeholder = "delete from friends"
 		}
 		m.friendsInputs[i] = ti
 	}
@@ -362,7 +375,9 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		case 0:
 			ti.Placeholder = "new color in hex, d to default"
 		case 1:
-			ti.Placeholder = "new best friend tag"
+			ti.Placeholder = "new best friend tag, d to default"
+		case 2:
+			ti.Placeholder = "new notification sign, d to default"
 		}
 		m.profileInputs[i] = ti
 	}

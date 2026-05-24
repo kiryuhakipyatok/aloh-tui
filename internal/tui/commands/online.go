@@ -14,6 +14,9 @@ type OnlineMsg struct {
 func FetchOnlineFriendsCmd(netw networking.Networking, nicknames []string) tea.Cmd {
 	return func() tea.Msg {
 		msg := OnlineMsg{}
+		if len(nicknames) <= 0 {
+			return msg
+		}
 		online, err := netw.FetchOnlineFriends(nicknames)
 		if err != nil {
 			msg.Err = err

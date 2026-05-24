@@ -64,3 +64,22 @@ func DenyFriendRequestCmd(user *entities.User, nickname string) tea.Cmd {
 		return msg
 	}
 }
+
+func DeleteFromFriendsCmd(user *entities.User, nickname string) tea.Cmd {
+	return func() tea.Msg {
+		msg := FriendsMsg{
+			Typee:    sshclient.DELETE_FRIEND,
+			Nickname: nickname,
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		if err := user.SSHClient.DeleteFromFriends(ctx, nickname); err != nil {
+			msg.Err = err
+			return msg
+		}
+		if err := user.DecreaseAmountOfFriends(nickname); err != nil {
+			msg.Err = err
+		}
+		return msg
+	}
+}

@@ -20,8 +20,8 @@ func (m *Model) focusInputs() {
 		}
 	case states.FRIEND_STATE:
 		if m.sideState == states.RIGHT_STATE {
-			m.friendsInputs[1].Focus()
-			m.friendsInputs[1].PromptStyle = ps
+			m.friendsInputs[m.cursor].Focus()
+			m.friendsInputs[m.cursor].PromptStyle = ps
 		}
 	case states.CHAT_STATE:
 		m.chatTextInput.Focus()

@@ -3,8 +3,11 @@ package tui
 import (
 	"aloh-tui/internal/tui/components/titles"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -88,4 +91,23 @@ func (m *Model) coloredNickname(nickname string) string {
 		}
 	}
 	return nickname
+}
+
+func (m *Model) updateFreindsReqs(nickname string) (tea.Model, tea.Cmd) {
+	for i, fr := range m.friendsReqs {
+		if fr.Nickname == nickname {
+			m.friendsReqs = append(m.friendsReqs[:i], m.friendsReqs[i+1:]...)
+			break
+		}
+	}
+	cmd := m.updateFriendsReqList()
+	return m, cmd
+}
+
+func isEqualOnline(online1, online2 map[string][]string) bool {
+	return maps.EqualFunc(online1, online2, func(arr1 []string, arr2 []string) bool {
+		slices.Sort(arr1)
+		slices.Sort(arr2)
+		return slices.Equal(arr1, arr2)
+	})
 }

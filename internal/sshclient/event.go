@@ -6,6 +6,7 @@ const (
 	NEW_FRIEND = iota
 	ACCEPT_FRIEND
 	DENY_FRIEND
+	DELETE_FRIEND
 )
 
 type Event struct {

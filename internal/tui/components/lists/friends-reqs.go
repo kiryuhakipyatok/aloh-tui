@@ -13,7 +13,7 @@ func (fi FriendReqItem) Title() string {
 	return fi.Nickname
 }
 func (fi FriendReqItem) Description() string {
-	return fmt.Sprintf("requested in %s", fi.ReqTime)
+	return fmt.Sprintf("requested in %s, ENTER to accept, ALT+X to deny", fi.ReqTime)
 }
 func (fi FriendReqItem) FilterValue() string {
 	return fi.Nickname

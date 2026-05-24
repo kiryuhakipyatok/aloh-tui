@@ -32,12 +32,14 @@ func NewUser(logFilePath, keysPath, dataFilePath, defColor string) *User {
 				ThemeColor:           defColor,
 				AudioNotifications:   true,
 				DesktopNotifications: true,
-				BestFriendTag:        "👑",
 			},
 			Statistics: Statistics{
 				BestFriend: BestFriend{
 					Nickname: "nobody",
 				},
+			},
+			Personal: Personal{
+				Friends: make([]string, 0, 5),
 			},
 		},
 	}
@@ -58,8 +60,21 @@ func (u *User) UpdateUserJSON() error {
 	return nil
 }
 
-func (u *User) IncreaseAmountOfFriends(nickanme string) error {
-	u.Data.Personal.Friends = append(u.Data.Personal.Friends, nickanme)
+func (u *User) IncreaseAmountOfFriends(nickname string) error {
+	u.Data.Personal.Friends = append(u.Data.Personal.Friends, nickname)
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) DecreaseAmountOfFriends(nickname string) error {
+	for i, fr := range u.Data.Personal.Friends {
+		if fr == nickname {
+			u.Data.Personal.Friends = append(u.Data.Personal.Friends[:i], u.Data.Personal.Friends[i+1:]...)
+			break
+		}
+	}
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -129,10 +144,10 @@ type Data struct {
 }
 
 type Personal struct {
-	Nickname     string `json:"nickname"`
-	RegisterTime string `json:"registerTime"`
-	FriendsReqs  []FriendReq
-	Friends      []string
+	Nickname     string      `json:"nickname"`
+	RegisterTime string      `json:"registerTime"`
+	FriendsReqs  []FriendReq `json:"-"`
+	Friends      []string    `json:"-"`
 }
 
 type FriendReq struct {
@@ -165,6 +180,7 @@ type Setup struct {
 	DesktopNotifications bool                   `json:"desktop-notifications"`
 	AudioNotifications   bool                   `json:"audio-notifications"`
 	BestFriendTag        string                 `json:"best-friend-tag"`
+	NotificaionSign      string                 `json:"notification-sign"`
 }
 
 type UsersSetup struct {
