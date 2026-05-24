@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"aloh-tui/internal/entities"
+	"aloh-tui/internal/entities/users"
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/notifications"
 	"time"
@@ -32,28 +32,32 @@ func PlayNotificationCmd(ae audio.AudioEngine) tea.Cmd {
 	}
 }
 
-func OnOffAudioNotifications(user *entities.User) tea.Cmd {
+func OnOffAudioNotifications(user *users.User) tea.Cmd {
 	return func() tea.Msg {
-		cmsg := NotificationMessage{}
-		user.Data.Setup.AudioNotifications = !user.Data.Setup.AudioNotifications
-
-		if err := user.UpdateUserJSON(); err != nil {
-			cmsg.Err = err
+		msg := NotificationMessage{}
+		if err := user.OnOffAudioNotification(); err != nil {
+			msg.Err = err
 		}
-
-		return cmsg
+		return msg
 	}
 }
 
-func OnOffDesktopNotifications(user *entities.User) tea.Cmd {
+func OnOffDesktopNotifications(user *users.User) tea.Cmd {
 	return func() tea.Msg {
-		cmsg := NotificationMessage{}
-		user.Data.Setup.DesktopNotifications = !user.Data.Setup.DesktopNotifications
-
-		if err := user.UpdateUserJSON(); err != nil {
-			cmsg.Err = err
+		msg := NotificationMessage{}
+		if err := user.OnOffDesktopNotification(); err != nil {
+			msg.Err = err
 		}
+		return msg
+	}
+}
 
-		return cmsg
+func OnOffAppNotifications(user *users.User) tea.Cmd {
+	return func() tea.Msg {
+		msg := NotificationMessage{}
+		if err := user.OnOffAppNotification(); err != nil {
+			msg.Err = err
+		}
+		return msg
 	}
 }

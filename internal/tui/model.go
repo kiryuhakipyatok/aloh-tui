@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"aloh-tui/internal/entities"
+	"aloh-tui/internal/entities/users"
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
@@ -79,11 +79,9 @@ type Model struct {
 
 	cursor int
 
-	user *entities.User
+	user *users.User
 
 	muteState string
-
-	friendsReqs []entities.FriendReq
 
 	messages []commands.ChatMessage
 
@@ -153,7 +151,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		logoAnim:      make([]string, 0, 4),
 		notConnAnim:   make([]string, 0, 4),
 		profileInputs: make([]textinput.Model, 3),
-		friendsInputs: make([]textinput.Model, 3),
+		friendsInputs: make([]textinput.Model, 5),
 		messages:      make([]commands.ChatMessage, 0, 20),
 
 		eventsChan: make(chan sshclient.Event, 50),
@@ -165,7 +163,6 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		spinner: sp,
 
 		online:      make(map[string][]string, 5),
-		friendsReqs: make([]entities.FriendReq, 0, 3),
 
 		stopCountMinutesChan: make(chan struct{}, 1),
 
@@ -192,7 +189,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	m.notConnAnim = []string{titles.NOT_CONN1, titles.NOT_CONN2, titles.NOT_CONN3, titles.NOT_CONN2}
 	m.aloneAnim = []string{titles.ALONE1, titles.ALONE2, titles.ALONE3, titles.ALONE2}
 
-	user := entities.NewUser(logFilePath, keysPath, dataFilePath, m.defaultThemeColor)
+	user := users.NewUser(logFilePath, keysPath, dataFilePath, m.defaultThemeColor)
 	user.Data.Setup.BestFriendTag = m.defaultBFTag
 	user.Data.Setup.NotificaionSign = m.defaultNotificationSign
 
@@ -241,10 +238,10 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			}
 		} else {
 			var pd struct {
-				Nickname     string               `json:"nickname"`
-				RegisterTime time.Time            `json:"registerTime"`
-				FriendsReqs  []entities.FriendReq `json:"friendsReqs"`
-				Friends      []string             `json:"friends"`
+				Nickname     string            `json:"nickname"`
+				RegisterTime time.Time         `json:"registerTime"`
+				FriendsReqs  []users.FriendReq `json:"friendsReqs"`
+				Friends      []string          `json:"friends"`
 			}
 
 			if err := json.Unmarshal(personalData, &pd); err != nil {
@@ -252,12 +249,12 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 				return nil, err
 			}
 
-			m.friendsReqs = pd.FriendsReqs
-			log.Info("len", len(m.friendsReqs))
-
 			user.Data.Personal.Nickname = pd.Nickname
 			user.Data.Personal.RegisterTime = pd.RegisterTime.Local().Format("2006-01-02")
 			user.Data.Personal.FriendsReqs = pd.FriendsReqs
+			if len(user.Data.Personal.FriendsReqs) > 0 {
+				m.tabsNotifications["profile"] = struct{}{}
+			}
 			user.Data.Personal.Friends = pd.Friends
 			user.SSHClient = client
 			log.Info("user authorized successfully, networking setting...", logNickname)
@@ -360,6 +357,10 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			ti.Placeholder = "send friend request"
 		case 2:
 			ti.Placeholder = "delete from friends"
+		case 3:
+			ti.Placeholder = "block user"
+		case 4:
+			ti.Placeholder = "unblock user"
 		}
 		m.friendsInputs[i] = ti
 	}

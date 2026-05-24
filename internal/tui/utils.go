@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -84,7 +83,7 @@ func (m Model) getChatSizes() (int, int, int) {
 	return maxOffset, w, historyMaxH
 }
 
-func (m *Model) coloredNickname(nickname string) string {
+func (m Model) coloredNickname(nickname string) string {
 	for _, v := range m.connections {
 		if nickname == ansi.Strip(v) {
 			nickname = v
@@ -93,15 +92,23 @@ func (m *Model) coloredNickname(nickname string) string {
 	return nickname
 }
 
-func (m *Model) updateFreindsReqs(nickname string) (tea.Model, tea.Cmd) {
-	for i, fr := range m.friendsReqs {
-		if fr.Nickname == nickname {
-			m.friendsReqs = append(m.friendsReqs[:i], m.friendsReqs[i+1:]...)
-			break
+func (m Model) getOfflineUsers() []string {
+	onlineMap := make(map[string]struct{})
+	for o := range m.online {
+		onlineMap[o] = struct{}{}
+	}
+
+	friends := m.user.GetFriends()
+
+	offline := make([]string, 0, len(friends))
+
+	for _, f := range friends {
+		if _, ok := onlineMap[f]; !ok {
+			offline = append(offline, f)
 		}
 	}
-	cmd := m.updateFriendsReqList()
-	return m, cmd
+
+	return offline
 }
 
 func isEqualOnline(online1, online2 map[string][]string) bool {

@@ -143,7 +143,7 @@ func (m Model) View() string {
 	remainder := usableW % len(tabs)
 
 	for i, t := range tabs {
-		if _, ok := m.tabsNotifications[t]; ok {
+		if _, ok := m.tabsNotifications[t]; ok && m.activeTab != i && m.user.GetAppNotificationsState() {
 			t += fmt.Sprintf(" %s", m.user.Data.Setup.NotificaionSign)
 		}
 		isFirst, isLast, isActive := i == 0, i == len(tabs)-1, i == m.activeTab
@@ -389,12 +389,21 @@ func (m Model) renderFriendsTab(w, h int) string {
 
 	leftTopContent := lipgloss.NewStyle().PaddingLeft(2).Render("zero friends online")
 	if len(m.onlineList.Items()) > 0 {
-		m.onlineList.SetSize(leftW-2, h-2)
+		m.onlineList.SetSize(leftW-2, h-4)
 
 		leftTopContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.onlineList.View())
 	}
 
-	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblTopLeft, "", leftTopContent)
+	leftBotContent := "offline: "
+
+	offline := m.getOfflineUsers()
+	if len(offline) > 0 {
+		leftBotContent = lipgloss.NewStyle().Foreground(cDim).Render(leftBotContent + strings.Join(m.getOfflineUsers(), " · "))
+	} else {
+		leftBotContent = lipgloss.NewStyle().Foreground(cDim).Render(leftBotContent + "all friends are online")
+	}
+
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblTopLeft, "", leftTopContent, "", leftBotContent)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	lblTopRight := m.headerActiveStyle.Render("► connect to friend")
@@ -422,13 +431,22 @@ func (m Model) renderFriendsTab(w, h int) string {
 	if m.state == states.LOAD_STATE && m.prState == states.FRIEND_STATE {
 		rightBottomContent = safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(m.spinner.View()+"sending friend request..."), rightW)
 	} else {
-		m.friendsInputs[1].Width = max(1, rightW-4)
+		inputWidth := max(1, (rightW-4)/2)
+		for i := range m.friendsInputs {
+			m.friendsInputs[i].Width = inputWidth
+		}
+		firstLine := lipgloss.JoinHorizontal(lipgloss.Left,
+			safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Width(inputWidth).Render(m.friendsInputs[1].View()), inputWidth),
+			safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Width(inputWidth).Render(m.friendsInputs[3].View()), inputWidth))
+		secondLine := lipgloss.JoinHorizontal(lipgloss.Left,
+			safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Width(inputWidth).Render(m.friendsInputs[2].View()), inputWidth),
+			safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Width(inputWidth).Render(m.friendsInputs[4].View()), inputWidth))
 		rightBottomContent = lipgloss.JoinVertical(lipgloss.Left,
 			safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("enter nickname to:"), rightW),
 			"",
-			lipgloss.NewStyle().PaddingLeft(2).Render(m.friendsInputs[1].View()),
+			firstLine,
 			"",
-			lipgloss.NewStyle().PaddingLeft(2).Render(m.friendsInputs[2].View()),
+			secondLine,
 		)
 	}
 
@@ -537,10 +555,10 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 
 	lblRight := m.headerActiveStyle.Render("► statistics")
 	friendsView := "zero friends"
-	friends := m.user.Data.Personal.Friends
+	friends := m.user.GetFriends()
 	friendsLen := len(friends)
 	if len(friends) > 0 {
-		friendsView = strings.Join(friends, ", ")
+		friendsView = strings.Join(friends, " · ")
 	}
 	rightBox := lipgloss.JoinVertical(lipgloss.Left,
 		lblRight, "",
@@ -746,7 +764,7 @@ func (m Model) renderErrView(w, h int, cText lipgloss.AdaptiveColor) string {
 
 	lblRight := lipgloss.NewStyle().Foreground(cErr).Bold(true).Render("► resolution")
 	var rightContent string
-	if m.user.Networking == nil && m.user.Data.Personal.Nickname == "" {
+	if !m.isLoggedIn() {
 		quote := ""
 		switch m.activeTab {
 		case 0:

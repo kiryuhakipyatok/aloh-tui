@@ -99,6 +99,7 @@ const (
 	EQUALIZER
 	AUDIO_N
 	DESKTOP_N
+	APP_N
 )
 
 func (m *Model) setupSettingsList() {
@@ -126,6 +127,12 @@ func (m *Model) setupSettingsList() {
 			Name:    "equalizer",
 			Desc:    "reduce low freqs and increase high",
 			Enabled: m.user.Data.Setup.Filter,
+		},
+		lists.SettingsItem{
+			Id:      APP_N,
+			Name:    "app notifications",
+			Desc:    "notifications in app intreface",
+			Enabled: m.user.Data.Setup.AppNotifications,
 		},
 		lists.SettingsItem{
 			Id:      AUDIO_N,
@@ -159,9 +166,10 @@ func (m *Model) setupSettingsList() {
 }
 
 func (m *Model) setupFriendsReqsList() {
-	friendsReq := make([]list.Item, 0, len(m.friendsReqs))
+	fReqs := m.user.GetFriendsReqs()
+	friendsReq := make([]list.Item, 0, len(fReqs))
 
-	for _, f := range m.friendsReqs {
+	for _, f := range fReqs {
 		friendsReq = append(friendsReq, lists.FriendReqItem{
 			Nickname: f.Nickname,
 			ReqTime:  f.ReqTime.Local().Format("2006-01-02"),
@@ -186,8 +194,9 @@ func (m *Model) setupFriendsReqsList() {
 }
 
 func (m *Model) updateFriendsReqList() tea.Cmd {
-	names := make([]string, 0, len(m.friendsReqs))
-	for _, f := range m.friendsReqs {
+	fReqs := m.user.GetFriendsReqs()
+	names := make([]string, 0, len(fReqs))
+	for _, f := range fReqs {
 		names = append(names, f.Nickname)
 	}
 

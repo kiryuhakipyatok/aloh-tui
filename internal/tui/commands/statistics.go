@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"aloh-tui/internal/entities"
+	"aloh-tui/internal/entities/users"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -10,7 +10,7 @@ type StatiscticsMsg struct {
 	Err error
 }
 
-func IncreaseAmountOfFriendsCmd(user *entities.User, nickname string) tea.Cmd {
+func IncreaseAmountOfFriendsCmd(user *users.User, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		msg := StatiscticsMsg{}
 		if err := user.IncreaseAmountOfFriends(nickname); err != nil {
@@ -20,7 +20,7 @@ func IncreaseAmountOfFriendsCmd(user *entities.User, nickname string) tea.Cmd {
 	}
 }
 
-// func DecreaseAmountOfFriendsCmd(user *entities.User) tea.Cmd {
+// func DecreaseAmountOfFriendsCmd(user *users.User) tea.Cmd {
 // 	return func() tea.Msg {
 // 		msg := StatiscticsMsg{}
 // 		if err := user.DecreaseAmountOfFriends(); err != nil {
@@ -30,7 +30,7 @@ func IncreaseAmountOfFriendsCmd(user *entities.User, nickname string) tea.Cmd {
 // 	}
 // }
 
-func IncreaseAmountOfMessagesCmd(user *entities.User) tea.Cmd {
+func IncreaseAmountOfMessagesCmd(user *users.User) tea.Cmd {
 	return func() tea.Msg {
 		msg := StatiscticsMsg{}
 		if err := user.IncreaseAmountOfMessages(); err != nil {
@@ -40,7 +40,7 @@ func IncreaseAmountOfMessagesCmd(user *entities.User) tea.Cmd {
 	}
 }
 
-func IncreaseAmountOfConnectionsCmd(user *entities.User) tea.Cmd {
+func IncreaseAmountOfConnectionsCmd(user *users.User) tea.Cmd {
 	return func() tea.Msg {
 		msg := StatiscticsMsg{}
 		if err := user.IncreaseAmountOfConnections(); err != nil {
@@ -50,7 +50,7 @@ func IncreaseAmountOfConnectionsCmd(user *entities.User) tea.Cmd {
 	}
 }
 
-func CountMaxTimeInConnectionCmd(user *entities.User, stop chan struct{}) tea.Cmd {
+func CountMaxTimeInConnectionCmd(user *users.User, stop chan struct{}) tea.Cmd {
 	return func() tea.Msg {
 		msg := StatiscticsMsg{}
 		if err := user.CountMaxTimeInConnection(stop); err != nil {
@@ -60,7 +60,7 @@ func CountMaxTimeInConnectionCmd(user *entities.User, stop chan struct{}) tea.Cm
 	}
 }
 
-func IncreaseAmountOfConnectionsByUser(user *entities.User, nickname string) tea.Cmd {
+func IncreaseAmountOfConnectionsByUser(user *users.User, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		msg := StatiscticsMsg{}
 		if err := user.IncreaseAmountOfConnectionsByUser(nickname); err != nil {

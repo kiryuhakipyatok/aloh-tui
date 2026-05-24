@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"aloh-tui/internal/entities"
+	"aloh-tui/internal/entities/users"
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
@@ -20,7 +20,7 @@ type AuthMsg struct {
 	Err   error
 }
 
-func AuthCmd(user *entities.User, eventsChan chan sshclient.Event, appLogger *logger.Logger, password []byte) tea.Cmd {
+func AuthCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logger.Logger, password []byte) tea.Cmd {
 	return func() tea.Msg {
 		msg := AuthMsg{
 			Typee: sshclient.DEFAULT,
@@ -43,7 +43,7 @@ func AuthCmd(user *entities.User, eventsChan chan sshclient.Event, appLogger *lo
 		var pd struct {
 			Nickname     string               `json:"nickname"`
 			RegisterTime time.Time            `json:"registerTime"`
-			FriendsReqs  []entities.FriendReq `json:"friendsReqs"`
+			FriendsReqs  []users.FriendReq `json:"friendsReqs"`
 			Friends      []string             `json:"friends"`
 		}
 
@@ -93,7 +93,7 @@ func AuthCmd(user *entities.User, eventsChan chan sshclient.Event, appLogger *lo
 	}
 }
 
-func RegisterCmd(user *entities.User, eventsChan chan sshclient.Event, appLogger *logger.Logger, password, repPassword []byte) tea.Cmd {
+func RegisterCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logger.Logger, password, repPassword []byte) tea.Cmd {
 	return func() tea.Msg {
 		msg := AuthMsg{
 			Typee: sshclient.REGISTER,
@@ -154,7 +154,7 @@ func RegisterCmd(user *entities.User, eventsChan chan sshclient.Event, appLogger
 	}
 }
 
-func LoginCmd(user *entities.User, eventsChan chan sshclient.Event, appLogger *logger.Logger, secret []byte) tea.Cmd {
+func LoginCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logger.Logger, secret []byte) tea.Cmd {
 	return func() tea.Msg {
 		msg := AuthMsg{
 			Typee: sshclient.LOGIN,
@@ -176,7 +176,7 @@ func LoginCmd(user *entities.User, eventsChan chan sshclient.Event, appLogger *l
 		var pd struct {
 			Nickname     string               `json:"nickname"`
 			RegisterTime time.Time            `json:"registerTime"`
-			FriendsReqs  []entities.FriendReq `json:"friendsReqs"`
+			FriendsReqs  []users.FriendReq `json:"friendsReqs"`
 			Friends      []string             `json:"friends"`
 		}
 

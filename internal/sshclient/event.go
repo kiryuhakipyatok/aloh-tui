@@ -7,6 +7,8 @@ const (
 	ACCEPT_FRIEND
 	DENY_FRIEND
 	DELETE_FRIEND
+	BLOCK_USER
+	UNBLOCK_USER
 )
 
 type Event struct {

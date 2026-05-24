@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"aloh-tui/internal/entities"
+	"aloh-tui/internal/entities/users"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -10,7 +10,7 @@ type ChangeMicrophoneMessage struct {
 	Err error
 }
 
-func ChangeMicrophoneCmd(user *entities.User, microphone string) tea.Cmd {
+func ChangeMicrophoneCmd(user *users.User, microphone string) tea.Cmd {
 	return func() tea.Msg {
 		msg := ChangeMicrophoneMessage{}
 		if err := user.Engines.AudioEngine.ChangeMicrophone(microphone); err != nil {
@@ -18,9 +18,7 @@ func ChangeMicrophoneCmd(user *entities.User, microphone string) tea.Cmd {
 			return msg
 		}
 
-		user.Data.Devices.Microphone = microphone
-
-		if err := user.UpdateUserJSON(); err != nil {
+		if err := user.ChangeMicrophone(microphone); err != nil {
 			msg.Err = err
 		}
 

@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"aloh-tui/internal/entities"
+	"aloh-tui/internal/entities/users"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -10,23 +10,12 @@ type UsersVolumeMsg struct {
 	Err error
 }
 
-func SetUserVolumeCmd(user *entities.User, nickname string, volumeCoeficent float32) tea.Cmd {
+func SetUserVolumeCmd(user *users.User, nickname string, volumeCoeficent float32) tea.Cmd {
 	return func() tea.Msg {
 		msg := UsersVolumeMsg{}
 		user.Engines.AudioEngine.SetVolume(nickname, volumeCoeficent)
 
-		us, ok := user.Data.Setup.UsersSetup[nickname]
-		if !ok {
-			us = &entities.UsersSetup{
-				VolumeCoefficient: 1,
-			}
-		}
-
-		us.VolumeCoefficient = volumeCoeficent
-
-		user.Data.Setup.UsersSetup[nickname] = us
-
-		if err := user.UpdateUserJSON(); err != nil {
+		if err := user.SetUsersVolume(nickname, volumeCoeficent); err != nil {
 			msg.Err = err
 		}
 
@@ -34,11 +23,11 @@ func SetUserVolumeCmd(user *entities.User, nickname string, volumeCoeficent floa
 	}
 }
 
-func SetupUserVolumeCmd(user *entities.User, nickname string) tea.Cmd {
+func SetupUserVolumeCmd(user *users.User, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		var vc float32 = 1
-		us, ok := user.Data.Setup.UsersSetup[nickname]
-		if ok {
+		us := user.GetUsersSetup(nickname)
+		if us != nil {
 			vc = us.VolumeCoefficient
 		}
 		user.Engines.AudioEngine.SetVolume(nickname, vc)

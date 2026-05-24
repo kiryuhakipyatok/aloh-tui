@@ -20,7 +20,7 @@ func NotificationSoundBytes() []byte {
 func Notify(time, nickname, msg string) error {
 	beeep.AppName = "aloh"
 
-	if err := beeep.Notify("new message", fmt.Sprintf("%s> %s: %s", time, nickname, msg), notificationImage); err != nil {
+	if err := beeep.Notify("aloh notification", fmt.Sprintf("%s> %s: %s", time, nickname, msg), notificationImage); err != nil {
 		return err
 	}
 	return nil

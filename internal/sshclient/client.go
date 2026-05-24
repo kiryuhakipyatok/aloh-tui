@@ -34,6 +34,8 @@ type SSHClient interface {
 	AcceptFriendReq(ctx context.Context, friendNickname string) error
 	DenyFriendReq(ctx context.Context, friendNickname string) error
 	DeleteFromFriends(ctx context.Context, friendNickname string) error
+	BlockUser(ctx context.Context, friendNickname string) error
+	UnblockUser(ctx context.Context, friendNickname string) error
 	Close()
 }
 
@@ -238,6 +240,37 @@ func (sc *sshClient) DeleteFromFriends(ctx context.Context, friendNickname strin
 		return ctx.Err()
 	default:
 		status, payload, err := sc.client.SendRequest("delete-friend", true, []byte(friendNickname))
+		if err != nil {
+			return err
+		}
+		if !status {
+			return castErr(payload)
+		}
+		return nil
+	}
+}
+
+func (sc *sshClient) BlockUser(ctx context.Context, friendNickname string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		status, payload, err := sc.client.SendRequest("block-user", true, []byte(friendNickname))
+		if err != nil {
+			return err
+		}
+		if !status {
+			return castErr(payload)
+		}
+		return nil
+	}
+}
+func (sc *sshClient) UnblockUser(ctx context.Context, friendNickname string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		status, payload, err := sc.client.SendRequest("unblock-user", true, []byte(friendNickname))
 		if err != nil {
 			return err
 		}

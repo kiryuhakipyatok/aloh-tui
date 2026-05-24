@@ -1,11 +1,9 @@
-package entities
+package users
 
 import (
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
-	"encoding/json"
-	"os"
 	"sync"
 	"time"
 )
@@ -16,7 +14,7 @@ type User struct {
 	Networking networking.Networking
 	Engines    Engines
 	SSHClient  sshclient.SSHClient
-	mu         sync.Mutex
+	mu         sync.RWMutex
 }
 
 func NewUser(logFilePath, keysPath, dataFilePath, defColor string) *User {
@@ -32,6 +30,7 @@ func NewUser(logFilePath, keysPath, dataFilePath, defColor string) *User {
 				ThemeColor:           defColor,
 				AudioNotifications:   true,
 				DesktopNotifications: true,
+				AppNotifications:     true,
 			},
 			Statistics: Statistics{
 				BestFriend: BestFriend{
@@ -39,100 +38,10 @@ func NewUser(logFilePath, keysPath, dataFilePath, defColor string) *User {
 				},
 			},
 			Personal: Personal{
-				Friends: make([]string, 0, 5),
+				Friends:     make([]string, 0, 5),
+				FriendsReqs: make([]FriendReq, 0, 5),
 			},
 		},
-	}
-}
-
-func (u *User) UpdateUserJSON() error {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	userData, err := json.Marshal(u.Data)
-	if err != nil {
-		return err
-	}
-
-	if err := os.WriteFile(u.Paths.DataFilePath, userData, 0644); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (u *User) IncreaseAmountOfFriends(nickname string) error {
-	u.Data.Personal.Friends = append(u.Data.Personal.Friends, nickname)
-	if err := u.UpdateUserJSON(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (u *User) DecreaseAmountOfFriends(nickname string) error {
-	for i, fr := range u.Data.Personal.Friends {
-		if fr == nickname {
-			u.Data.Personal.Friends = append(u.Data.Personal.Friends[:i], u.Data.Personal.Friends[i+1:]...)
-			break
-		}
-	}
-	if err := u.UpdateUserJSON(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (u *User) IncreaseAmountOfMessages() error {
-	u.Data.Statistics.AmountOfMessages++
-	if err := u.UpdateUserJSON(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (u *User) IncreaseAmountOfConnections() error {
-	u.Data.Statistics.AmountOfConnections++
-	if err := u.UpdateUserJSON(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (u *User) IncreaseAmountOfConnectionsByUser(nickname string) error {
-	if uc, ok := u.Data.Setup.UsersSetup[nickname]; ok {
-		uc.AmountOfConnections++
-		if uc.AmountOfConnections > u.Data.Statistics.BestFriend.AmountOfConnections {
-			u.Data.Statistics.BestFriend.AmountOfConnections = uc.AmountOfConnections
-			u.Data.Statistics.BestFriend.Nickname = nickname
-		}
-		if err := u.UpdateUserJSON(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (u *User) CountMaxTimeInConnection(stop chan struct{}) error {
-	var currentTime uint
-	defer func() error {
-		if currentTime > u.Data.Statistics.MaxTimeInConnetion {
-			u.Data.Statistics.MaxTimeInConnetion = currentTime
-			if err := u.UpdateUserJSON(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}()
-	for {
-		select {
-		case <-stop:
-			return nil
-		case <-time.After(time.Minute * 1):
-			currentTime++
-			u.Data.Statistics.AmountOfMinutesInConnections++
-			if err := u.UpdateUserJSON(); err != nil {
-				return err
-			}
-		}
 	}
 }
 
@@ -179,6 +88,7 @@ type Setup struct {
 	ThemeColor           string                 `json:"theme-color"`
 	DesktopNotifications bool                   `json:"desktop-notifications"`
 	AudioNotifications   bool                   `json:"audio-notifications"`
+	AppNotifications     bool                   `json:"app-notifications"`
 	BestFriendTag        string                 `json:"best-friend-tag"`
 	NotificaionSign      string                 `json:"notification-sign"`
 }

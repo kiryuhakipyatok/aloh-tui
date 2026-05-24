@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"aloh-tui/internal/entities"
+	"aloh-tui/internal/entities/users"
 	"aloh-tui/internal/sshclient"
 	"aloh-tui/internal/tui/commands"
 	"aloh-tui/internal/tui/components/lists"
@@ -186,7 +186,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nickname := msg.Data
 		switch msg.Type {
 		case sshclient.NEW_FRIEND:
-			m.friendsReqs = append(m.friendsReqs, entities.FriendReq{Nickname: nickname})
+			m.user.NewFriendReq(msg.Data)
 			m.tabsNotifications["profile"] = struct{}{}
 			cmds = append(cmds, m.updateFriendsReqList(),
 				commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
@@ -261,12 +261,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			nickname := msg.Nickname
 			switch msg.Typee {
 			case sshclient.ACCEPT_FRIEND:
-				return m.updateFreindsReqs(nickname)
+				m.user.DeleteFriendReq(nickname)
+				return m, m.updateFriendsReqList()
 			case sshclient.DENY_FRIEND:
-				return m.updateFreindsReqs(nickname)
+				m.user.DeleteFriendReq(nickname)
+				return m, m.updateFriendsReqList()
 			case sshclient.DELETE_FRIEND:
 				delete(m.online, nickname)
-				return m, m.updateOnlineList()
+				m.user.DeleteFriendReq(nickname)
+				cmds = append(cmds, m.updateOnlineList(), m.updateFriendsReqList())
+				return m, tea.Batch(cmds...)
+			case sshclient.BLOCK_USER:
+				delete(m.online, nickname)
+				cmds = append(cmds, m.updateOnlineList(), m.updateFriendsReqList())
+				return m, tea.Batch(cmds...)
 			case sshclient.NEW_FRIEND:
 			}
 		}
@@ -374,7 +382,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
 			if msg.Typee != sshclient.DEFAULT {
-				m.user.Data.Personal = entities.Personal{}
+				m.user.Data.Personal = users.Personal{}
 			}
 		} else {
 			m.activeTab = 0
@@ -507,7 +515,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: nickname + " joined the chat!"})
 
 		if _, ok := m.user.Data.Setup.UsersSetup[msg.Nickname]; !ok {
-			m.user.Data.Setup.UsersSetup[msg.Nickname] = &entities.UsersSetup{
+			m.user.Data.Setup.UsersSetup[msg.Nickname] = &users.UsersSetup{
 				VolumeCoefficient: 1,
 			}
 
@@ -903,10 +911,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if m.state == states.ERR_STATE {
+				m.err = nil
 				m.curWindow = windows.DEF_WINDOW
-				m = m.syncTabState()
-				m.focusInputs()
-				return m, textinput.Blink
+				if m.prState == states.LOAD_STATE {
+					m = m.syncTabState()
+				} else {
+					m.state = m.prState
+				}
 			}
 
 			if !m.isLoggedIn() {
@@ -944,10 +955,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				switch m.activeTab {
 				case 0:
-					if !m.connected {
-						var nick string
-						switch m.sideState {
-						case states.LEFT_STATE:
+
+					var nick string
+					switch m.sideState {
+					case states.LEFT_STATE:
+						if !m.connected {
 							if i, ok := m.onlineList.SelectedItem().(lists.OnlineItem); ok {
 								nick = i.Name
 							} else {
@@ -956,44 +968,67 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.prState = m.state
 							m.state = states.LOAD_STATE
 							cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, nick))
-						case states.RIGHT_STATE:
-							switch m.cursor {
-							case 0:
-								if m.friendsInputs[0].Value() != "" {
-									nick = m.friendsInputs[0].Value()
-									m.friendsInputs[0].Reset()
+						}
+
+					case states.RIGHT_STATE:
+						switch m.cursor {
+						case 0:
+							if !m.connected {
+								if m.friendsInputs[m.cursor].Value() != "" {
+									nick = m.friendsInputs[m.cursor].Value()
+									m.friendsInputs[m.cursor].Reset()
 								} else {
 									return m, nil
 								}
 								m.prState = m.state
 								m.state = states.LOAD_STATE
 								cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, nick))
-							case 1:
-								if m.friendsInputs[1].Value() != "" {
-									nick = m.friendsInputs[1].Value()
-									m.friendsInputs[1].Reset()
-								} else {
-									return m, nil
-								}
-								m.prState = m.state
-								m.state = states.LOAD_STATE
-								cmds = append(cmds, commands.SendFriendRequestCmd(m.user, nick))
-							case 2:
-								if m.friendsInputs[2].Value() != "" {
-									nick = m.friendsInputs[2].Value()
-									m.friendsInputs[2].Reset()
-								} else {
-									return m, nil
-								}
-								m.prState = m.state
-								m.state = states.LOAD_STATE
-								cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nick))
 							}
-
-							m.friendsInputs[m.cursor].Reset()
-						default:
-							return m, nil
+						case 1:
+							if m.friendsInputs[m.cursor].Value() != "" {
+								nick = m.friendsInputs[m.cursor].Value()
+								m.friendsInputs[m.cursor].Reset()
+							} else {
+								return m, nil
+							}
+							m.prState = m.state
+							m.state = states.LOAD_STATE
+							cmds = append(cmds, commands.SendFriendRequestCmd(m.user, nick))
+						case 2:
+							if m.friendsInputs[m.cursor].Value() != "" {
+								nick = m.friendsInputs[m.cursor].Value()
+								m.friendsInputs[m.cursor].Reset()
+							} else {
+								return m, nil
+							}
+							m.prState = m.state
+							m.state = states.LOAD_STATE
+							cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nick))
+						case 3:
+							if m.friendsInputs[m.cursor].Value() != "" {
+								nick = m.friendsInputs[m.cursor].Value()
+								m.friendsInputs[m.cursor].Reset()
+							} else {
+								return m, nil
+							}
+							m.prState = m.state
+							m.state = states.LOAD_STATE
+							cmds = append(cmds, commands.BlockUserCmd(m.user, nick))
+						case 4:
+							if m.friendsInputs[m.cursor].Value() != "" {
+								nick = m.friendsInputs[m.cursor].Value()
+								m.friendsInputs[m.cursor].Reset()
+							} else {
+								return m, nil
+							}
+							m.prState = m.state
+							m.state = states.LOAD_STATE
+							cmds = append(cmds, commands.UnblockUserCmd(m.user, nick))
 						}
+
+						m.friendsInputs[m.cursor].Reset()
+					default:
+						return m, nil
 					}
 
 				case 1:
@@ -1124,6 +1159,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								cmds = append(cmds, commands.OnOffAECCmd(m.user))
 							case EQUALIZER:
 								cmds = append(cmds, commands.OnOffFilterCmd(m.user))
+							case APP_N:
+								cmds = append(cmds, commands.OnOffAppNotifications(m.user))
 							case AUDIO_N:
 								cmds = append(cmds, commands.OnOffAudioNotifications(m.user))
 							case DESKTOP_N:
