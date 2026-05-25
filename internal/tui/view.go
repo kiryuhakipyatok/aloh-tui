@@ -641,9 +641,11 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 	}
 	topSect := usersAudioState
 
-	m.chatTextInput.Width = max(1, w-4)
+	chatW := w - 4
 
-	bottomSect := lipgloss.NewStyle().PaddingLeft(2).Render(m.chatTextInput.View())
+	m.chatTextInput.Width = max(1, chatW)
+
+	bottomSect := lipgloss.NewStyle().MaxWidth(chatW).PaddingLeft(2).Render(m.chatTextInput.View())
 
 	middleH := h - lipgloss.Height(topSect) - lipgloss.Height(bottomSect) - 1
 	if middleH < 0 {
