@@ -13,13 +13,15 @@ type ChangeMicrophoneMessage struct {
 func ChangeMicrophoneCmd(user *users.User, microphone string) tea.Cmd {
 	return func() tea.Msg {
 		msg := ChangeMicrophoneMessage{}
-		if err := user.Engines.AudioEngine.ChangeMicrophone(microphone); err != nil {
-			msg.Err = err
-			return msg
-		}
+		if user.Engines.AudioEngine != nil {
+			if err := user.Engines.AudioEngine.ChangeMicrophone(microphone); err != nil {
+				msg.Err = err
+				return msg
+			}
 
-		if err := user.ChangeMicrophone(microphone); err != nil {
-			msg.Err = err
+			if err := user.ChangeMicrophone(microphone); err != nil {
+				msg.Err = err
+			}
 		}
 
 		return msg

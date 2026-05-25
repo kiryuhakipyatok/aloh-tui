@@ -100,7 +100,7 @@ type UsersSetup struct {
 }
 
 type Statistics struct {
-	AmountOfFriends              uint       `json:"amount-of-friends"`
+	MinutesInCurrentConnection   uint       `json:"minutes-in-current-connection"`
 	MaxTimeInConnetion           uint       `json:"max-time-in-connections"`
 	AmountOfMessages             uint       `json:"amount-of-messages"`
 	AmountOfMinutesInConnections uint       `json:"minutes-in-connections"`

@@ -13,14 +13,16 @@ type MuteUnmuteUserMsg struct {
 func MuteUnmuteUserCmd(user *users.User, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		msg := MuteUnmuteUserMsg{}
-		res, err := user.Engines.AudioEngine.MuteUnmuteUser(nickname)
-		if err != nil {
-			msg.Err = err
-			return msg
-		}
+		if user.Engines.AudioEngine != nil {
+			res, err := user.Engines.AudioEngine.MuteUnmuteUser(nickname)
+			if err != nil {
+				msg.Err = err
+				return msg
+			}
 
-		if err := user.MuteUnmuteUser(nickname, res); err != nil {
-			msg.Err = err
+			if err := user.MuteUnmuteUser(nickname, res); err != nil {
+				msg.Err = err
+			}
 		}
 
 		return msg
@@ -31,11 +33,14 @@ func MuteUnmuteUserCmd(user *users.User, nickname string) tea.Cmd {
 func SetupUserMuteCmd(user *users.User, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		var state bool
-		us := user.GetUsersSetup(nickname)
-		if us != nil {
-			state = us.Muted
+		if user.Engines.AudioEngine != nil {
+			us := user.GetUsersSetup(nickname)
+			if us != nil {
+				state = us.Muted
+			}
+			user.Engines.AudioEngine.SetMuteState(nickname, state)
 		}
-		user.Engines.AudioEngine.SetMuteState(nickname, state)
+
 		return MuteUnmuteUserMsg{}
 	}
 }

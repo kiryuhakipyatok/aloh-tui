@@ -13,9 +13,12 @@ type UpdateMicrophonesMsg struct {
 func UpdateMicrophonesCmd(user *users.User) tea.Cmd {
 	return func() tea.Msg {
 		msg := UpdateMicrophonesMsg{}
-		if err := user.Engines.AudioEngine.UpdateMicrophones(); err != nil {
-			msg.Err = err
+		if user.Engines.AudioEngine != nil {
+			if err := user.Engines.AudioEngine.UpdateMicrophones(); err != nil {
+				msg.Err = err
+			}
 		}
+
 		return msg
 	}
 }

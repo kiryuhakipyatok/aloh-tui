@@ -18,20 +18,24 @@ type MuteMsg struct {
 
 func MuteUnmuteCmd(ae audio.AudioEngine) tea.Cmd {
 	return func() tea.Msg {
-		res := ae.MuteUnmute()
-		return MuteMsg{
-			Typee: FULL,
-			Res:   res,
+		msg := MuteMsg{}
+		if ae != nil {
+			res := ae.MuteUnmute()
+			msg.Typee = FULL
+			msg.Res = res
 		}
+		return msg
 	}
 }
 
 func MuteUnmuteMicCmd(ae audio.AudioEngine) tea.Cmd {
 	return func() tea.Msg {
-		res := ae.MuteUnmuteMicro()
-		return MuteMsg{
-			Typee: MIC,
-			Res:   res,
+		msg := MuteMsg{}
+		if ae != nil {
+			res := ae.MuteUnmuteMicro()
+			msg.Typee = FULL
+			msg.Res = res
 		}
+		return msg
 	}
 }

@@ -58,7 +58,7 @@ func (m Model) getChatSizes() (int, int, int) {
 	for _, p := range chatParts {
 		usedH += lipgloss.Height(p)
 	}
-	usedH += lipgloss.Height(inputView) + 1
+	usedH += lipgloss.Height(inputView)
 
 	historyMaxH := max(0, h-usedH)
 

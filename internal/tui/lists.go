@@ -79,11 +79,13 @@ func (m *Model) setupOnlineList() {
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
-
 	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
-	delegate.SetSpacing(0)
-	m.onlineDelegate = delegate
-	m.onlineList = list.New(online, delegate, m.width/2, m.height-4)
+	delegate.SetSpacing(1)
+
+	dynamicDelegate := lists.DynamicOnlineDelegate{DefaultDelegate: delegate}
+
+	m.onlineDelegate = dynamicDelegate
+	m.onlineList = list.New(online, dynamicDelegate, m.width/2, m.height-4)
 	m.onlineList.DisableQuitKeybindings()
 	m.onlineList.SetShowStatusBar(false)
 	m.onlineList.SetShowTitle(false)
@@ -182,8 +184,11 @@ func (m *Model) setupFriendsReqsList() {
 
 	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
 	delegate.SetSpacing(0)
-	m.friendsReqsDelegate = delegate
-	m.friendsReqsList = list.New(friendsReq, delegate, m.width/2, m.height-4)
+
+	dynamicFriendsReqDelegate := lists.DynamicFriendsReqDelegate{DefaultDelegate: delegate}
+
+	m.friendsReqsDelegate = dynamicFriendsReqDelegate
+	m.friendsReqsList = list.New(friendsReq, dynamicFriendsReqDelegate, m.width/2, m.height-4)
 	m.friendsReqsList.Select(-1)
 	m.friendsReqsList.DisableQuitKeybindings()
 	m.friendsReqsList.SetShowStatusBar(false)

@@ -6,6 +6,7 @@ import (
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
 	"aloh-tui/internal/tui/commands"
+	"aloh-tui/internal/tui/components/lists"
 	"aloh-tui/internal/tui/components/states"
 	"aloh-tui/internal/tui/components/titles"
 	"aloh-tui/internal/tui/components/windows"
@@ -96,15 +97,15 @@ type Model struct {
 	connectionsList     list.Model
 	connectionsDelegate list.DefaultDelegate
 	onlineList          list.Model
-	onlineDelegate      list.DefaultDelegate
+	onlineDelegate      lists.DynamicOnlineDelegate
 	settingsList        list.Model
 	settingsDelegate    list.DefaultDelegate
 	friendsReqsList     list.Model
-	friendsReqsDelegate list.DefaultDelegate
+	friendsReqsDelegate lists.DynamicFriendsReqDelegate
 
 	tabsNotifications map[string]struct{}
 
-	connected bool
+	connected     bool
 
 	msgChan    chan commands.ChatMessage
 	rawMsgChan chan commands.RawChatMessage
@@ -162,7 +163,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		spinner: sp,
 
-		online:      make(map[string][]string, 5),
+		online: make(map[string][]string, 5),
 
 		stopCountMinutesChan: make(chan struct{}, 1),
 
@@ -392,7 +393,6 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
 	cmds = append(cmds, commands.AnimTickCmd(), commands.PulseTickCmd(), m.spinner.Tick)
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-		m.log.Info("friends", m.user.Data.Personal.Friends)
 		cmds = append(cmds, commands.FetchOnlineFriendsCmd(m.user.Networking, m.user.Data.Personal.Friends),
 			commands.WaitForChatMessageCmd(m.msgChan),
 			commands.WaitForEventMessageCmd(m.eventsChan),
@@ -407,6 +407,7 @@ func (m Model) Init() tea.Cmd {
 
 func (m *Model) Clean() {
 	if m.user.Engines.AudioEngine != nil {
+		m.user.Engines.AudioEngine.SetDisconnected()
 		m.user.Engines.AudioEngine.Stop()
 	}
 

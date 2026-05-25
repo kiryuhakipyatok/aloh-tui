@@ -13,10 +13,13 @@ type OnOffFilterMsg struct {
 func OnOffFilterCmd(user *users.User) tea.Cmd {
 	return func() tea.Msg {
 		msg := OnOffFilterMsg{}
-		d := user.Engines.AudioEngine.OnOffFilter()
-		if err := user.OnOffFilter(d); err != nil {
-			msg.Err = err
+		if user.Engines.AudioEngine != nil {
+			d := user.Engines.AudioEngine.OnOffFilter()
+			if err := user.OnOffFilter(d); err != nil {
+				msg.Err = err
+			}
 		}
+
 		return msg
 	}
 }

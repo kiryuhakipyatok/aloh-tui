@@ -17,13 +17,15 @@ func FetchOnlineFriendsCmd(netw networking.Networking, nicknames []string) tea.C
 		if len(nicknames) <= 0 {
 			return msg
 		}
-		online, err := netw.FetchOnlineFriends(nicknames)
-		if err != nil {
-			msg.Err = err
-			return msg
-		}
+		if netw != nil {
+			online, err := netw.FetchOnlineFriends(nicknames)
+			if err != nil {
+				msg.Err = err
+				return msg
+			}
 
-		msg.Online = online
+			msg.Online = online
+		}
 
 		return msg
 	}

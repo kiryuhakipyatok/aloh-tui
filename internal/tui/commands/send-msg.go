@@ -13,9 +13,12 @@ type SendInChatMsg struct {
 func SendInChatCmd(netw networking.Networking, msg []byte) tea.Cmd {
 	return func() tea.Msg {
 		cmsg := SendInChatMsg{}
-		if err := netw.SendMessageInChat(msg); err != nil {
-			cmsg.Err = err
+		if netw != nil {
+			if err := netw.SendMessageInChat(msg); err != nil {
+				cmsg.Err = err
+			}
 		}
+
 		return cmsg
 	}
 }

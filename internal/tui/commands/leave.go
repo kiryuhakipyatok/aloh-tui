@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
 	"time"
 
@@ -13,17 +12,18 @@ type LeaveMsg struct {
 	Err  error
 }
 
-func LeaveCmd(netw networking.Networking, ae audio.AudioEngine) tea.Cmd {
+func LeaveCmd(netw networking.Networking) tea.Cmd {
 	return func() tea.Msg {
 		t := time.Now().Format("15:04:05")
 		msg := LeaveMsg{
 			Time: t,
 		}
-
-		if err := netw.DisconnectFromUsers(); err != nil {
-			msg.Err = err
+		if netw != nil {
+			if err := netw.DisconnectFromUsers(); err != nil {
+				msg.Err = err
+			}
 		}
-		ae.PlayNotification()
+
 		return msg
 	}
 }

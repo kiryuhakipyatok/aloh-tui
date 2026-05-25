@@ -80,14 +80,14 @@ func (u *User) IncreaseAmountOfConnectionsByUser(nickname string) error {
 }
 
 func (u *User) CountMaxTimeInConnection(stop chan struct{}) error {
-	var currentTime uint
 	defer func() error {
 		u.mu.Lock()
-		if currentTime > u.Data.Statistics.MaxTimeInConnetion {
-			u.Data.Statistics.MaxTimeInConnetion = currentTime
-			if err := u.UpdateUserJSON(); err != nil {
-				return err
-			}
+		if u.Data.Statistics.MinutesInCurrentConnection > u.Data.Statistics.MaxTimeInConnetion {
+			u.Data.Statistics.MaxTimeInConnetion = u.Data.Statistics.MinutesInCurrentConnection
+		}
+		u.Data.Statistics.MinutesInCurrentConnection = 0
+		if err := u.UpdateUserJSON(); err != nil {
+			return err
 		}
 		u.mu.Unlock()
 		return nil
@@ -98,7 +98,7 @@ func (u *User) CountMaxTimeInConnection(stop chan struct{}) error {
 			return nil
 		case <-time.After(time.Minute * 1):
 			u.mu.Lock()
-			currentTime++
+			u.Data.Statistics.MinutesInCurrentConnection++
 			u.Data.Statistics.AmountOfMinutesInConnections++
 			if err := u.UpdateUserJSON(); err != nil {
 				return err
@@ -251,34 +251,6 @@ func (u *User) SetUsersVolume(nickname string, vc float32) error {
 		return err
 	}
 	return nil
-}
-
-func (u *User) GetUsersSetup(nickname string) *UsersSetup {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	us, ok := u.Data.Setup.UsersSetup[nickname]
-	if ok {
-		return us
-	}
-	return nil
-}
-
-func (u *User) GetFriendsReqs() []FriendReq {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return u.Data.Personal.FriendsReqs
-}
-
-func (u *User) GetFriends() []string {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return u.Data.Personal.Friends
-}
-
-func (u *User) GetAppNotificationsState() bool {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return u.Data.Setup.AppNotifications
 }
 
 func (u *User) NewFriendReq(nickname string) {
