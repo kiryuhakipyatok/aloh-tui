@@ -66,7 +66,7 @@ func (u *User) IncreaseAmountOfConnections() error {
 func (u *User) IncreaseAmountOfConnectionsByUser(nickname string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if uc, ok := u.Data.Setup.UsersSetup[nickname]; ok {
+	if uc, ok := u.Data.Setup.Audio.UsersSetup[nickname]; ok {
 		uc.AmountOfConnections++
 		if uc.AmountOfConnections > u.Data.Statistics.BestFriend.AmountOfConnections {
 			u.Data.Statistics.BestFriend.AmountOfConnections = uc.AmountOfConnections
@@ -111,7 +111,7 @@ func (u *User) CountMaxTimeInConnection(stop chan struct{}) error {
 func (u *User) OnOffAudioNotification() error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.AudioNotifications = !u.Data.Setup.AudioNotifications
+	u.Data.Setup.Notifications.AudioNotifications = !u.Data.Setup.Notifications.AudioNotifications
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func (u *User) OnOffAudioNotification() error {
 func (u *User) OnOffDesktopNotification() error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.DesktopNotifications = !u.Data.Setup.DesktopNotifications
+	u.Data.Setup.Notifications.DesktopNotifications = !u.Data.Setup.Notifications.DesktopNotifications
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (u *User) OnOffDesktopNotification() error {
 func (u *User) OnOffAppNotification() error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.AppNotifications = !u.Data.Setup.AppNotifications
+	u.Data.Setup.Notifications.AppNotifications = !u.Data.Setup.Notifications.AppNotifications
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func (u *User) OnOffAppNotification() error {
 func (u *User) OnOffAEC(aec bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.AEC = aec
+	u.Data.Setup.Audio.AEC = aec
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func (u *User) OnOffAEC(aec bool) error {
 func (u *User) OnOffHardDenoice(denoice bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.HardDenoise = denoice
+	u.Data.Setup.Audio.HardDenoise = denoice
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func (u *User) OnOffHardDenoice(denoice bool) error {
 func (u *User) OnOffSoftDenoice(denoice bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.SoftDenoise = denoice
+	u.Data.Setup.Audio.SoftDenoise = denoice
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -181,7 +181,7 @@ func (u *User) ChangeMicrophone(mic string) error {
 func (u *User) OnOffFilter(filter bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Filter = filter
+	u.Data.Setup.Audio.Filter = filter
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -191,7 +191,7 @@ func (u *User) OnOffFilter(filter bool) error {
 func (u *User) ChangeThemeColor(color string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.ThemeColor = color
+	u.Data.Setup.Appereance.ThemeColor = color
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (u *User) ChangeThemeColor(color string) error {
 func (u *User) ChangeBFTag(tag string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.BestFriendTag = tag
+	u.Data.Setup.Appereance.BestFriendTag = tag
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -211,7 +211,37 @@ func (u *User) ChangeBFTag(tag string) error {
 func (u *User) ChangeNotificationSign(sign string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.NotificaionSign = sign
+	u.Data.Setup.Appereance.NotificaionSign = sign
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) OnOffShowTime() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Setup.Appereance.ShowTime = !u.Data.Setup.Appereance.ShowTime
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) OnOffShowDate() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Setup.Appereance.ShowDate = !u.Data.Setup.Appereance.ShowDate
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) OnOffShowZone() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Setup.Appereance.ShowZone = !u.Data.Setup.Appereance.ShowZone
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -221,12 +251,12 @@ func (u *User) ChangeNotificationSign(sign string) error {
 func (u *User) MuteUnmuteUser(nickname string, res bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	us, ok := u.Data.Setup.UsersSetup[nickname]
+	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
 	if !ok {
 		us = &UsersSetup{}
 	}
 	us.Muted = res
-	u.Data.Setup.UsersSetup[nickname] = us
+	u.Data.Setup.Audio.UsersSetup[nickname] = us
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -236,7 +266,7 @@ func (u *User) MuteUnmuteUser(nickname string, res bool) error {
 func (u *User) SetUsersVolume(nickname string, vc float32) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	us, ok := u.Data.Setup.UsersSetup[nickname]
+	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
 	if !ok {
 		us = &UsersSetup{
 			VolumeCoefficient: 1,
@@ -245,7 +275,7 @@ func (u *User) SetUsersVolume(nickname string, vc float32) error {
 
 	us.VolumeCoefficient = vc
 
-	u.Data.Setup.UsersSetup[nickname] = us
+	u.Data.Setup.Audio.UsersSetup[nickname] = us
 
 	if err := u.UpdateUserJSON(); err != nil {
 		return err

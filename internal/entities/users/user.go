@@ -17,7 +17,7 @@ type User struct {
 	mu         sync.RWMutex
 }
 
-func NewUser(logFilePath, keysPath, dataFilePath, defColor string) *User {
+func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 	return &User{
 		Paths: Paths{
 			LogFilePath:  logFilePath,
@@ -26,11 +26,15 @@ func NewUser(logFilePath, keysPath, dataFilePath, defColor string) *User {
 		},
 		Data: Data{
 			Setup: Setup{
-				UsersSetup:           make(map[string]*UsersSetup, 5),
-				ThemeColor:           defColor,
-				AudioNotifications:   true,
-				DesktopNotifications: true,
-				AppNotifications:     true,
+				Audio: Audio{
+					UsersSetup:  make(map[string]*UsersSetup, 5),
+					SoftDenoise: true,
+				},
+				Notifications: Notifications{
+					AudioNotifications:   true,
+					DesktopNotifications: true,
+					AppNotifications:     true,
+				},
 			},
 			Statistics: Statistics{
 				BestFriend: BestFriend{
@@ -80,17 +84,32 @@ type Devices struct {
 }
 
 type Setup struct {
-	HardDenoise          bool                   `json:"hard-denoise"`
-	SoftDenoise          bool                   `json:"soft-denoise"`
-	AEC                  bool                   `json:"aec"`
-	Filter               bool                   `json:"filter"`
-	UsersSetup           map[string]*UsersSetup `json:"users-setup"`
-	ThemeColor           string                 `json:"theme-color"`
-	DesktopNotifications bool                   `json:"desktop-notifications"`
-	AudioNotifications   bool                   `json:"audio-notifications"`
-	AppNotifications     bool                   `json:"app-notifications"`
-	BestFriendTag        string                 `json:"best-friend-tag"`
-	NotificaionSign      string                 `json:"notification-sign"`
+	Audio         Audio         `json:"audio"`
+	Appereance    Appereance    `json:"appereance"`
+	Notifications Notifications `json:"notifications"`
+}
+
+type Appereance struct {
+	BestFriendTag   string `json:"best-friend-tag"`
+	NotificaionSign string `json:"notification-sign"`
+	ThemeColor      string `json:"theme-color"`
+	ShowTime        bool   `json:"show-time"`
+	ShowDate        bool   `json:"show-date"`
+	ShowZone        bool   `json:"show-zone"`
+}
+
+type Notifications struct {
+	DesktopNotifications bool `json:"desktop-notifications"`
+	AudioNotifications   bool `json:"audio-notifications"`
+	AppNotifications     bool `json:"app-notifications"`
+}
+
+type Audio struct {
+	HardDenoise bool                   `json:"hard-denoise"`
+	SoftDenoise bool                   `json:"soft-denoise"`
+	AEC         bool                   `json:"aec"`
+	Filter      bool                   `json:"filter"`
+	UsersSetup  map[string]*UsersSetup `json:"users-setup"`
 }
 
 type UsersSetup struct {

@@ -3,7 +3,7 @@ package users
 func (u *User) GetUsersSetup(nickname string) *UsersSetup {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	us, ok := u.Data.Setup.UsersSetup[nickname]
+	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
 	if ok {
 		return us
 	}
@@ -61,5 +61,23 @@ func (u *User) GetBestFriend() BestFriend {
 func (u *User) GetAppNotificationsState() bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	return u.Data.Setup.AppNotifications
+	return u.Data.Setup.Notifications.AppNotifications
+}
+
+func (u *User) GetShowTimeState() bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Appereance.ShowTime
+}
+
+func (u *User) GetShowDateState() bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Appereance.ShowDate
+}
+
+func (u *User) GetShowZoneState() bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Appereance.ShowZone
 }

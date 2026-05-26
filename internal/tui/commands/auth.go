@@ -66,10 +66,10 @@ func AuthCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logge
 
 		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
 			Microphone:  user.Data.Devices.Microphone,
-			Aec:         user.Data.Setup.AEC,
-			HardDenoice: user.Data.Setup.HardDenoise,
-			SoftDenoice: user.Data.Setup.SoftDenoise,
-			Filtered:    user.Data.Setup.Filter,
+			Aec:         user.Data.Setup.Audio.AEC,
+			HardDenoice: user.Data.Setup.Audio.HardDenoise,
+			SoftDenoice: user.Data.Setup.Audio.SoftDenoise,
+			Filtered:    user.Data.Setup.Audio.Filter,
 		})
 		if err != nil {
 			msg.Err = err
@@ -115,7 +115,7 @@ func RegisterCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *l
 			msg.Err = err
 			return msg
 		}
-		user.Data.Setup.SoftDenoise = true
+		user.Data.Setup.Audio.SoftDenoise = true
 		user.SSHClient = client
 		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
 		if err != nil {
@@ -125,10 +125,10 @@ func RegisterCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *l
 
 		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
 			Microphone:  user.Data.Devices.Microphone,
-			Aec:         user.Data.Setup.AEC,
-			HardDenoice: user.Data.Setup.HardDenoise,
+			Aec:         user.Data.Setup.Audio.AEC,
+			HardDenoice: user.Data.Setup.Audio.HardDenoise,
 			SoftDenoice: true,
-			Filtered:    user.Data.Setup.Filter,
+			Filtered:    user.Data.Setup.Audio.Filter,
 		})
 		if err != nil {
 			msg.Err = err
@@ -191,7 +191,7 @@ func LoginCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logg
 		user.Data.Personal.Friends = pd.Friends
 		user.SSHClient = client
 
-		user.Data.Setup.SoftDenoise = true
+		user.Data.Setup.Audio.SoftDenoise = true
 
 		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
 		if err != nil {
@@ -201,10 +201,10 @@ func LoginCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logg
 
 		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
 			Microphone:  user.Data.Devices.Microphone,
-			Aec:         user.Data.Setup.AEC,
-			HardDenoice: user.Data.Setup.HardDenoise,
+			Aec:         user.Data.Setup.Audio.AEC,
+			HardDenoice: user.Data.Setup.Audio.HardDenoise,
 			SoftDenoice: true,
-			Filtered:    user.Data.Setup.Filter,
+			Filtered:    user.Data.Setup.Audio.Filter,
 		})
 		if err != nil {
 			msg.Err = err

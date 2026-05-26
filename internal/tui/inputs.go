@@ -19,7 +19,7 @@ func (m *Model) focusInputs() {
 			m.friendsInputs[0].PromptStyle = ps
 		}
 	case states.FRIEND_STATE:
-		if m.sideState == states.RIGHT_STATE {
+		if m.sideState == states.LEFT_STATE {
 			m.friendsInputs[m.cursor].Focus()
 			m.friendsInputs[m.cursor].PromptStyle = ps
 		}
@@ -30,7 +30,7 @@ func (m *Model) focusInputs() {
 		m.logingInput[m.cursor].Focus()
 		m.logingInput[m.cursor].PromptStyle = ps
 	case states.PROFILE_STATE:
-		if m.cursor < len(m.profileInputs) {
+		if m.sideState == states.RIGHT_STATE && m.cursor < len(m.profileInputs) {
 			m.profileInputs[m.cursor].Focus()
 			m.profileInputs[m.cursor].PromptStyle = ps
 		}

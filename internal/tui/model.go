@@ -6,7 +6,6 @@ import (
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
 	"aloh-tui/internal/tui/commands"
-	"aloh-tui/internal/tui/components/lists"
 	"aloh-tui/internal/tui/components/states"
 	"aloh-tui/internal/tui/components/titles"
 	"aloh-tui/internal/tui/components/windows"
@@ -21,7 +20,6 @@ import (
 	"time"
 
 	"github.com/AvraamMavridis/randomcolor"
-	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -48,6 +46,8 @@ type Model struct {
 	logoAnim    []string
 	notConnAnim []string
 	aloneAnim   []string
+
+	curTime time.Time
 
 	state   uint
 	prState uint
@@ -92,20 +92,23 @@ type Model struct {
 	connections []string
 	online      map[string][]string
 
-	microphonesList     list.Model
-	microphonesDelegate list.DefaultDelegate
-	connectionsList     list.Model
-	connectionsDelegate list.DefaultDelegate
-	onlineList          list.Model
-	onlineDelegate      lists.DynamicOnlineDelegate
-	settingsList        list.Model
-	settingsDelegate    list.DefaultDelegate
-	friendsReqsList     list.Model
-	friendsReqsDelegate lists.DynamicFriendsReqDelegate
+	microphonesList List
+	//microphonesDelegate list.DefaultDelegate
+	connectionsList List
+	//connectionsDelegate list.DefaultDelegate
+	onlineList List
+	//onlineDelegate      lists.DynamicOnlineDelegate
+	settingsList List
+	//settingsDelegate    list.DefaultDelegate
+	apearenceList List
+	// apearenceList       list.Model
+	// apearenceDelegate   list.DefaultDelegate
+	friendsReqsList List
+	//friendsReqsDelegate lists.DynamicFriendsReqDelegate
 
 	tabsNotifications map[string]struct{}
 
-	connected     bool
+	connected bool
 
 	msgChan    chan commands.ChatMessage
 	rawMsgChan chan commands.RawChatMessage
@@ -190,9 +193,10 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	m.notConnAnim = []string{titles.NOT_CONN1, titles.NOT_CONN2, titles.NOT_CONN3, titles.NOT_CONN2}
 	m.aloneAnim = []string{titles.ALONE1, titles.ALONE2, titles.ALONE3, titles.ALONE2}
 
-	user := users.NewUser(logFilePath, keysPath, dataFilePath, m.defaultThemeColor)
-	user.Data.Setup.BestFriendTag = m.defaultBFTag
-	user.Data.Setup.NotificaionSign = m.defaultNotificationSign
+	user := users.NewUser(logFilePath, keysPath, dataFilePath)
+	user.Data.Setup.Appereance.BestFriendTag = m.defaultBFTag
+	user.Data.Setup.Appereance.NotificaionSign = m.defaultNotificationSign
+	user.Data.Setup.Appereance.ThemeColor = m.defaultThemeColor
 
 	userDataBytes, err := os.ReadFile(user.Paths.DataFilePath)
 	if err != nil {
@@ -210,8 +214,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		}
 	}
 
-	m.themeColor = lipgloss.Color(user.Data.Setup.ThemeColor)
-	m.subThemeColor = lipgloss.Color(utils.DarkenHex(user.Data.Setup.ThemeColor, 0.7))
+	m.themeColor = lipgloss.Color(user.Data.Setup.Appereance.ThemeColor)
+	m.subThemeColor = lipgloss.Color(utils.DarkenHex(user.Data.Setup.Appereance.ThemeColor, 0.7))
 	m.headerActiveStyle = lipgloss.NewStyle().Foreground(m.themeColor).Bold(true)
 
 	if user.Data.Personal.Nickname != "" && user.Data.Personal.RegisterTime != "" {
@@ -267,10 +271,10 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			}
 			audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
 				Microphone:  user.Data.Devices.Microphone,
-				Aec:         user.Data.Setup.AEC,
-				HardDenoice: user.Data.Setup.HardDenoise,
-				SoftDenoice: user.Data.Setup.SoftDenoise,
-				Filtered:    user.Data.Setup.Filter,
+				Aec:         user.Data.Setup.Audio.AEC,
+				HardDenoice: user.Data.Setup.Audio.HardDenoise,
+				SoftDenoice: user.Data.Setup.Audio.SoftDenoise,
+				Filtered:    user.Data.Setup.Audio.Filter,
 			})
 			if err != nil {
 				log.Error("failed to create audio engine", logger.Err(err))
@@ -318,6 +322,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	m.setupConnestionsList()
 	m.setupOnlineList()
 	m.setupFriendsReqsList()
+	m.setupApearenceList()
 
 	for i := range m.regTextInputs {
 		ti := textinput.New()
@@ -391,7 +396,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
-	cmds = append(cmds, commands.AnimTickCmd(), commands.PulseTickCmd(), m.spinner.Tick)
+	cmds = append(cmds, commands.AnimTickCmd(), commands.PulseTickCmd(), commands.TimeTickCmd(), m.spinner.Tick)
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
 		cmds = append(cmds, commands.FetchOnlineFriendsCmd(m.user.Networking, m.user.Data.Personal.Friends),
 			commands.WaitForChatMessageCmd(m.msgChan),

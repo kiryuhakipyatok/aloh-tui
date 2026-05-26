@@ -30,3 +30,9 @@ func PulseTickCmd() tea.Cmd {
 		return PulseTickMsg(t)
 	})
 }
+
+func TimeTickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return t
+	})
+}
