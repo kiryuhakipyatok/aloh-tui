@@ -19,7 +19,7 @@ func (m *Model) focusInputs() {
 			m.friendsInputs[0].PromptStyle = ps
 		}
 	case states.FRIEND_STATE:
-		if m.sideState == states.LEFT_STATE {
+		if m.sideState == states.RIGHT_STATE {
 			m.friendsInputs[m.cursor].Focus()
 			m.friendsInputs[m.cursor].PromptStyle = ps
 		}
