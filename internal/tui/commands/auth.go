@@ -99,7 +99,7 @@ func RegisterCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *l
 			Typee: sshclient.REGISTER,
 		}
 		if !slices.Equal(password, repPassword) {
-			msg.Err = errs.ErrPasswordsNotEqual
+			msg.Err = errs.ErrPasswordsNotEqual()
 			return msg
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)

@@ -195,7 +195,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	user := users.NewUser(logFilePath, keysPath, dataFilePath)
 	user.Data.Setup.Appereance.BestFriendTag = m.defaultBFTag
-	user.Data.Setup.Appereance.NotificaionSign = m.defaultNotificationSign
+	user.Data.Setup.Appereance.NotificaionTag = m.defaultNotificationSign
 	user.Data.Setup.Appereance.ThemeColor = m.defaultThemeColor
 
 	userDataBytes, err := os.ReadFile(user.Paths.DataFilePath)
@@ -234,7 +234,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		})
 		if err != nil {
 			log.Error("err when sshclient", logger.Err(err))
-			if !errors.Is(err, errs.ErrAuth) {
+			if !errors.Is(err, errs.ErrAuth()) {
 				log.Error("err sshclient", logger.Err(err))
 				m.err = err
 				m.state = states.ERR_STATE
@@ -247,6 +247,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 				RegisterTime time.Time         `json:"registerTime"`
 				FriendsReqs  []users.FriendReq `json:"friendsReqs"`
 				Friends      []string          `json:"friends"`
+				BlockedUsers []string          `json:"blocked-users"`
 			}
 
 			if err := json.Unmarshal(personalData, &pd); err != nil {
@@ -257,6 +258,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			user.Data.Personal.Nickname = pd.Nickname
 			user.Data.Personal.RegisterTime = pd.RegisterTime.Local().Format("2006-01-02")
 			user.Data.Personal.FriendsReqs = pd.FriendsReqs
+			user.Data.Personal.BlockedUsers = pd.BlockedUsers
 			if len(user.Data.Personal.FriendsReqs) > 0 {
 				m.tabsNotifications["profile"] = struct{}{}
 			}
@@ -326,7 +328,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	for i := range m.regTextInputs {
 		ti := textinput.New()
-		ti.CharLimit = 32
+		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(cGray)
+		ti.CharLimit = 24
 		switch i {
 		case 0:
 			ti.Placeholder = "unique nickname"
@@ -342,7 +345,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	for i := range m.logingInput {
 		ti := textinput.New()
-		ti.CharLimit = 32
+		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(cGray)
+		ti.CharLimit = 24
 		switch i {
 		case 0:
 			ti.Placeholder = "nickname"
@@ -355,7 +359,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	for i := range m.friendsInputs {
 		ti := textinput.New()
-		ti.CharLimit = 32
+		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(cGray)
+		ti.CharLimit = 24
 		switch i {
 		case 0:
 			ti.Placeholder = "connect to friend"
@@ -377,7 +382,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	for i := range m.profileInputs {
 		ti := textinput.New()
-		ti.CharLimit = 32
+		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(cGray)
+		ti.CharLimit = 8
 		switch i {
 		case 0:
 			ti.Placeholder = "new color in hex, d to default"

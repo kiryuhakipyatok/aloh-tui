@@ -69,16 +69,16 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 		switch setup.Typee {
 		case LOGIN:
 			authType = "SSH-2.0-aloh-login"
-			errAuth = errs.ErrLogin
+			errAuth = errs.ErrLogin()
 		case REGISTER:
 			authType = "SSH-2.0-aloh-register"
-			errAuth = errs.ErrRegister
+			errAuth = errs.ErrRegister()
 		case DEFAULT:
 			authType = "SSH-2.0-aloh-default"
-			errAuth = errs.ErrAuth
+			errAuth = errs.ErrAuth()
 		default:
 			authType = "SSH-2.0-aloh-default"
-			errAuth = errs.ErrAuth
+			errAuth = errs.ErrAuth()
 		}
 
 		kp, err := InitKeys(setup.KeysPath)

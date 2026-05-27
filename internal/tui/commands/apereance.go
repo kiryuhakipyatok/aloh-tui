@@ -9,7 +9,7 @@ import (
 const (
 	COLOR = iota
 	BFTAG
-	N_SIGN
+	N_TAG
 	S_TIME
 	S_DATE
 	S_WEATHER
@@ -45,12 +45,12 @@ func ChangeBFTagCmd(user *users.User, newBFTag string) tea.Cmd {
 	}
 }
 
-func ChangeNotificationSignCmd(user *users.User, newNotifySign string) tea.Cmd {
+func ChangeNotificationTagCmd(user *users.User, newNotifySign string) tea.Cmd {
 	return func() tea.Msg {
 		msg := AppereanceMsg{
-			Typee: N_SIGN,
+			Typee: N_TAG,
 		}
-		if err := user.ChangeNotificationSign(newNotifySign); err != nil {
+		if err := user.ChangeNotificationTag(newNotifySign); err != nil {
 			msg.Err = err
 		}
 		return msg

@@ -45,7 +45,7 @@ func (m *Model) setupMicrohonesList() {
 		delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 		delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-		delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+		delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.Foreground(cGray)
 		delegate.SetSpacing(1)
 
 		dd := lists.DynamicDelegate{DefaultDelegate: delegate}
@@ -73,6 +73,7 @@ func (m *Model) setupConnestionsList() {
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle()
+	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.Foreground(cGray)
 	delegate.ShowDescription = true
 	delegate.SetSpacing(1)
 
@@ -98,7 +99,7 @@ func (m *Model) setupOnlineList() {
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
-	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.Foreground(cGray)
 	delegate.SetSpacing(1)
 
 	dd := lists.DynamicDelegate{DefaultDelegate: delegate}
@@ -180,7 +181,7 @@ func (m *Model) setupSettingsList() {
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.Foreground(cGray)
 	delegate.SetSpacing(1)
 
 	dd := lists.DynamicDelegate{DefaultDelegate: delegate}
@@ -216,7 +217,7 @@ func (m *Model) setupFriendsReqsList() {
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.Foreground(cGray)
 	delegate.SetSpacing(0)
 
 	dd := lists.DynamicDelegate{DefaultDelegate: delegate}
@@ -262,7 +263,8 @@ func (m *Model) setupApearenceList() {
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-	delegate.Styles.DimmedTitle = lipgloss.NewStyle().Foreground(cText)
+	delegate.Styles.NormalTitle = delegate.Styles.NormalTitle.Foreground(cDim)
+	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.Foreground(cGray)
 	delegate.SetSpacing(1)
 	dd := lists.DynamicDelegate{DefaultDelegate: delegate}
 	l := list.New(apearences, dd, m.width/2, m.height-4)

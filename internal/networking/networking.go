@@ -20,7 +20,8 @@ type Networking interface {
 	SendVideoData(data []byte) error
 
 	ConnectToUser(nickname string) error
-	DisconnectFromUsers() error
+	DisconnectFromAllUsers() error
+	DisconnectFromUser(id string) error
 
 	Close()
 }
@@ -113,8 +114,15 @@ func (n *networking) ConnectToUser(nickname string) error {
 	return nil
 }
 
-func (n *networking) DisconnectFromUsers() error {
+func (n *networking) DisconnectFromAllUsers() error {
 	if err := n.Disconnect(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *networking) DisconnectFromUser(id string) error {
+	if err := n.DisconnectById(id); err != nil {
 		return err
 	}
 	return nil

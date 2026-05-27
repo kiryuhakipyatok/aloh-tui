@@ -61,6 +61,7 @@ type Personal struct {
 	RegisterTime string      `json:"registerTime"`
 	FriendsReqs  []FriendReq `json:"-"`
 	Friends      []string    `json:"-"`
+	BlockedUsers []string    `json:"-"`
 }
 
 type FriendReq struct {
@@ -90,12 +91,12 @@ type Setup struct {
 }
 
 type Appereance struct {
-	BestFriendTag   string `json:"best-friend-tag"`
-	NotificaionSign string `json:"notification-sign"`
-	ThemeColor      string `json:"theme-color"`
-	ShowTime        bool   `json:"show-time"`
-	ShowDate        bool   `json:"show-date"`
-	ShowZone        bool   `json:"show-zone"`
+	BestFriendTag  string `json:"best-friend-tag"`
+	NotificaionTag string `json:"notification-tag"`
+	ThemeColor     string `json:"theme-color"`
+	ShowTime       bool   `json:"show-time"`
+	ShowDate       bool   `json:"show-date"`
+	ShowZone       bool   `json:"show-zone"`
 }
 
 type Notifications struct {

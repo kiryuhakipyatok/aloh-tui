@@ -78,6 +78,8 @@ github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260525155853-c39698724a19 h1
 github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260525155853-c39698724a19/go.mod h1:c4+vBMv0R8Sj+GxtTxD06iWiqfYtwMyR4O7QH/mNNik=
 github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260525162209-280b6015114b h1:zIeaoYVebYJDenOTeaQzHln9mYUYm79uOOxXqd6z28w=
 github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260525162209-280b6015114b/go.mod h1:c4+vBMv0R8Sj+GxtTxD06iWiqfYtwMyR4O7QH/mNNik=
+github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260527162703-238f3e1209cb h1:8NW1KJY5HCNIte/EvE3FmS3venL7QWZiadOzZ0gcwQY=
+github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260527162703-238f3e1209cb/go.mod h1:c4+vBMv0R8Sj+GxtTxD06iWiqfYtwMyR4O7QH/mNNik=
 github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e h1:r140sC6YmBlbwkO1ObcLh/27idiqCuNzTD4eMtmq8nw=
 github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e/go.mod h1:ygGMfWezx/ZqLUUZWbQr7geVOaGYdgUOxbp8KZBuasQ=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=

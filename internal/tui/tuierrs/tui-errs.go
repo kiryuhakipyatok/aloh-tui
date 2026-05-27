@@ -44,11 +44,12 @@ func CastError(err error) string {
 		case OFFLINE:
 			resErr = "offline"
 		}
+	} else {
+		appErr, ok := errors.AsType[errs.AppError](err)
+		if ok {
+			resErr = appErr.Error()
+		}
 	}
 
-	if errors.Is(err, errs.ErrAuth) || errors.Is(err, errs.ErrRegister) || errors.Is(err, errs.ErrLogin) ||
-	errors.Is(err, errs.ErrAlreadyExists) || errors.Is(err, errs.ErrNotFound) {
-		resErr = err.Error()
-	}
 	return resErr
 }

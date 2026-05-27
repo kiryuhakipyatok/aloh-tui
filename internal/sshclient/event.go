@@ -3,12 +3,13 @@ package sshclient
 import "encoding/json"
 
 const (
-	NEW_FRIEND = iota
+	NEW_FRIEND_REQ = iota
 	ACCEPT_FRIEND
 	DENY_FRIEND
 	DELETE_FRIEND
 	BLOCK_USER
 	UNBLOCK_USER
+	SEND_FRIEND_REQ
 )
 
 type Event struct {

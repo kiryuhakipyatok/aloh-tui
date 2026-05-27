@@ -20,29 +20,6 @@ func (u *User) UpdateUserJSON() error {
 	return nil
 }
 
-func (u *User) IncreaseAmountOfFriends(nickname string) error {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.Data.Personal.Friends = append(u.Data.Personal.Friends, nickname)
-	if err := u.UpdateUserJSON(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (u *User) DecreaseAmountOfFriends(nickname string) error {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.Data.Personal.Friends = slices.DeleteFunc(u.Data.Personal.Friends, func(f string) bool {
-		return f == nickname
-	})
-
-	if err := u.UpdateUserJSON(); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (u *User) IncreaseAmountOfMessages() error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -208,10 +185,10 @@ func (u *User) ChangeBFTag(tag string) error {
 	return nil
 }
 
-func (u *User) ChangeNotificationSign(sign string) error {
+func (u *User) ChangeNotificationTag(tag string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Appereance.NotificaionSign = sign
+	u.Data.Setup.Appereance.NotificaionTag = tag
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -289,6 +266,12 @@ func (u *User) NewFriendReq(nickname string) {
 	u.Data.Personal.FriendsReqs = append(u.Data.Personal.FriendsReqs, FriendReq{Nickname: nickname})
 }
 
+func (u *User) NewFriend(nickname string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Personal.Friends = append(u.Data.Personal.Friends, nickname)
+}
+
 func (u *User) DeleteFriendReq(nickname string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -297,8 +280,57 @@ func (u *User) DeleteFriendReq(nickname string) {
 	})
 }
 
+func (u *User) DeleteFriend(nickname string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Personal.Friends = slices.DeleteFunc(u.Data.Personal.Friends, func(f string) bool {
+		return f == nickname
+	})
+	delete(u.Data.Setup.Audio.UsersSetup, nickname)
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) BlockUser(nickname string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Personal.BlockedUsers = append(u.Data.Personal.BlockedUsers, nickname)
+	var deletedFriend bool
+	u.Data.Personal.Friends = slices.DeleteFunc(u.Data.Personal.Friends, func(f string) bool {
+		deletedFriend = f == nickname
+		return deletedFriend
+	})
+	u.Data.Personal.FriendsReqs = slices.DeleteFunc(u.Data.Personal.FriendsReqs, func(f FriendReq) bool {
+		return f.Nickname == nickname
+	})
+	if deletedFriend {
+		delete(u.Data.Setup.Audio.UsersSetup, nickname)
+		if err := u.UpdateUserJSON(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (u *User) UnblockUser(nickname string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Personal.BlockedUsers = slices.DeleteFunc(u.Data.Personal.BlockedUsers, func(b string) bool {
+		return b == nickname
+	})
+}
+
 func (u *User) IsFriend(nickname string) bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	return slices.Contains(u.Data.Personal.Friends, nickname)
 }
+
+func (u *User) IsBlocked(nickname string) bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return slices.Contains(u.Data.Personal.BlockedUsers, nickname)
+}
+

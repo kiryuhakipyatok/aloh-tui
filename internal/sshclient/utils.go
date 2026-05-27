@@ -12,10 +12,10 @@ func authErr(errStr string) bool {
 func castErr(errByte []byte) error {
 	switch errByte[0] {
 	case NOT_FOUND:
-		return errs.ErrNotFound
+		return errs.ErrNotFound()
 	case ALREADY_EXISTS:
-		return errs.ErrAlreadyExists
+		return errs.ErrAlreadyExists()
 	default:
-		return errs.ErrInternalServer
+		return errs.ErrInternalServer()
 	}
 }

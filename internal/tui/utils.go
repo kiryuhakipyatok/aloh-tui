@@ -111,8 +111,17 @@ func (m Model) getOfflineUsers() []string {
 	return offline
 }
 
-func isEqualOnline(online1, online2 map[string][]string) bool {
-	return maps.EqualFunc(online1, online2, func(arr1 []string, arr2 []string) bool {
+func isNewInOnline(newOnline, oldOnline map[string][]string) bool {
+	for n := range newOnline {
+		if _, ok := oldOnline[n]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+func isEqualOnline(newOnline, oldOnline map[string][]string) bool {
+	return maps.EqualFunc(newOnline, oldOnline, func(arr1 []string, arr2 []string) bool {
 		slices.Sort(arr1)
 		slices.Sort(arr2)
 		return slices.Equal(arr1, arr2)

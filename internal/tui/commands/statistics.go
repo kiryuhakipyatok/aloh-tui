@@ -10,26 +10,6 @@ type StatiscticsMsg struct {
 	Err error
 }
 
-func IncreaseAmountOfFriendsCmd(user *users.User, nickname string) tea.Cmd {
-	return func() tea.Msg {
-		msg := StatiscticsMsg{}
-		if err := user.IncreaseAmountOfFriends(nickname); err != nil {
-			msg.Err = err
-		}
-		return msg
-	}
-}
-
-func DecreaseAmountOfFriendsCmd(user *users.User, nickname string) tea.Cmd {
-	return func() tea.Msg {
-		msg := StatiscticsMsg{}
-		if err := user.DecreaseAmountOfFriends(nickname); err != nil {
-			msg.Err = err
-		}
-		return msg
-	}
-}
-
 func IncreaseAmountOfMessagesCmd(user *users.User) tea.Cmd {
 	return func() tea.Msg {
 		msg := StatiscticsMsg{}

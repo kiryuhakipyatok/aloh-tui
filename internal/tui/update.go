@@ -199,26 +199,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sshclient.Event:
 		nickname := msg.Data
 		switch msg.Type {
-		case sshclient.NEW_FRIEND:
-			m.user.NewFriendReq(msg.Data)
+		case sshclient.NEW_FRIEND_REQ:
 			if m.activeTab != 4 {
 				m.tabsNotifications["profile"] = struct{}{}
 			}
-			cmds = append(cmds, m.updateFriendsReqList(),
-				commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
-				commands.NotifyCmd(nickname, "new friend request"))
+			cmds = append(cmds, commands.NewFriendReqCmd(m.user, msg.Data))
 		case sshclient.ACCEPT_FRIEND:
 			if m.activeTab != 4 {
 				m.tabsNotifications["profile"] = struct{}{}
 			}
-			cmds = append(cmds, commands.IncreaseAmountOfFriendsCmd(m.user, nickname),
-				commands.NotifyCmd(nickname, "your new friend"))
+			cmds = append(cmds, commands.NewFriendCmd(m.user, nickname))
 		case sshclient.DELETE_FRIEND:
 			if m.activeTab != 4 {
 				m.tabsNotifications["profile"] = struct{}{}
 			}
 			delete(m.online, nickname)
-			cmds = append(cmds, commands.DecreaseAmountOfFriendsCmd(m.user, nickname),
+			cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nickname, false),
 				m.updateOnlineList(), commands.NotifyCmd(nickname, "no longer your friend"))
 		}
 		cmds = append(cmds, commands.WaitForEventMessageCmd(m.eventsChan))
@@ -284,10 +280,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			nickname := msg.Nickname
 			switch msg.Typee {
 			case sshclient.ACCEPT_FRIEND:
-				m.user.DeleteFriendReq(nickname)
+				commands.NotifyCmd(nickname, "your new friend")
 				return m, m.updateFriendsReqList()
 			case sshclient.DENY_FRIEND:
-				m.user.DeleteFriendReq(nickname)
 				return m, m.updateFriendsReqList()
 			case sshclient.DELETE_FRIEND:
 				delete(m.online, nickname)
@@ -298,12 +293,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.user.DeleteFriendReq(nickname)
 				cmds = append(cmds, m.updateOnlineList(), m.updateFriendsReqList())
 				return m, tea.Batch(cmds...)
-			case sshclient.NEW_FRIEND:
+			case sshclient.NEW_FRIEND_REQ:
+				cmds = append(cmds, m.updateFriendsReqList(),
+					commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
+					commands.NotifyCmd(nickname, "new friend request"))
+				return m, tea.Batch(cmds...)
 			}
 		}
 
 	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg,
-		commands.MuteUnmuteUserMsg, commands.StatiscticsMsg, commands.NotificationMessage, commands.ChangeMicrophoneMessage:
+		commands.MuteUnmuteUserMsg, commands.StatiscticsMsg, commands.NotificationMessage, commands.ChangeMicrophoneMessage, commands.SoloDisconn:
 		var err error
 		switch m := msg.(type) {
 		case commands.OnOffDenoiceMsg:
@@ -321,6 +320,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case commands.NotificationMessage:
 			err = m.Err
 		case commands.ChangeMicrophoneMessage:
+			err = m.Err
+		case commands.SoloDisconn:
 			err = m.Err
 		}
 
@@ -509,7 +510,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, commands.PlayNotificationCmd(m.user.Engines.AudioEngine))
 		}
 		if m.user.Data.Setup.Notifications.DesktopNotifications {
-			cmds = append(cmds, commands.NotifyCmd(m.user.Data.Personal.Nickname, textForDesktopNotification))
+			cmds = append(cmds, commands.NotifyCmd(msg.Nickname, textForDesktopNotification))
 		}
 		cmds = append(cmds, commands.WaitForRawChatMessageCmd(m.rawMsgChan))
 		return m, tea.Batch(cmds...)
@@ -527,9 +528,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
 		} else {
-			if msg.Online != nil && !isEqualOnline(m.online, msg.Online) {
+			if msg.Online != nil && !isEqualOnline(msg.Online, m.online) {
 				m.online = msg.Online
-				if m.activeTab != 0 {
+				if m.activeTab != 0 && isNewInOnline(msg.Online, m.online) {
 					m.tabsNotifications["friends"] = struct{}{}
 				}
 				cmd = m.updateOnlineList()
@@ -547,9 +548,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.PeerConnectedMsg:
+		nick := msg.Nickname
+		if m.user.IsBlocked(nick) {
+			return m, commands.DsiconnFromOne(m.user.Networking, nick)
+		}
 		hex := randomcolor.GetRandomColorInHex()
 		color := lipgloss.Color(hex)
-		nickname := lipgloss.NewStyle().Foreground(color).Render(msg.Nickname)
+		nickname := lipgloss.NewStyle().Foreground(color).Render(nick)
 		m.usersColors[msg.Nickname] = userColors{
 			mainColor: color,
 			subColor:  lipgloss.Color(utils.DarkenHex(hex, 0.7)),
@@ -1041,12 +1046,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							if !m.connected {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
-								cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, nick))
+								cmds = append(cmds, commands.ConnectToUserCmd(m.user, nick))
 							} else if m.connected && !slices.Contains(conns, m.user.Data.Personal.Nickname) {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
 
-								sequence := tea.Sequence(commands.LeaveCmd(m.user.Networking), commands.ConnectToUserCmd(m.user.Networking, nick))
+								sequence := tea.Sequence(commands.LeaveCmd(m.user.Networking), commands.ConnectToUserCmd(m.user, nick))
 								cmds = append(cmds, sequence)
 							}
 						}
@@ -1055,53 +1060,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						switch m.cursor {
 						case 0:
 							if !m.connected {
-								if m.friendsInputs[m.cursor].Value() != "" {
-									nick = m.friendsInputs[m.cursor].Value()
-									m.friendsInputs[m.cursor].Reset()
-								} else {
+								nick = strings.TrimSpace(m.friendsInputs[m.cursor].Value())
+								if nick == "" {
 									return m, nil
 								}
+
 								m.prState = m.state
 								m.state = states.LOAD_STATE
-								cmds = append(cmds, commands.ConnectToUserCmd(m.user.Networking, nick))
+
+								cmds = append(cmds, commands.ConnectToUserCmd(m.user, nick))
 							}
 						case 1:
-							if m.friendsInputs[m.cursor].Value() != "" {
-								nick = m.friendsInputs[m.cursor].Value()
-								m.friendsInputs[m.cursor].Reset()
-							} else {
+							nick = strings.TrimSpace(m.friendsInputs[m.cursor].Value())
+							if nick == "" {
 								return m, nil
 							}
+
 							m.prState = m.state
 							m.state = states.LOAD_STATE
 							cmds = append(cmds, commands.SendFriendRequestCmd(m.user, nick))
 						case 2:
-							if m.friendsInputs[m.cursor].Value() != "" {
-								nick = m.friendsInputs[m.cursor].Value()
-								m.friendsInputs[m.cursor].Reset()
-							} else {
+							nick = strings.TrimSpace(m.friendsInputs[m.cursor].Value())
+							if nick == "" {
 								return m, nil
 							}
+
 							m.prState = m.state
 							m.state = states.LOAD_STATE
-							cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nick))
+							cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nick, true))
 						case 3:
-							if m.friendsInputs[m.cursor].Value() != "" {
-								nick = m.friendsInputs[m.cursor].Value()
-								m.friendsInputs[m.cursor].Reset()
-							} else {
+							nick = strings.TrimSpace(m.friendsInputs[m.cursor].Value())
+							if nick == "" {
 								return m, nil
 							}
+
 							m.prState = m.state
 							m.state = states.LOAD_STATE
 							cmds = append(cmds, commands.BlockUserCmd(m.user, nick))
 						case 4:
-							if m.friendsInputs[m.cursor].Value() != "" {
-								nick = m.friendsInputs[m.cursor].Value()
-								m.friendsInputs[m.cursor].Reset()
-							} else {
+							nick = strings.TrimSpace(m.friendsInputs[m.cursor].Value())
+							if nick == "" {
 								return m, nil
 							}
+
 							m.prState = m.state
 							m.state = states.LOAD_STATE
 							cmds = append(cmds, commands.UnblockUserCmd(m.user, nick))
@@ -1214,7 +1215,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 							m.prState = m.state
 							m.state = states.LOAD_STATE
-							cmds = append(cmds, commands.ChangeNotificationSignCmd(m.user, newNotifySign))
+							cmds = append(cmds, commands.ChangeNotificationTagCmd(m.user, newNotifySign))
 							m.profileInputs[2].Reset()
 						case 3:
 							if i, ok := m.apearenceList.lipList.SelectedItem().(lists.ApearenceItem); ok {

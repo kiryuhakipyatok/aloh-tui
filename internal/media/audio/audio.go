@@ -852,7 +852,7 @@ func (ae *audioEngine) MuteUnmuteUser(nickname string) (bool, error) {
 	defer ae.mu.Unlock()
 	ua, ok := ae.usersAudio[nickname]
 	if !ok {
-		return false, errs.ErrNotFound
+		return false, errs.ErrNotFound()
 	}
 	s := ua.muted.Load()
 	ua.muted.Store(!s)
