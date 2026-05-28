@@ -298,6 +298,15 @@ func (m *Model) setListVisible(l *List, vis bool) {
 	l.lipList.SetDelegate(l.lipDelegate)
 }
 
+func (m *Model) unfocusLists() {
+	m.setListVisible(&m.apearenceList, false)
+	m.setListVisible(&m.connectionsList, false)
+	m.setListVisible(&m.friendsReqsList, false)
+	m.setListVisible(&m.settingsList, false)
+	m.setListVisible(&m.onlineList, false)
+	m.setListVisible(&m.microphonesList, false)
+}
+
 func (m *Model) updateFriendsReqList() tea.Cmd {
 	fReqs := m.user.GetFriendsReqs()
 	names := make([]string, 0, len(fReqs))

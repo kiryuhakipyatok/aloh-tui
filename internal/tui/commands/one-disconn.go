@@ -7,12 +7,15 @@ import (
 )
 
 type SoloDisconn struct {
-	Err error
+	Nickname string
+	Err      error
 }
 
-func DsiconnFromOne(netw networking.Networking, id string) tea.Cmd {
+func DisconnFromOne(netw networking.Networking, id string) tea.Cmd {
 	return func() tea.Msg {
-		msg := SoloDisconn{}
+		msg := SoloDisconn{
+			Nickname: id,
+		}
 		if netw != nil {
 			if err := netw.DisconnectFromUser(id); err != nil {
 				msg.Err = err

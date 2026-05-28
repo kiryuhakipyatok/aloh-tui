@@ -383,7 +383,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	for i := range m.profileInputs {
 		ti := textinput.New()
 		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(cGray)
-		ti.CharLimit = 8
+		ti.CharLimit = 7
 		switch i {
 		case 0:
 			ti.Placeholder = "new color in hex, d to default"

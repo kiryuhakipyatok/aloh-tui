@@ -43,7 +43,7 @@ func (u *User) IncreaseAmountOfConnections() error {
 func (u *User) IncreaseAmountOfConnectionsByUser(nickname string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if uc, ok := u.Data.Setup.Audio.UsersSetup[nickname]; ok {
+	if uc, ok := u.Data.Setup.Audio.UsersSetup[nickname]; ok && slices.Contains(u.Data.Personal.Friends, nickname) {
 		uc.AmountOfConnections++
 		if uc.AmountOfConnections > u.Data.Statistics.BestFriend.AmountOfConnections {
 			u.Data.Statistics.BestFriend.AmountOfConnections = uc.AmountOfConnections
@@ -307,6 +307,9 @@ func (u *User) BlockUser(nickname string) error {
 	})
 	if deletedFriend {
 		delete(u.Data.Setup.Audio.UsersSetup, nickname)
+		if u.Data.Statistics.BestFriend.Nickname == nickname {
+			u.Data.Statistics.BestFriend = noBF()
+		}
 		if err := u.UpdateUserJSON(); err != nil {
 			return err
 		}
@@ -333,4 +336,3 @@ func (u *User) IsBlocked(nickname string) bool {
 	defer u.mu.RUnlock()
 	return slices.Contains(u.Data.Personal.BlockedUsers, nickname)
 }
-

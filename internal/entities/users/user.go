@@ -35,11 +35,14 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 					DesktopNotifications: true,
 					AppNotifications:     true,
 				},
+				Appereance: Appereance{
+					ShowTime: true,
+					ShowDate: true,
+					ShowZone: true,
+				},
 			},
 			Statistics: Statistics{
-				BestFriend: BestFriend{
-					Nickname: "nobody",
-				},
+				BestFriend: noBF(),
 			},
 			Personal: Personal{
 				Friends:     make([]string, 0, 5),
@@ -131,4 +134,10 @@ type Statistics struct {
 type BestFriend struct {
 	Nickname            string `json:"nickname"`
 	AmountOfConnections uint   `json:"amount-of-connections"`
+}
+
+func noBF() BestFriend {
+	return BestFriend{
+		Nickname: "nobody",
+	}
 }

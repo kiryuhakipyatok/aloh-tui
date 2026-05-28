@@ -24,8 +24,10 @@ func (m *Model) focusInputs() {
 			m.friendsInputs[m.cursor].PromptStyle = ps
 		}
 	case states.CHAT_STATE:
-		m.chatTextInput.Focus()
-		m.chatTextInput.PromptStyle = ps
+		if m.connected {
+			m.chatTextInput.Focus()
+			m.chatTextInput.PromptStyle = ps
+		}
 	case states.LOGIN_STATE:
 		m.logingInput[m.cursor].Focus()
 		m.logingInput[m.cursor].PromptStyle = ps

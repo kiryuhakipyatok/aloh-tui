@@ -22,4 +22,5 @@ const (
 const (
 	LEFT_STATE = iota
 	RIGHT_STATE
+	ZERO_STATE
 )

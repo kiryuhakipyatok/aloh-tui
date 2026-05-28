@@ -127,3 +127,9 @@ func isEqualOnline(newOnline, oldOnline map[string][]string) bool {
 		return slices.Equal(arr1, arr2)
 	})
 }
+
+func isInConnections(conns []string, nickname string) bool {
+	return slices.ContainsFunc(conns, func(c string) bool {
+		return nickname == ansi.Strip(c)
+	})
+}
