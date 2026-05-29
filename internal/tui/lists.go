@@ -4,6 +4,7 @@ import (
 	"aloh-tui/internal/tui/components/lists"
 	"cmp"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -286,7 +287,6 @@ func (m *Model) setupApearenceList() {
 }
 
 func (m *Model) setListVisible(l *List, vis bool) {
-	l.lipList.Select(0)
 	if vis {
 		l.lipDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 		l.lipDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
@@ -435,23 +435,36 @@ func (m *Model) updateMicrophonesList() tea.Cmd {
 
 func (m *Model) updateOnlineList() tea.Cmd {
 	names := make([]string, 0, len(m.online))
+	bfTag := m.user.Data.Setup.Appereance.BestFriendTag
+	bfNick := m.user.Data.Setup.Appereance.BestFriendTag
+	banTag := m.user.Data.Setup.Appereance.BanTag
+	var wg sync.WaitGroup
 	for name := range m.online {
 		names = append(names, name)
+		wg.Go(func() {
+			for i, c := range m.online[name] {
+				if bfNick == c {
+					m.online[name][i] = bfTag + " " + c
+				} else if m.user.IsBlocked(c) {
+					m.online[name][i] = banTag + " " + c
+				}
+			}
+		})
 	}
-
+	wg.Wait()
 	slices.Sort(names)
 
 	newItems := make([]list.Item, 0, len(names))
 
 	for _, name := range names {
-		var bf string
-		if m.user.Data.Statistics.BestFriend.Nickname == name {
-			bf = m.user.Data.Setup.Appereance.BestFriendTag
+		var rel string
+		if bfNick == name {
+			rel = bfTag
 		}
 		newItems = append(newItems, lists.OnlineItem{
 			Name:        name,
 			Connections: m.online[name],
-			BFTag:       bf,
+			BFTag:       rel,
 		})
 	}
 
@@ -460,8 +473,12 @@ func (m *Model) updateOnlineList() tea.Cmd {
 
 func (m *Model) updateConnectionsList() tea.Cmd {
 	names := make([]string, 0, len(m.connections))
+	var clearName string
 	for _, name := range m.connections {
-		names = append(names, name)
+		clearName = ansi.Strip(name)
+		if !m.user.IsBlocked(clearName) {
+			names = append(names, name)
+		}
 	}
 
 	slices.Sort(names)
@@ -470,21 +487,21 @@ func (m *Model) updateConnectionsList() tea.Cmd {
 	for _, name := range names {
 		var vc float32 = 1
 		var muted bool
-		clearName := ansi.Strip(name)
+		clearName = ansi.Strip(name)
 		us, ok := m.user.Data.Setup.Audio.UsersSetup[clearName]
 		if ok {
 			vc = us.VolumeCoefficient
 			muted = us.Muted
 		}
-		var bf string
+		var rel string
 		if m.user.Data.Statistics.BestFriend.Nickname == clearName {
-			bf = m.user.Data.Setup.Appereance.BestFriendTag
+			rel = m.user.Data.Setup.Appereance.BestFriendTag
 		}
 		newItems = append(newItems, lists.ConnectionItem{
 			Nickname:          name,
 			VolumeCoefficient: vc,
 			Muted:             muted,
-			BFTag:             bf,
+			Relation:          rel,
 		})
 	}
 

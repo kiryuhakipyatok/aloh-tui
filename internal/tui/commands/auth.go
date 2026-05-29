@@ -41,10 +41,11 @@ func AuthCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logge
 			return msg
 		}
 		var pd struct {
-			Nickname     string               `json:"nickname"`
-			RegisterTime time.Time            `json:"registerTime"`
+			Nickname     string            `json:"nickname"`
+			RegisterTime time.Time         `json:"registerTime"`
 			FriendsReqs  []users.FriendReq `json:"friendsReqs"`
-			Friends      []string             `json:"friends"`
+			Friends      []string          `json:"friends"`
+			BlockedUsers []string          `json:"blocked-users"`
 		}
 
 		if err := json.Unmarshal(personalData, &pd); err != nil {
@@ -56,6 +57,7 @@ func AuthCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logge
 		user.Data.Personal.RegisterTime = pd.RegisterTime.Local().Format("2006-01-02")
 		user.Data.Personal.FriendsReqs = pd.FriendsReqs
 		user.Data.Personal.Friends = pd.Friends
+		user.Data.Personal.BlockedUsers = pd.BlockedUsers
 		user.SSHClient = client
 
 		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
@@ -174,10 +176,11 @@ func LoginCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logg
 		}
 
 		var pd struct {
-			Nickname     string               `json:"nickname"`
-			RegisterTime time.Time            `json:"registerTime"`
+			Nickname     string            `json:"nickname"`
+			RegisterTime time.Time         `json:"registerTime"`
 			FriendsReqs  []users.FriendReq `json:"friendsReqs"`
-			Friends      []string             `json:"friends"`
+			Friends      []string          `json:"friends"`
+			BlockedUsers []string          `json:"blocked-users"`
 		}
 
 		if err := json.Unmarshal(personalData, &pd); err != nil {
@@ -189,6 +192,7 @@ func LoginCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logg
 		user.Data.Personal.RegisterTime = pd.RegisterTime.Local().Format("2006-01-02")
 		user.Data.Personal.FriendsReqs = pd.FriendsReqs
 		user.Data.Personal.Friends = pd.Friends
+		user.Data.Personal.BlockedUsers = pd.BlockedUsers
 		user.SSHClient = client
 
 		user.Data.Setup.Audio.SoftDenoise = true

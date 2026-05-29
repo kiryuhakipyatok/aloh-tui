@@ -176,9 +176,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, nil
 					}
 
-					if m.zone.Get("leftSide").InBounds(msg) {
+					if m.zone.Get("leftSide").InBounds(msg) && m.sideState != states.LEFT_STATE {
 						m.sideState = states.LEFT_STATE
-					} else if m.zone.Get("rightSide").InBounds(msg) {
+					} else if m.zone.Get("rightSide").InBounds(msg) && m.sideState != states.RIGHT_STATE {
 						m.sideState = states.RIGHT_STATE
 					}
 
@@ -289,8 +289,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m, cmd = m.syncTabState(), m.updateMicrophonesItemList(m.user.Data.Devices.Microphone)
 				return m, cmd
 			case commands.BFTAG:
-
 				cmds = append(cmds, m.updateConnectionsList(), m.updateOnlineList())
+				return m, cmd
+			case commands.B_TAG:
+				cmds = append(cmds, m.updateOnlineList())
 				return m, cmd
 			}
 		}
@@ -318,10 +320,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case sshclient.BLOCK_USER:
 				delete(m.online, nickname)
 				if isInConnections(m.connections, nickname) {
-					m.log.Info("you blocked friend in connection")
 					cmds = append(cmds, commands.DisconnFromOne(m.user.Networking, nickname))
 				}
-				cmds = append(cmds, m.updateOnlineList(), m.updateFriendsReqList())
+
+				cmds = append(cmds, m.updateOnlineList(), m.updateFriendsReqList(), commands.NotifyCmd(nickname, "blocked"))
+				return m, tea.Batch(cmds...)
+			case sshclient.UNBLOCK_USER:
+				cmds = append(cmds, m.updateOnlineList(), commands.NotifyCmd(nickname, "unblocked"))
 				return m, tea.Batch(cmds...)
 			case sshclient.NEW_FRIEND_REQ:
 				cmds = append(cmds, m.updateFriendsReqList(),
@@ -336,16 +341,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
 		} else if m.connected {
-			m.connections = slices.DeleteFunc(m.connections, func(n string) bool {
-				if ansi.Strip(n) == msg.Nickname {
-					return true
-				}
-				return false
-			})
+			t := time.Now().Format("15:04:05")
+			red := lipgloss.NewStyle().Foreground(cErr)
+
+			m.messages = append(m.messages, commands.ChatMessage{Time: t, Nickname: "system", Text: red.Render(msg.Nickname) + red.Render(" banned!")})
 
 			cmds = append(cmds, m.updateConnectionsList())
-			if len(m.connections) == 0 && m.connected {
+			if len(m.connections) == 0 {
 				m.connected = false
+				m.connections = []string{}
+				m.messages = []commands.ChatMessage{}
 				select {
 				case m.stopCountMinutesChan <- struct{}{}:
 				default:
@@ -410,14 +415,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case commands.ConnectToUserMsg:
+	case commands.ConnectMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
-		} else {
-			if m.state == states.LOAD_STATE {
-				m.state = m.prState
-			}
+		} else if m.state == states.LOAD_STATE {
+
+			m.state = m.prState
+
+			// if !m.connected {
+			// 	m.connected = true
+			// 	if m.user.Engines.AudioEngine != nil {
+			// 		m.user.Engines.AudioEngine.SetConnected()
+			// 	}
+			// 	cmds = append(cmds, commands.CountMaxTimeInConnectionCmd(m.user, m.stopCountMinutesChan),
+			// 		commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
+			// 		commands.IncreaseAmountOfConnectionsCmd(m.user), textinput.Blink)
+
+			// 	if m.activeTab != 2 {
+			// 		m.tabsNotifications["voice"] = struct{}{}
+			// 	}
+			// 	if m.activeTab == 0 {
+			// 		m.activeTab = 1
+			// 		m = m.syncTabState()
+			// 	}
+			// }
 		}
 		// } else if !m.connected {
 		// 	m.log.Info("state before conn cmd", logger.Attr("state", m.state), logger.Attr("prState", m.prState))
@@ -470,8 +492,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages = []commands.ChatMessage{}
 			m.connections = []string{}
 			m.user.Engines.AudioEngine.PlayNotification()
-			m.activeTab = 0
-			m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: "you disconnected!"})
+			//m.activeTab = 0
+			// m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: "you disconnected!"})
 
 		}
 
@@ -606,9 +628,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.PeerConnectedMsg:
+		m.log.Info("new connect", msg.Nickname)
 		nick := msg.Nickname
 		if m.user.IsBlocked(nick) {
-			return m, commands.DisconnFromOne(m.user.Networking, nick)
+			m.log.Info("disconn from blocked", nick)
+			cmds = append(cmds, commands.DisconnFromOne(m.user.Networking, nick),
+				commands.WaitForPeerConnectionCmd(m.peerConnectionsChan))
+			return m, tea.Batch(cmds...)
 		}
 		hex := randomcolor.GetRandomColorInHex()
 		color := lipgloss.Color(hex)
@@ -648,43 +674,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.activeTab != 2 {
 			m.tabsNotifications["voice"] = struct{}{}
 		}
-		if m.activeTab == 0 {
-			m.activeTab = 1
-			m = m.syncTabState()
-		}
+		// if m.activeTab == 0 {
+		// 	m.activeTab = 1
+		// 	m = m.syncTabState()
+		// }
 
 	case commands.PeerDisconnectedMsg:
-		var colored string
-		m.connections = slices.DeleteFunc(m.connections, func(n string) bool {
-			if ansi.Strip(n) == msg.Nickname {
-				colored = n
-				return true
-			}
-			return false
-		})
-		if m.activeTab != 2 {
-			m.tabsNotifications["voice"] = struct{}{}
-		}
-		m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: colored + " disconnected!"})
-		cmds = append(cmds, m.updateConnectionsList(),
-			commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
-			commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan))
-		if len(m.connections) == 0 && m.connected {
-
-			m.connected = false
-			select {
-			case m.stopCountMinutesChan <- struct{}{}:
-			default:
-			}
-
-			if m.user.Engines.AudioEngine != nil {
-				if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
-					m.err = err
-					m.state = states.ERR_STATE
+		m.log.Info("new disconn", msg.Nickname)
+		nick := msg.Nickname
+		cmds = append(cmds, commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan))
+		if !m.user.IsBlocked(nick) {
+			var colored string
+			m.connections = slices.DeleteFunc(m.connections, func(n string) bool {
+				if ansi.Strip(n) == nick {
+					colored = n
+					return true
 				}
+				return false
+			})
+			if m.activeTab != 2 {
+				m.tabsNotifications["voice"] = struct{}{}
 			}
+			m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: colored + " disconnected!"})
+			cmds = append(cmds, m.updateConnectionsList(),
+				commands.PlayNotificationCmd(m.user.Engines.AudioEngine))
+			if len(m.connections) == 0 && m.connected {
 
-			m.log.Info("peer disconnected you are solo")
+				m.connected = false
+				select {
+				case m.stopCountMinutesChan <- struct{}{}:
+				default:
+				}
+
+				if m.user.Engines.AudioEngine != nil {
+					if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
+						m.err = err
+						m.state = states.ERR_STATE
+					}
+				}
+
+				m.log.Info("peer disconnected you are solo")
+			}
 		}
 
 	case spinner.TickMsg:
@@ -1166,12 +1196,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							if !m.connected {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
-								cmds = append(cmds, commands.ConnectToUserCmd(m.user, nick))
+								m.log.Info("connecting...")
+								cmds = append(cmds, commands.ConnectToAllUsersCmd(m.user, nick))
 							} else if m.connected && !isInConnections(conns, m.user.Data.Personal.Nickname) {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
 
-								sequence := tea.Sequence(commands.LeaveCmd(m.user.Networking), commands.ConnectToUserCmd(m.user, nick))
+								sequence := tea.Sequence(commands.LeaveCmd(m.user.Networking), commands.ConnectToAllUsersCmd(m.user, nick))
 								cmds = append(cmds, sequence)
 							}
 						}
@@ -1186,12 +1217,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							if !m.connected {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
-								cmds = append(cmds, commands.ConnectToUserCmd(m.user, nick))
+								cmds = append(cmds, commands.ConnectToAllUsersCmd(m.user, nick))
 							} else if m.connected && !isInConnections(m.connections, nick) {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
 
-								sequence := tea.Sequence(commands.LeaveCmd(m.user.Networking), commands.ConnectToUserCmd(m.user, nick))
+								sequence := tea.Sequence(commands.LeaveCmd(m.user.Networking), commands.ConnectToAllUsersCmd(m.user, nick))
 								cmds = append(cmds, sequence)
 							}
 						case 1:
@@ -1333,15 +1364,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							cmds = append(cmds, commands.ChangeBFTagCmd(m.user, newBFTag))
 							m.profileInputs[1].Reset()
 						case 2:
-							newNotifySign := strings.TrimSpace(m.profileInputs[2].Value())
-							if newNotifySign == "d" {
-								newNotifySign = m.defaultNotificationSign
+							newNotifyTag := strings.TrimSpace(m.profileInputs[2].Value())
+							if newNotifyTag == "d" {
+								newNotifyTag = m.defaultNotificationTag
 							}
 							m.prState = m.state
 							m.state = states.LOAD_STATE
-							cmds = append(cmds, commands.ChangeNotificationTagCmd(m.user, newNotifySign))
+							cmds = append(cmds, commands.ChangeNotificationTagCmd(m.user, newNotifyTag))
 							m.profileInputs[2].Reset()
 						case 3:
+							newBanTag := strings.TrimSpace(m.profileInputs[3].Value())
+							if newBanTag == "d" {
+								newBanTag = m.defaultBanTag
+							}
+							m.prState = m.state
+							m.state = states.LOAD_STATE
+							cmds = append(cmds, commands.ChangeBanTagCmd(m.user, newBanTag))
+							m.profileInputs[3].Reset()
+						case 4:
 							if i, ok := m.apearenceList.lipList.SelectedItem().(lists.ApearenceItem); ok {
 								m.prState = m.state
 								m.state = states.LOAD_STATE

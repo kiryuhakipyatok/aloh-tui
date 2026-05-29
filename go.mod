@@ -13,7 +13,7 @@ require (
 	github.com/gen2brain/beeep v0.11.2
 	github.com/gen2brain/malgo v0.11.24
 	github.com/kechako/go-speexdsp v0.2.2
-	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260527162703-238f3e1209cb
+	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260529182235-7af3b345815e
 	github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e
 	github.com/lrstanley/bubblezone v1.0.0
 	golang.design/x/clipboard v0.7.1

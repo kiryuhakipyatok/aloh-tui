@@ -8,13 +8,13 @@ type ConnectionItem struct {
 	Nickname          string
 	VolumeCoefficient float32
 	Muted             bool
-	BFTag             string
+	Relation             string
 }
 
 func (ci ConnectionItem) Title() string {
 	name := ci.Nickname
-	if ci.BFTag != "" {
-		name = ci.BFTag + " " + name
+	if ci.Relation != "" {
+		name = ci.Relation + " " + name
 	}
 	return name
 }

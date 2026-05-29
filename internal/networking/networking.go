@@ -19,6 +19,7 @@ type Networking interface {
 	SendVoiceData(data []byte) error
 	SendVideoData(data []byte) error
 
+	ConnectToAllUsers(nickname string) error
 	ConnectToUser(nickname string) error
 	DisconnectFromAllUsers() error
 	DisconnectFromUser(id string) error
@@ -107,8 +108,15 @@ func (n *networking) SendVideoData(data []byte) error {
 	return nil
 }
 
-func (n *networking) ConnectToUser(nickname string) error {
+func (n *networking) ConnectToAllUsers(nickname string) error {
 	if err := n.Connect(nickname); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *networking) ConnectToUser(nickname string) error {
+	if err := n.ConnectById(nickname); err != nil {
 		return err
 	}
 	return nil

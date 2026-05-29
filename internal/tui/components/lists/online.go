@@ -34,7 +34,7 @@ func (oi OnlineItem) DynamicDescription(isSelected bool) string {
 	}
 	desc := "alone" + ent
 	if len(oi.Connections) > 0 {
-		conns := strings.Join(oi.Connections, "  ·  ")
+		conns := strings.Join(oi.Connections, " · ")
 		desc = fmt.Sprintf("with: %s%s", conns, ent)
 	}
 	return desc

@@ -22,6 +22,18 @@ func (u *User) GetFriends() []string {
 	return u.Data.Personal.Friends
 }
 
+func (u *User) GetAmountOfFriends() int {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return len(u.Data.Personal.Friends)
+}
+
+func (u *User) GetAmountOfBlocked() int {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return len(u.Data.Personal.BlockedUsers)
+}
+
 func (u *User) GetMinutesInCurrentConenction() uint {
 	u.mu.RLock()
 	defer u.mu.RUnlock()

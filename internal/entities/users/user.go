@@ -96,6 +96,7 @@ type Setup struct {
 type Appereance struct {
 	BestFriendTag  string `json:"best-friend-tag"`
 	NotificaionTag string `json:"notification-tag"`
+	BanTag         string `json:"ban-tag"`
 	ThemeColor     string `json:"theme-color"`
 	ShowTime       bool   `json:"show-time"`
 	ShowDate       bool   `json:"show-date"`

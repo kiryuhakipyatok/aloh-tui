@@ -185,6 +185,16 @@ func (u *User) ChangeBFTag(tag string) error {
 	return nil
 }
 
+func (u *User) ChangeBanTag(tag string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Setup.Appereance.BanTag = tag
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (u *User) ChangeNotificationTag(tag string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -305,6 +315,7 @@ func (u *User) BlockUser(nickname string) error {
 	u.Data.Personal.FriendsReqs = slices.DeleteFunc(u.Data.Personal.FriendsReqs, func(f FriendReq) bool {
 		return f.Nickname == nickname
 	})
+
 	if deletedFriend {
 		delete(u.Data.Setup.Audio.UsersSetup, nickname)
 		if u.Data.Statistics.BestFriend.Nickname == nickname {
@@ -323,6 +334,7 @@ func (u *User) UnblockUser(nickname string) {
 	u.Data.Personal.BlockedUsers = slices.DeleteFunc(u.Data.Personal.BlockedUsers, func(b string) bool {
 		return b == nickname
 	})
+
 }
 
 func (u *User) IsFriend(nickname string) bool {

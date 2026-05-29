@@ -10,6 +10,7 @@ const (
 	COLOR = iota
 	BFTAG
 	N_TAG
+	B_TAG
 	S_TIME
 	S_DATE
 	S_WEATHER
@@ -45,12 +46,24 @@ func ChangeBFTagCmd(user *users.User, newBFTag string) tea.Cmd {
 	}
 }
 
-func ChangeNotificationTagCmd(user *users.User, newNotifySign string) tea.Cmd {
+func ChangeNotificationTagCmd(user *users.User, newNotifyTag string) tea.Cmd {
 	return func() tea.Msg {
 		msg := AppereanceMsg{
 			Typee: N_TAG,
 		}
-		if err := user.ChangeNotificationTag(newNotifySign); err != nil {
+		if err := user.ChangeNotificationTag(newNotifyTag); err != nil {
+			msg.Err = err
+		}
+		return msg
+	}
+}
+
+func ChangeBanTagCmd(user *users.User, newBanTag string) tea.Cmd {
+	return func() tea.Msg {
+		msg := AppereanceMsg{
+			Typee: B_TAG,
+		}
+		if err := user.ChangeBanTag(newBanTag); err != nil {
 			msg.Err = err
 		}
 		return msg

@@ -125,8 +125,9 @@ type Model struct {
 	themeColor        lipgloss.Color
 	subThemeColor     lipgloss.Color
 
-	defaultBFTag            string
-	defaultNotificationSign string
+	defaultBFTag           string
+	defaultNotificationTag string
+	defaultBanTag          string
 
 	stopCountMinutesChan chan struct{}
 
@@ -154,15 +155,16 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		logingInput:   make([]textinput.Model, 2),
 		logoAnim:      make([]string, 0, 4),
 		notConnAnim:   make([]string, 0, 4),
-		profileInputs: make([]textinput.Model, 3),
+		profileInputs: make([]textinput.Model, 4),
 		friendsInputs: make([]textinput.Model, 5),
 		messages:      make([]commands.ChatMessage, 0, 20),
 
 		eventsChan: make(chan sshclient.Event, 50),
 
-		defaultThemeColor:       "#A6E22E",
-		defaultBFTag:            "👑",
-		defaultNotificationSign: "🔔",
+		defaultThemeColor:      "#A6E22E",
+		defaultBFTag:           "👑",
+		defaultNotificationTag: "🔔",
+		defaultBanTag:          "🚫",
 
 		spinner: sp,
 
@@ -195,7 +197,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	user := users.NewUser(logFilePath, keysPath, dataFilePath)
 	user.Data.Setup.Appereance.BestFriendTag = m.defaultBFTag
-	user.Data.Setup.Appereance.NotificaionTag = m.defaultNotificationSign
+	user.Data.Setup.Appereance.NotificaionTag = m.defaultNotificationTag
+	user.Data.Setup.Appereance.BanTag = m.defaultBanTag
 	user.Data.Setup.Appereance.ThemeColor = m.defaultThemeColor
 
 	userDataBytes, err := os.ReadFile(user.Paths.DataFilePath)
@@ -390,7 +393,9 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		case 1:
 			ti.Placeholder = "new best friend tag, d to default"
 		case 2:
-			ti.Placeholder = "new notification sign, d to default"
+			ti.Placeholder = "new notification tag, d to default"
+		case 3:
+			ti.Placeholder = "new ban tag, d to default"
 		}
 		m.profileInputs[i] = ti
 	}
