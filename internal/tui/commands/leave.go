@@ -20,6 +20,7 @@ func LeaveCmd(netw networking.Networking) tea.Cmd {
 		}
 		if netw != nil {
 			if err := netw.DisconnectFromAllUsers(); err != nil {
+				
 				msg.Err = err
 			}
 		}

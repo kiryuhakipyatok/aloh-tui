@@ -155,6 +155,16 @@ func (u *User) ChangeMicrophone(mic string) error {
 	return nil
 }
 
+func (u *User) ChangeHeadphones(h string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Devices.Headphones = h
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (u *User) OnOffFilter(filter bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -347,4 +357,17 @@ func (u *User) IsBlocked(nickname string) bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	return slices.Contains(u.Data.Personal.BlockedUsers, nickname)
+}
+
+func (u *User) NewUserSetup(nickname string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Setup.Audio.UsersSetup[nickname] = &UsersSetup{
+		VolumeCoefficient: 1,
+	}
+
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
 }

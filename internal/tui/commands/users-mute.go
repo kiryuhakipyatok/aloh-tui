@@ -24,7 +24,6 @@ func MuteUnmuteUserCmd(user *users.User, nickname string) tea.Cmd {
 				msg.Err = err
 			}
 		}
-
 		return msg
 	}
 

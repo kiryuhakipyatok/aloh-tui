@@ -1,7 +1,7 @@
 package networking
 
 import (
-	networkapi "github.com/kiryuhakipyatok/aloh-networking/cmd/api"
+	alohnetwork "github.com/kiryuhakipyatok/aloh-networking"
 )
 
 type Networking interface {
@@ -14,10 +14,13 @@ type Networking interface {
 	VoiceCallback(cb func(id string, data []byte))
 	PeerConnectedCallback(cb func(id string))
 	PeerDisconnectedCallback(cb func(id string))
+	EventCallback(cb func(id string, e alohnetwork.Event))
 
 	SendMessageInChat(msg []byte) error
 	SendVoiceData(data []byte) error
 	SendVideoData(data []byte) error
+
+	NewEvent(e alohnetwork.Event) error
 
 	ConnectToAllUsers(nickname string) error
 	ConnectToUser(nickname string) error
@@ -28,11 +31,18 @@ type Networking interface {
 }
 
 type networking struct {
-	*networkapi.Netwoking
+	*alohnetwork.Netwoking
 }
 
 func NewNetworking(nickname, logPath string) (Networking, error) {
-	netw, err := networkapi.NewNetworking(nickname, logPath)
+	if len(embeddedConfig) == 0 {
+		panic("embedded config is empty")
+	}
+
+	cfg := setupConfig()
+	cfg.App.LogPath = logPath
+
+	netw, err := alohnetwork.NewNetworking(nickname, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +95,17 @@ func (n *networking) PeerConnectedCallback(cb func(id string)) {
 
 func (n *networking) PeerDisconnectedCallback(cb func(id string)) {
 	n.RegisterOnPeerDisconnected(cb)
+}
+
+func (n *networking) EventCallback(cb func(id string, e alohnetwork.Event)) {
+	n.RegisterOnEvent(cb)
+}
+
+func (n *networking) NewEvent(e alohnetwork.Event) error {
+	if err := n.SendEvent(e); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (n *networking) SendMessageInChat(msg []byte) error {

@@ -1,8 +1,10 @@
 package main
 
 import (
+	_ "net/http/pprof"
 	"aloh-tui/internal/app"
 	"aloh-tui/pkg/logger"
+	"net/http"
 )
 
 var (
@@ -11,5 +13,8 @@ var (
 )
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
 	app.Run(logger.DevEnv, version)
 }

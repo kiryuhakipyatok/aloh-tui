@@ -1,12 +1,16 @@
 package tui
 
 import (
+	"aloh-tui/internal/tui/components/lists"
+	"aloh-tui/internal/tui/components/states"
 	"aloh-tui/internal/tui/components/titles"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -132,4 +136,46 @@ func isInConnections(conns []string, nickname string) bool {
 	return slices.ContainsFunc(conns, func(c string) bool {
 		return nickname == ansi.Strip(c)
 	})
+}
+
+func (m *Model) unfocusLists() {
+	lists.SetListVisible(&m.apearenceList.DefList, false)
+	lists.SetListVisible(&m.connectionsList.DefList, false)
+	lists.SetListVisible(&m.friendsReqsList.DefList, false)
+	lists.SetListVisible(&m.settingsList.DefList, false)
+	lists.SetListVisible(&m.onlineList.DefList, false)
+	lists.SetListVisible(&m.microphonesList.DefList, false)
+	lists.SetListVisible(&m.headphonesList.DefList, false)
+}
+
+func (m Model) selectSetting() (Model, tea.Cmd) {
+	if i, ok := m.settingsList.LipList.SelectedItem().(lists.SettingsItem); ok {
+		m.prState = m.state
+		m.state = states.LOAD_STATE
+		switch i.Id {
+		case lists.DEVICES_SETTINGS:
+			m.state = states.DEVICES_STATE
+		case lists.AUDIO_SETTINGS:
+			m.state = states.AUDIO_STATE
+			m.sideState = states.RIGHT_STATE
+		case lists.NOTIFICATIONS_SETTINGS:
+			m.state = states.NOTIFICATIONS_STATE
+			m.sideState = states.RIGHT_STATE
+		case lists.BINDS_SETTINGS:
+			m.state = states.BINDS_STATE
+		default:
+			return m, nil
+		}
+		m = m.syncTabState()
+		return m, textinput.Blink
+	}
+	return m, nil
+}
+
+func cloneMap(original map[string][]string) map[string][]string {
+	cp := make(map[string][]string, len(original))
+	for k, v := range original {
+		cp[k] = v
+	}
+	return cp
 }

@@ -1,35 +1,35 @@
 package commands
 
-import (
-	"aloh-tui/internal/networking"
+// import (
+// 	"aloh-tui/internal/networking"
 
-	tea "github.com/charmbracelet/bubbletea"
-)
+// 	tea "github.com/charmbracelet/bubbletea"
+// )
 
-type OnlineMsg struct {
-	Online map[string][]string
-	Err    error
-}
+// type OnlineMsg struct {
+// 	Online map[string][]string
+// 	Err    error
+// }
 
-func FetchOnlineFriendsCmd(netw networking.Networking, nicknames []string) tea.Cmd {
-	return func() tea.Msg {
-		msg := OnlineMsg{}
-		if len(nicknames) <= 0 {
-			return msg
-		}
-		if netw != nil {
-			online, err := netw.FetchOnlineFriends(nicknames)
-			if err != nil {
-				msg.Err = err
-				return msg
-			}
+// func FetchOnlineFriendsCmd(netw networking.Networking, nicknames []string) tea.Cmd {
+// 	return func() tea.Msg {
+// 		msg := OnlineMsg{}
+// 		if len(nicknames) <= 0 {
+// 			return msg
+// 		}
+// 		if netw != nil {
+// 			online, err := netw.FetchOnlineFriends(nicknames)
+// 			if err != nil {
+// 				msg.Err = err
+// 				return msg
+// 			}
 
-			msg.Online = online
-		}
+// 			msg.Online = online
+// 		}
 
-		return msg
-	}
-}
+// 		return msg
+// 	}
+// }
 
 // func FetchOnlineCmd(netw networking.Networking, nickname string) tea.Cmd {
 // 	return func() tea.Msg {

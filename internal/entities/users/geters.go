@@ -76,6 +76,18 @@ func (u *User) GetAppNotificationsState() bool {
 	return u.Data.Setup.Notifications.AppNotifications
 }
 
+func (u *User) GetDesktopNotificationsState() bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Notifications.DesktopNotifications
+}
+
+func (u *User) GetAudioNotificationsState() bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Notifications.AudioNotifications
+}
+
 func (u *User) GetShowTimeState() bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
@@ -92,4 +104,52 @@ func (u *User) GetShowZoneState() bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	return u.Data.Setup.Appereance.ShowZone
+}
+
+func (u *User) GetNotificationTag() string {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Appereance.NotificaionTag
+}
+
+func (u *User) GetBanTag() string {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Appereance.BanTag
+}
+
+func (u *User) GetBFTag() string {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Appereance.BestFriendTag
+}
+
+func (u *User) GetBinds() Binds {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Binds
+}
+
+func (u *User) GetAudio() Audio {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Audio
+}
+
+func (u *User) GetNotifications() Notifications {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Notifications
+}
+
+func (u *User) GetDevices() Devices {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Devices
+}
+
+func (u *User) GetAppereance() Appereance {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Appereance
 }

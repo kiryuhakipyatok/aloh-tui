@@ -6,7 +6,9 @@ import (
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
 	"aloh-tui/internal/tui/commands"
+	"aloh-tui/internal/tui/components/lists"
 	"aloh-tui/internal/tui/components/states"
+	"aloh-tui/internal/tui/components/styles"
 	"aloh-tui/internal/tui/components/titles"
 	"aloh-tui/internal/tui/components/windows"
 	"aloh-tui/internal/utils"
@@ -17,6 +19,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/AvraamMavridis/randomcolor"
@@ -24,12 +27,18 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	alohnetwork "github.com/kiryuhakipyatok/aloh-networking"
 	bz "github.com/lrstanley/bubblezone"
 )
 
 type userColors struct {
 	mainColor lipgloss.Color
 	subColor  lipgloss.Color
+}
+
+type userState struct {
+	fullMute bool
+	micMute  bool
 }
 
 type Model struct {
@@ -62,7 +71,8 @@ type Model struct {
 	friendsInputs []textinput.Model
 	profileInputs []textinput.Model
 
-	eventsChan chan sshclient.Event
+	sshEventsChan  chan sshclient.Event
+	netwEventsChan chan commands.NetworkEventMsg
 
 	defaultThemeColor string
 
@@ -91,20 +101,19 @@ type Model struct {
 	usersColors map[string]userColors
 	connections []string
 	online      map[string][]string
+	//usersStates map[string]*userState
 
-	microphonesList List
-	//microphonesDelegate list.DefaultDelegate
-	connectionsList List
-	//connectionsDelegate list.DefaultDelegate
-	onlineList List
-	//onlineDelegate      lists.DynamicOnlineDelegate
-	settingsList List
-	//settingsDelegate    list.DefaultDelegate
-	apearenceList List
-	// apearenceList       list.Model
-	// apearenceDelegate   list.DefaultDelegate
-	friendsReqsList List
-	//friendsReqsDelegate lists.DynamicFriendsReqDelegate
+	connectionsList lists.ConnectionsList
+
+	onlineList lists.OnlineList
+
+	settingsList      lists.SettingsList
+	notificationsList lists.SwitcherList
+	audioList         lists.SwitcherList
+	microphonesList   lists.DeviceList
+	headphonesList    lists.DeviceList
+	apearenceList     lists.SwitcherList
+	friendsReqsList   lists.FriendsReqsList
 
 	tabsNotifications map[string]struct{}
 
@@ -159,7 +168,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		friendsInputs: make([]textinput.Model, 5),
 		messages:      make([]commands.ChatMessage, 0, 20),
 
-		eventsChan: make(chan sshclient.Event, 50),
+		sshEventsChan:  make(chan sshclient.Event, 50),
+		netwEventsChan: make(chan commands.NetworkEventMsg, 50),
 
 		defaultThemeColor:      "#A6E22E",
 		defaultBFTag:           "👑",
@@ -173,12 +183,15 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		stopCountMinutesChan: make(chan struct{}, 1),
 
 		usersColors: make(map[string]userColors, 5),
+		//usersStates: make(map[string]*userState, 5),
 
 		zone: bz.New(),
 
 		connections: make([]string, 0, 3),
 
 		userColor: randomcolor.GetRandomColorInHex(),
+
+		curTime: time.Now(),
 
 		log: appLogger,
 
@@ -232,7 +245,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			Nickname:   user.Data.Personal.Nickname,
 			KeysPath:   user.Paths.KeysPath,
 			Typee:      sshclient.DEFAULT,
-			EventsChan: m.eventsChan,
+			EventsChan: m.sshEventsChan,
 			Password:   nil,
 		})
 		if err != nil {
@@ -247,26 +260,27 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		} else {
 			var pd struct {
 				Nickname     string            `json:"nickname"`
-				RegisterTime time.Time         `json:"registerTime"`
+				RegisterTime string            `json:"registerTime"`
 				FriendsReqs  []users.FriendReq `json:"friendsReqs"`
 				Friends      []string          `json:"friends"`
 				BlockedUsers []string          `json:"blocked-users"`
 			}
 
 			if err := json.Unmarshal(personalData, &pd); err != nil {
-				log.Error("failed to unmarshal users's personal data", logger.Err(err), logNickname)
+				log.Error("failed to unmarshal user personal data", logger.Err(err), logNickname)
 				return nil, err
 			}
 
 			user.Data.Personal.Nickname = pd.Nickname
-			user.Data.Personal.RegisterTime = pd.RegisterTime.Local().Format("2006-01-02")
+			user.Data.Personal.RegisterTime = pd.RegisterTime
 			user.Data.Personal.FriendsReqs = pd.FriendsReqs
+			user.Data.Personal.Friends = pd.Friends
 			user.Data.Personal.BlockedUsers = pd.BlockedUsers
+			user.SSHClient = client
 			if len(user.Data.Personal.FriendsReqs) > 0 {
 				m.tabsNotifications["profile"] = struct{}{}
 			}
-			user.Data.Personal.Friends = pd.Friends
-			user.SSHClient = client
+
 			log.Info("user authorized successfully, networking setting...", logNickname)
 
 			networking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
@@ -294,21 +308,49 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			log.Info("setting netwoking callbacks...", logNickname)
 
 			networking.ChatCallback(func(id string, data []byte) {
+				defer func() {
+					if r := recover(); r != nil {
+						m.log.Error("panic:", r, string(debug.Stack()))
+					}
+				}()
 				t := time.Now().Format("15:04:05")
 				m.rawMsgChan <- commands.RawChatMessage{Time: t, Nickname: id, Data: data}
 
 			})
 			networking.VoiceCallback(func(id string, data []byte) {
-
+				defer func() {
+					if r := recover(); r != nil {
+						m.log.Error("panic:", r, string(debug.Stack()))
+					}
+				}()
 				audioEngine.PlayUserVoice(id, data)
 			})
 			networking.PeerConnectedCallback(func(id string) {
+				defer func() {
+					if r := recover(); r != nil {
+						m.log.Error("panic:", r, string(debug.Stack()))
+					}
+				}()
 				t := time.Now().Format("15:04:05")
 				m.peerConnectionsChan <- commands.PeerConnectedMsg{Nickname: id, Time: t}
 			})
 			networking.PeerDisconnectedCallback(func(id string) {
+				defer func() {
+					if r := recover(); r != nil {
+						m.log.Error("panic:", r, string(debug.Stack()))
+					}
+				}()
 				t := time.Now().Format("15:04:05")
 				m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
+			})
+
+			networking.EventCallback(func(id string, e alohnetwork.Event) {
+				defer func() {
+					if r := recover(); r != nil {
+						m.log.Error("panic:", r, string(debug.Stack()))
+					}
+				}()
+				m.netwEventsChan <- commands.NetworkEventMsg{Nickname: id, Event: e}
 			})
 			user.SSHClient = client
 			user.Engines.AudioEngine = audioEngine
@@ -319,19 +361,34 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	m.user = user
 
-	if m.user.Engines.AudioEngine != nil {
-		m.setupMicrohonesList()
-		m.setupSettingsList()
+	ls := lists.ListSetup{
+		ThemeColor:       m.themeColor,
+		SubColor:         m.subThemeColor,
+		NormalDescColor:  styles.CGray,
+		NormalTitleColor: styles.CText,
 	}
 
-	m.setupConnestionsList()
-	m.setupOnlineList()
-	m.setupFriendsReqsList()
-	m.setupApearenceList()
+	if m.user.Engines.AudioEngine != nil {
+		m.microphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.MICROPHONE, ls)
+		m.headphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.HEADPHONES, ls)
+	}
+
+	m.connectionsList = lists.SetupConnestionsList(ls)
+	m.onlineList = lists.SetupOnlineList(m.online, ls)
+	m.friendsReqsList = lists.SetupFriendsReqsList(m.user, ls)
+	m.apearenceList = lists.SetupSwitcherList(m.user, lists.APEREANCE, lists.ListSetup{
+		ThemeColor:       m.themeColor,
+		SubColor:         m.subThemeColor,
+		NormalDescColor:  styles.CGray,
+		NormalTitleColor: lipgloss.AdaptiveColor{Light: styles.Black, Dark: styles.White},
+	})
+	m.notificationsList = lists.SetupSwitcherList(m.user, lists.NOTIFICATIONS, ls)
+	m.audioList = lists.SetupSwitcherList(m.user, lists.AUDIO, ls)
+	m.settingsList = lists.SetupSettingsList(ls)
 
 	for i := range m.regTextInputs {
 		ti := textinput.New()
-		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(cGray)
+		ti.PlaceholderStyle = styles.CGrayStyle
 		ti.CharLimit = 24
 		switch i {
 		case 0:
@@ -348,7 +405,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	for i := range m.logingInput {
 		ti := textinput.New()
-		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(cGray)
+		ti.PlaceholderStyle = styles.CGrayStyle
 		ti.CharLimit = 24
 		switch i {
 		case 0:
@@ -362,7 +419,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	for i := range m.friendsInputs {
 		ti := textinput.New()
-		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(cGray)
+		ti.PlaceholderStyle = styles.CGrayStyle
 		ti.CharLimit = 24
 		switch i {
 		case 0:
@@ -385,7 +442,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 	for i := range m.profileInputs {
 		ti := textinput.New()
-		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(cGray)
+		ti.PlaceholderStyle = styles.CGrayStyle
 		ti.CharLimit = 7
 		switch i {
 		case 0:
@@ -407,15 +464,19 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
-	cmds = append(cmds, commands.AnimTickCmd(), commands.PulseTickCmd(), commands.TimeTickCmd(), m.spinner.Tick)
+	cmds = append(cmds, commands.AnimTickCmd(), commands.PulseTickCmd())
 	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-		cmds = append(cmds, commands.FetchOnlineFriendsCmd(m.user.Networking, m.user.Data.Personal.Friends),
+		cmds = append(cmds,
 			commands.WaitForChatMessageCmd(m.msgChan),
-			commands.WaitForEventMessageCmd(m.eventsChan),
+			commands.WaitForSSHEventMessageCmd(m.sshEventsChan),
+			commands.WaitForNetworkEventMessageCmd(m.netwEventsChan),
 			commands.WaitForRawChatMessageCmd(m.rawMsgChan),
 			commands.WaitForPeerConnectionCmd(m.peerConnectionsChan),
 			commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan),
 			commands.TickCmd(), tea.EnableMouseCellMotion)
+		if m.user.GetShowTimeState() {
+			cmds = append(cmds, commands.TimeTickCmd())
+		}
 		return tea.Batch(cmds...)
 	}
 	return tea.Batch(cmds...)

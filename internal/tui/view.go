@@ -2,6 +2,7 @@ package tui
 
 import (
 	"aloh-tui/internal/tui/components/states"
+	"aloh-tui/internal/tui/components/styles"
 	"aloh-tui/internal/tui/components/titles"
 	"aloh-tui/internal/tui/components/windows"
 	"aloh-tui/internal/tui/tuierrs"
@@ -10,45 +11,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
-
-var (
-	cDim  = lipgloss.Color("#75715E")
-	cGray = lipgloss.Color("#5f5f5f")
-
-	cAccent  = lipgloss.Color("#FD971F")
-	cErr     = lipgloss.Color("#F92672")
-	cSubtext = lipgloss.Color("#66D9EF")
-
-	cText = lipgloss.AdaptiveColor{Light: "#1A1919", Dark: "#F8F8F2"}
-
-	whitePulse = []string{
-		"#444444",
-		"#666666",
-		"#888888",
-		"#AAAAAA",
-		"#CCCCCC",
-		"#FFFFFF",
-		"#CCCCCC",
-		"#AAAAAA",
-		"#888888",
-		"#666666",
-	}
-
-	blackPulse = []string{
-		"#BBBBBB",
-		"#999999",
-		"#777777",
-		"#555555",
-		"#333333",
-		"#000000",
-		"#333333",
-		"#555555",
-		"#777777",
-		"#999999",
-	}
-
-	headerInactive = lipgloss.NewStyle().Foreground(cDim).Bold(true)
 )
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
@@ -65,7 +27,7 @@ func (m Model) isLoggedIn() bool {
 
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
-		return m.spinner.View() + "loading..."
+		return "loading..."
 	}
 
 	padW, padH := 2, 0
@@ -77,7 +39,7 @@ func (m Model) View() string {
 	}
 
 	if m.curWindow == windows.START_WINDOW {
-		footer := lipgloss.NewStyle().Foreground(cDim).Width(usableW).Render("ALT+Q: quit")
+		footer := styles.CDimStyle.Width(usableW).Render("ALT+Q: quit")
 		uiContent := m.renderStartView(usableW, usableH-lipgloss.Height(footer)-1)
 		finalLayout := lipgloss.JoinVertical(lipgloss.Left, uiContent, "", footer)
 		return lipgloss.NewStyle().Padding(padH, padW).Render(m.zone.Scan(lipgloss.Place(usableW, usableH, lipgloss.Left, lipgloss.Top, finalLayout)))
@@ -89,9 +51,7 @@ func (m Model) View() string {
 
 	footerData := "ALT+Q: quit | TAB/ARRS: switch tabs | ESC: back | ALT+H: help"
 
-	leftFooterPart := lipgloss.NewStyle().
-		Foreground(cDim).
-		Width(usableW - rightFooterW).
+	leftFooterPart := styles.CDimStyle.Width(usableW - rightFooterW).
 		Align(lipgloss.Left).
 		Render(footerData)
 
@@ -115,7 +75,7 @@ func (m Model) View() string {
 		rightHeaderData = append(rightHeaderData, curZone)
 	}
 
-	rightHeaderPart := lipgloss.NewStyle().Foreground(cDim).Padding(1, 1, 0, 0).Render(strings.Join(rightHeaderData, " "))
+	rightHeaderPart := styles.CDimStyle.Padding(1, 1, 0, 0).Render(strings.Join(rightHeaderData, " "))
 	rightHeaderW := lipgloss.Width(rightHeaderPart)
 
 	leftHeaderPart := lipgloss.NewStyle().Width(usableW-rightHeaderW).Foreground(m.themeColor).Padding(1, 0, 0, 1).Render(titles.A)
@@ -142,24 +102,9 @@ func (m Model) View() string {
 	inactiveBorder := tabBorderWithBottom("┴", "─", "┴")
 	activeBorder := tabBorderWithBottom("┘", " ", "└")
 
-	inactiveTabStyle := lipgloss.NewStyle().
-		Border(inactiveBorder, true).
-		BorderForeground(cDim).
-		BorderBottomForeground(cDim).
-		Foreground(cDim).
-		Align(lipgloss.Center)
+	inactiveTabStyle := styles.InactiveTabStyle.Border(inactiveBorder, true).Align(lipgloss.Center)
 
-	activeTabStyle := lipgloss.NewStyle().
-		Border(activeBorder, true).
-		BorderForeground(cDim).
-		Foreground(m.themeColor).
-		Bold(true).
-		Align(lipgloss.Center)
-
-	windowStyle := lipgloss.NewStyle().
-		BorderForeground(cDim).
-		Border(lipgloss.NormalBorder()).
-		UnsetBorderTop()
+	activeTabStyle := styles.ActiveTabStyle.Border(activeBorder, true).Foreground(m.themeColor)
 
 	var renderedTabs []string
 	baseWidth := usableW / len(tabs)
@@ -167,7 +112,7 @@ func (m Model) View() string {
 
 	for i, t := range tabs {
 		if _, ok := m.tabsNotifications[t]; ok && m.user.GetAppNotificationsState() {
-			t += fmt.Sprintf(" %s", m.user.Data.Setup.Appereance.NotificaionTag)
+			t += fmt.Sprintf(" %s", m.user.GetNotificationTag())
 		}
 		isFirst, isLast, isActive := i == 0, i == len(tabs)-1, i == m.activeTab
 		style := inactiveTabStyle
@@ -230,9 +175,9 @@ func (m Model) View() string {
 	var uiContent string
 	switch m.state {
 	case states.ERR_STATE:
-		uiContent = m.renderErrView(windowInnerW, windowInnerH, cText)
+		uiContent = m.renderErrView(windowInnerW, windowInnerH, styles.CText)
 	case states.HELP_STATE:
-		uiContent = m.renderHelpView(windowInnerW, windowInnerH, cText)
+		uiContent = m.renderHelpView(windowInnerW, windowInnerH, styles.CText)
 	default:
 		if !m.isLoggedIn() {
 			switch m.activeTab {
@@ -246,20 +191,20 @@ func (m Model) View() string {
 			case 0:
 				uiContent = m.renderFriendsTab(windowInnerW, windowInnerH)
 			case 1:
-				uiContent = m.renderChatTab(windowInnerW, windowInnerH, cText)
+				uiContent = m.renderChatTab(windowInnerW, windowInnerH, styles.CText)
 			case 2:
 				uiContent = m.renderVoiceTab(windowInnerW, windowInnerH)
 			case 3:
 				uiContent = m.renderVideoTab(windowInnerW, windowInnerH)
 			case 4:
-				uiContent = m.renderProfileView(windowInnerW, windowInnerH, cText)
+				uiContent = m.renderProfileView(windowInnerW, windowInnerH, styles.CText)
 			case 5:
 				uiContent = m.renderSettingsView(windowInnerW, windowInnerH)
 			}
 		}
 	}
 
-	contentBox := windowStyle.Width(usableW - 2).Height(windowInnerH).Render(lipgloss.NewStyle().Padding(0, 1).Render(uiContent))
+	contentBox := styles.WindowStyle.Width(usableW - 2).Height(windowInnerH).Render(lipgloss.NewStyle().Padding(0, 1).Render(uiContent))
 
 	tabWindow := lipgloss.JoinVertical(lipgloss.Left, tabsRow, contentBox)
 
@@ -303,9 +248,9 @@ func (m Model) renderVoiceTab(w, h int) string {
 	}
 	var leftMiddleSect string
 	if !m.connected {
-		pulse := whitePulse
+		pulse := styles.WhitePulse
 		if !lipgloss.HasDarkBackground() {
-			pulse = blackPulse
+			pulse = styles.BlackPulse
 		}
 		aloneLogo := m.aloneAnim[m.animFrame%len(m.aloneAnim)]
 		currentColor := pulse[m.pulseFrame%len(pulse)]
@@ -319,8 +264,8 @@ func (m Model) renderVoiceTab(w, h int) string {
 		)
 	} else {
 		rawStatesW := lipgloss.Width(rawStatesStr)
-		m.connectionsList.lipList.SetSize(leftW-rawStatesW-4, h-2)
-		textStyle := lipgloss.NewStyle().PaddingLeft(2).Render(lipgloss.JoinHorizontal(lipgloss.Left, m.connectionsList.lipList.View(), rawStatesStr))
+		m.connectionsList.DefList.LipList.SetSize(leftW-rawStatesW-4, h-2)
+		textStyle := styles.PaddingLeftStyle.Render(lipgloss.JoinHorizontal(lipgloss.Left, m.connectionsList.DefList.LipList.View(), rawStatesStr))
 		leftMiddleSect = lipgloss.Place(
 			leftW,
 			leftMiddleHeight,
@@ -336,13 +281,13 @@ func (m Model) renderVoiceTab(w, h int) string {
 	lblRight := m.headerActiveStyle.Render("► details")
 	voicePowerLbl := ""
 	statusText := "not connected"
-	statusColor := cDim
+	statusColor := styles.CDim
 	disc := ""
 	if m.connected {
-		voicePowerLbl = lipgloss.NewStyle().PaddingLeft(2).Width(rightW).Align(lipgloss.Center).Foreground(cText).Render("voice powers")
+		voicePowerLbl = styles.PaddingLeftCDimStyle.Width(rightW).Align(lipgloss.Center).Render("voice powers")
 		statusText = "connected"
 		statusColor = m.themeColor
-		disc = lipgloss.NewStyle().Foreground(cErr).PaddingRight(1).Render("ENTER to disconnect")
+		disc = styles.CErrPaddingStyle.Render("ENTER to disconnect")
 	}
 
 	bottomRightLPart := lipgloss.NewStyle().Foreground(statusColor).Render("status: " + statusText)
@@ -361,9 +306,9 @@ func (m Model) renderVoiceTab(w, h int) string {
 	}
 	var rightMiddleSect string
 	if !m.connected {
-		pulse := whitePulse
+		pulse := styles.WhitePulse
 		if !lipgloss.HasDarkBackground() {
-			pulse = blackPulse
+			pulse = styles.BlackPulse
 		}
 		currentColor := pulse[m.pulseFrame%len(pulse)]
 		notConnLogo := m.notConnAnim[m.animFrame%len(m.notConnAnim)]
@@ -397,12 +342,12 @@ func (m Model) renderVoiceTab(w, h int) string {
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 	rightPane = m.zone.Mark("rightSide", rightPane)
 	leftPane = m.zone.Mark("leftSide", leftPane)
-	dividerPanel := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	dividerPanel := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, styles.CDimStyle.Render(vertLine(h)))
 	return m.zone.Mark("voiceW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPanel, rightPane))
 }
 
 func (m Model) renderVideoTab(w, h int) string {
-	return m.zone.Mark("videoW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, safeTruncate(lipgloss.NewStyle().Foreground(cDim).Render("~ video functionality coming soon ~"), w)))
+	return m.zone.Mark("videoW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, safeTruncate(styles.CDimStyle.Render("~ video functionality coming soon ~"), w)))
 }
 
 func (m Model) renderFriendsTab(w, h int) string {
@@ -412,19 +357,19 @@ func (m Model) renderFriendsTab(w, h int) string {
 	lblTopLeft := m.headerActiveStyle.Render("► online friends")
 
 	leftTopContent := lipgloss.NewStyle().PaddingLeft(2).Height(h - 4).Render("zero friends online")
-	if len(m.onlineList.lipList.Items()) > 0 {
-		m.onlineList.lipList.SetSize(leftW-2, h-4)
+	if len(m.onlineList.DefList.LipList.Items()) > 0 {
+		m.onlineList.DefList.LipList.SetSize(leftW-2, h-4)
 
-		leftTopContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.onlineList.lipList.View())
+		leftTopContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.onlineList.DefList.LipList.View())
 	}
 
 	leftBotContent := "offline: "
 
 	offline := m.getOfflineUsers()
 	if len(offline) > 0 {
-		leftBotContent = lipgloss.NewStyle().Foreground(cDim).Render(leftBotContent + strings.Join(m.getOfflineUsers(), " · "))
+		leftBotContent = styles.CDimStyle.Render(leftBotContent + strings.Join(m.getOfflineUsers(), " · "))
 	} else {
-		leftBotContent = lipgloss.NewStyle().Foreground(cDim).Render(leftBotContent + "all friends are online")
+		leftBotContent = styles.CDimStyle.Render(leftBotContent + "all friends are online")
 	}
 
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblTopLeft, "", leftTopContent, "", leftBotContent)
@@ -437,13 +382,13 @@ func (m Model) renderFriendsTab(w, h int) string {
 	m.friendsInputs[0].Width = max(1, rightW-4)
 	var rightTopContent string
 	if m.state == states.LOAD_STATE && m.prState == states.CONN_STATE {
-		rightTopContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(m.spinner.View() + "connecting to friend...")
+		rightTopContent = styles.PaddingLeftCDimStyle.Render(m.spinner.View() + "connecting to friend...")
 	} else if m.connected {
 		alr := lipgloss.NewStyle().Foreground(m.themeColor).Render("you're ")
-		curMins := lipgloss.NewStyle().Foreground(cText).Render(fmt.Sprintf("%d min", m.user.GetMinutesInCurrentConenction()))
+		curMins := styles.CTextStyle.Render(fmt.Sprintf("%d min", m.user.GetMinutesInCurrentConenction()))
 		withWho := lipgloss.NewStyle().Foreground(m.themeColor).Render(fmt.Sprintf(" in connection with: %s", strings.Join(m.connections, " · ")))
 		rightTopContent = lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("enter nickname to:"),
+			styles.PaddingLeftCDimStyle.Render("enter nickname to:"),
 			"",
 			lipgloss.NewStyle().PaddingLeft(2).Render(m.friendsInputs[0].View()),
 			"",
@@ -452,7 +397,7 @@ func (m Model) renderFriendsTab(w, h int) string {
 		)
 	} else {
 		rightTopContent = lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("enter nickname to:"),
+			styles.PaddingLeftCDimStyle.Render("enter nickname to:"),
 			"",
 			lipgloss.NewStyle().PaddingLeft(2).Render(m.friendsInputs[0].View()),
 		)
@@ -461,19 +406,19 @@ func (m Model) renderFriendsTab(w, h int) string {
 	lblBottomRight := m.headerActiveStyle.Render("► manage friends")
 	var rightBottomContent string
 	if m.state == states.LOAD_STATE && m.prState == states.FRIEND_STATE {
-		rightBottomContent = safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(m.spinner.View()+"sending friend request..."), rightW)
+		rightBottomContent = safeTruncate(styles.PaddingLeftCDimStyle.Render(m.spinner.View()+"sending friend request..."), rightW)
 	} else {
 		inputWidth := max(1, (rightW-4)/2)
 		for i := range m.friendsInputs {
 			m.friendsInputs[i].Width = inputWidth
 		}
-		frReq := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Width(inputWidth).Render(m.friendsInputs[1].View()), inputWidth)
-		delFr := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Width(inputWidth).Render(m.friendsInputs[2].View()), inputWidth)
-		bl := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Width(inputWidth).Render(m.friendsInputs[3].View()), inputWidth)
-		unb := safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Width(inputWidth).Render(m.friendsInputs[4].View()), inputWidth)
+		frReq := safeTruncate(styles.PaddingLeftStyle.Width(inputWidth).Render(m.friendsInputs[1].View()), inputWidth)
+		delFr := safeTruncate(styles.PaddingLeftStyle.Width(inputWidth).Render(m.friendsInputs[2].View()), inputWidth)
+		bl := safeTruncate(styles.PaddingLeftStyle.Width(inputWidth).Render(m.friendsInputs[3].View()), inputWidth)
+		unb := safeTruncate(styles.PaddingLeftStyle.Width(inputWidth).Render(m.friendsInputs[4].View()), inputWidth)
 		if rightBotH > 10 {
 			rightBottomContent = lipgloss.JoinVertical(lipgloss.Left,
-				safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("enter nickname to:"), rightW),
+				safeTruncate(styles.PaddingLeftCDimStyle.Render("enter nickname to:"), rightW),
 				"",
 				frReq,
 				"",
@@ -487,7 +432,7 @@ func (m Model) renderFriendsTab(w, h int) string {
 			firstLine := lipgloss.JoinHorizontal(lipgloss.Left, frReq, bl)
 			secondLine := lipgloss.JoinHorizontal(lipgloss.Left, delFr, unb)
 			rightBottomContent = lipgloss.JoinVertical(lipgloss.Left,
-				safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("enter nickname to:"), rightW),
+				safeTruncate(styles.PaddingLeftCDimStyle.Render("enter nickname to:"), rightW),
 				"",
 				firstLine,
 				"",
@@ -501,12 +446,12 @@ func (m Model) renderFriendsTab(w, h int) string {
 	rightTop := lipgloss.Place(rightW, rightTopH, lipgloss.Left, lipgloss.Top, rightTopBox)
 	rightBotBox := lipgloss.JoinVertical(lipgloss.Left, lblBottomRight, "", rightBottomContent)
 	rightBot := lipgloss.Place(rightW, rightBotH, lipgloss.Left, lipgloss.Top, rightBotBox)
-	dividerHorizPane := lipgloss.Place(rightW, 1, lipgloss.Center, lipgloss.Center, lipgloss.NewStyle().Foreground(cDim).Render(horizLine(rightW)))
+	dividerHorizPane := lipgloss.Place(rightW, 1, lipgloss.Center, lipgloss.Center, styles.CDimStyle.Render(horizLine(rightW)))
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightTop, dividerHorizPane, rightBot)
 
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
-	dividerVertPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	dividerVertPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, styles.CDimStyle.Render(vertLine(h)))
 	rightPane = m.zone.Mark("rightSide", rightPane)
 	leftPane = m.zone.Mark("leftSide", leftPane)
 	return m.zone.Mark("friendsW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerVertPane, rightPane))
@@ -516,20 +461,115 @@ func (m Model) renderSettingsView(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblLeft := m.headerActiveStyle.Render("► app settings")
+	var (
+		lblLeft     string
+		leftContent string
 
-	m.settingsList.lipList.SetSize(leftW-2, h-2)
-	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.lipList.View()))
+		lblRight     string
+		rightContent string
+	)
+
+	renderSetup := func(keys, desc string, maxW int) string {
+		k := styles.CDimStyle.Width(24).Render(keys)
+		d := styles.CTextStyle.Render(desc)
+		return safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(k+d), maxW)
+	}
+
+	switch m.state {
+	case states.SETTINGS_STATE:
+		lblRight = m.headerActiveStyle.Render("► your settings setup")
+
+		colW := (rightW - 2) / 2
+
+		binds := m.user.GetBinds()
+		audio := m.user.GetAudio()
+		notifications := m.user.GetNotifications()
+		devices := m.user.GetDevices()
+
+		leftRight := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("binds"),
+			renderSetup("friends tab", binds.FriendsTab, colW),
+			renderSetup("chat tab", binds.ChatTab, colW),
+			renderSetup("voice tab", binds.VoiceTab, colW),
+			renderSetup("video tab", binds.VideoTab, colW),
+			renderSetup("profile tab", binds.ProfileTab, colW),
+			renderSetup("settings tab", binds.SettingsTab, colW),
+			renderSetup("mute mic", binds.MicMute, colW),
+			renderSetup("full mute", binds.FullMute, colW),
+			renderSetup("user's mute", binds.UserMute, colW),
+		)
+
+		leftLeft := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("audio"),
+			renderSetup("hard denoise", fmt.Sprintf("%t", audio.HardDenoise), colW),
+			renderSetup("soft denoise", fmt.Sprintf("%t", audio.SoftDenoise), colW),
+			renderSetup("echocanceller", fmt.Sprintf("%t", audio.AEC), colW),
+			renderSetup("equalizer", fmt.Sprintf("%t", audio.Filter), colW),
+			"", styles.PaddingLeftCGrayStyle.Render("notifications"),
+			renderSetup("app notifications", fmt.Sprintf("%t", notifications.AppNotifications), colW),
+			renderSetup("desktop notifications", fmt.Sprintf("%t", notifications.DesktopNotifications), colW),
+			renderSetup("audio notifications", fmt.Sprintf("%t", notifications.AudioNotifications), colW),
+		)
+
+		leftTop := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("devices"),
+			renderSetup("headphones", devices.Headphones, rightW),
+			renderSetup("microphone", devices.Microphone, rightW),
+		)
+
+		styledLeftLeft := lipgloss.NewStyle().Width(colW).Render(leftLeft)
+		styledLeftRight := lipgloss.NewStyle().Width(rightW - colW).Render(leftRight)
+		middle := lipgloss.JoinHorizontal(lipgloss.Top, styledLeftLeft, styledLeftRight)
+
+		rightContent = lipgloss.JoinVertical(lipgloss.Left, leftTop, "", middle)
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+
+	case states.AUDIO_STATE:
+		lblRight = m.headerActiveStyle.Render("► audio settings")
+		m.audioList.LipList.SetSize(rightW-2, h-2)
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.audioList.LipList.View())
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+
+	case states.NOTIFICATIONS_STATE:
+		lblRight = m.headerActiveStyle.Render("► notification settings")
+		m.notificationsList.LipList.SetSize(rightW-2, h-2)
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.notificationsList.LipList.View())
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+
+	case states.DEVICES_STATE:
+		lblLeft = m.headerActiveStyle.Render("► headphones")
+		m.headphonesList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.headphonesList.LipList.View())
+
+		lblRight = m.headerActiveStyle.Render("► microphones")
+		m.microphonesList.LipList.SetSize(rightW-2, h-2)
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.microphonesList.LipList.View())
+
+	case states.BINDS_STATE:
+		lblRight = m.headerActiveStyle.Render("► audio binds")
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render("audio binds")
+
+		lblLeft = m.headerActiveStyle.Render("► quick jumps binds")
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render("quick jumps binds")
+	}
+
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", leftContent)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
-	lblRight := m.headerActiveStyle.Render("► microphones")
-	m.microphonesList.lipList.SetSize(rightW-2, h-2)
-	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", lipgloss.NewStyle().PaddingLeft(2).Render(m.microphonesList.lipList.View()))
+	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", rightContent)
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
-	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, styles.CDimStyle.Render(vertLine(h)))
+
 	rightPane = m.zone.Mark("rightSide", rightPane)
 	leftPane = m.zone.Mark("leftSide", leftPane)
+
 	return m.zone.Mark("settingsW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
 }
 
@@ -564,7 +604,7 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 			kTrunc = safeTruncate(title, kw)
 		}
 
-		k := lipgloss.NewStyle().Foreground(cDim).Width(kw).Render(kTrunc)
+		k := styles.CDimStyle.Width(kw).Render(kTrunc)
 		d := lipgloss.NewStyle().Foreground(cText).Render(data)
 		return safeTruncate(lipgloss.NewStyle().PaddingRight(2).Render(k+d), rightStatsW)
 	}
@@ -588,14 +628,14 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 	leftRTopBox = lipgloss.Place(rightStatsW, leftRTopBoxH, lipgloss.Right, lipgloss.Top, leftRTopBox)
 
 	nick := lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.NewStyle().PaddingLeft(2).Width(leftLTopBoxWidth).Foreground(cDim).Render("nickname:"),
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(m.user.Data.Personal.Nickname))
+		styles.PaddingLeftCDimStyle.Width(leftLTopBoxWidth).Render("nickname:"),
+		styles.PaddingLeftCTextStyle.Render(m.user.Data.Personal.Nickname))
 	reg := lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.NewStyle().PaddingLeft(2).Width(leftLTopBoxWidth).Foreground(cDim).Render("registered:"),
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(m.user.Data.Personal.RegisterTime))
+		styles.PaddingLeftCDimStyle.Width(leftLTopBoxWidth).Render("registered:"),
+		styles.PaddingLeftCTextStyle.Render(m.user.Data.Personal.RegisterTime))
 	bfView := lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.NewStyle().PaddingLeft(2).Width(leftLTopBoxWidth).Foreground(cDim).Render("best friend:"),
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(fmt.Sprintf("%s\n(%d conns)", bf.Nickname, bf.AmountOfConnections)))
+		styles.PaddingLeftCDimStyle.Width(leftLTopBoxWidth).Render("best friend:"),
+		styles.PaddingLeftCTextStyle.Render(fmt.Sprintf("%s\n(%d conns)", bf.Nickname, bf.AmountOfConnections)))
 	personalInfo := lipgloss.JoinVertical(lipgloss.Left, nick, "", reg, "", bfView)
 
 	leftLTopBox := lipgloss.JoinVertical(lipgloss.Left, lblTopLeft, "", personalInfo)
@@ -616,20 +656,20 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 
 	if m.state == states.LOAD_STATE && m.prState == states.PROFILE_STATE && m.sideState == states.LEFT_STATE {
 		leftBotContent = lipgloss.NewStyle().MaxHeight(leftBotH).PaddingLeft(2).Render(m.spinner.View() + "accepting friend request...")
-	} else if len(m.friendsReqsList.lipList.Items()) <= 0 {
+	} else if len(m.friendsReqsList.DefList.LipList.Items()) <= 0 {
 		leftBotContent = lipgloss.NewStyle().MaxHeight(leftBotH).PaddingLeft(2).Render("zero friend request")
 	} else {
 		listH := max(0, leftBotH-2)
 		listW := max(1, leftW-2)
-		m.friendsReqsList.lipList.SetSize(listW, listH)
-		leftBotContent = lipgloss.NewStyle().MaxHeight(leftBotH).PaddingLeft(2).Render(m.friendsReqsList.lipList.View())
+		m.friendsReqsList.DefList.LipList.SetSize(listW, listH)
+		leftBotContent = lipgloss.NewStyle().MaxHeight(leftBotH).PaddingLeft(2).Render(m.friendsReqsList.DefList.LipList.View())
 	}
 
 	leftBotBox := lipgloss.JoinVertical(lipgloss.Left, lblBotLeft, "", leftBotContent)
 	leftBotBox = lipgloss.NewStyle().MaxHeight(leftBotH).Render(leftBotBox)
 	leftBot := lipgloss.Place(leftW, leftBotH, lipgloss.Left, lipgloss.Top, leftBotBox)
 	leftTop := lipgloss.Place(leftW, leftTopH, lipgloss.Left, lipgloss.Top, leftTopBox)
-	dividerHorizPane := lipgloss.Place(leftW, 1, lipgloss.Center, lipgloss.Center, lipgloss.NewStyle().Foreground(cDim).Render(horizLine(leftW)))
+	dividerHorizPane := lipgloss.Place(leftW, 1, lipgloss.Center, lipgloss.Center, styles.CDimStyle.Render(horizLine(leftW)))
 
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, leftTop, dividerHorizPane, leftBot)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, lipgloss.NewStyle().MaxHeight(h).Render(leftBox))
@@ -643,17 +683,19 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 	tags := lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render("tags")
 	datetimes := lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render("datetimes")
 
+	apereance := m.user.GetAppereance()
+
 	rightTopBox := lipgloss.JoinVertical(lipgloss.Left, colors, "",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("theme color: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.Appereance.ThemeColor)),
+		styles.PaddingLeftCDimStyle.Render("theme color: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.ThemeColor)),
 		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[0].View()),
 		"", tags, "",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("best friend tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.Appereance.BestFriendTag)),
+		styles.PaddingLeftCDimStyle.Render("best friend tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.BestFriendTag)),
 		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[1].View()),
 		"",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("notification tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.Appereance.NotificaionTag)),
+		styles.PaddingLeftCDimStyle.Render("notification tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.NotificaionTag)),
 		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[2].View()),
 		"",
-		lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("ban tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(m.user.Data.Setup.Appereance.BanTag)),
+		styles.PaddingLeftCDimStyle.Render("ban tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.BanTag)),
 		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[3].View()),
 	)
 
@@ -663,9 +705,9 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 	rightBotH := max(0, h-staticRightH)
 
 	listRightW := max(1, rightW-2)
-	m.apearenceList.lipList.SetSize(listRightW, rightBotH)
+	m.apearenceList.DefList.LipList.SetSize(listRightW, rightBotH)
 
-	rightBotBox := lipgloss.NewStyle().PaddingLeft(2).MaxHeight(rightBotH).Render(m.apearenceList.lipList.View())
+	rightBotBox := lipgloss.NewStyle().PaddingLeft(2).MaxHeight(rightBotH).Render(m.apearenceList.DefList.LipList.View())
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left,
 		lblRight, "",
@@ -676,7 +718,7 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, lipgloss.NewStyle().MaxHeight(h).Render(rightBox))
 
-	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, styles.CDimStyle.Render(vertLine(h)))
 	rightPane = m.zone.Mark("rightSide", rightPane)
 	leftPane = m.zone.Mark("leftSide", leftPane)
 	return m.zone.Mark("profileW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
@@ -686,7 +728,7 @@ func (m Model) renderRegistrationTab(w, h int) string {
 	inputPad := lipgloss.NewStyle().PaddingLeft(2).Width(w)
 	var content string
 	if m.state == states.LOAD_STATE && m.prState == states.REG_STATE {
-		content = lipgloss.NewStyle().Foreground(cDim).Render(m.spinner.View() + "processing registration...")
+		content = styles.CDimStyle.Render(m.spinner.View() + "processing registration...")
 	} else {
 		for i := range m.regTextInputs {
 			m.regTextInputs[i].Width = max(1, w-10)
@@ -705,7 +747,7 @@ func (m Model) renderLoginTab(w, h int) string {
 	inputPad := lipgloss.NewStyle().PaddingLeft(2).Width(w)
 	var content string
 	if m.state == states.LOAD_STATE && (m.prState == states.CONN_STATE || m.prState == states.LOGIN_STATE) {
-		content = lipgloss.NewStyle().Foreground(cDim).Render(m.spinner.View() + "login proccesing...")
+		content = styles.CDimStyle.Render(m.spinner.View() + "login proccesing...")
 	} else {
 		for i := range m.logingInput {
 			m.logingInput[i].Width = max(1, w-10)
@@ -745,9 +787,9 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 	var middleSect string
 
 	if !m.connected {
-		pulse := whitePulse
+		pulse := styles.WhitePulse
 		if !lipgloss.HasDarkBackground() {
-			pulse = blackPulse
+			pulse = styles.BlackPulse
 		}
 		aloneLogo := m.aloneAnim[m.animFrame%len(m.aloneAnim)]
 		currentColor := pulse[m.pulseFrame%len(pulse)]
@@ -783,18 +825,25 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 			} else if _, ok := speakingUsers[clearNick]; ok {
 				state = " 🔊"
 			}
-
-			if clearNick == m.user.Data.Statistics.BestFriend.Nickname {
-				rel = m.user.Data.Setup.Appereance.BestFriendTag + " "
+			// } else if us, ok := m.usersStates[clearNick]; ok {
+			// 	if us.fullMute {
+			// 		state = "🙊🙉"
+			// 	} else if us.micMute {
+			// 		state = "🙊"
+			// 	}
+			// }
+			bfTag := m.user.GetBFTag()
+			bf := m.user.GetBestFriend()
+			if clearNick == bf.Nickname {
+				rel = bfTag + " "
 			}
 
 			res = rel + c + state
 			cons = append(cons, res)
 		}
 
-		rawConnStr := lipgloss.NewStyle().Foreground(cDim).Render("with: ") + strings.Join(cons, " · ")
-
-		connView := safeTruncate(lipgloss.NewStyle().Foreground(cDim).Render(rawConnStr), w-2)
+		rawConnStr := styles.CDimStyle.Render("with: ") + strings.Join(cons, " · ")
+		connView := safeTruncate(styles.CDimStyle.Render(rawConnStr), w-2)
 
 		historyMaxH := middleH - lipgloss.Height(connView) - 1
 		if historyMaxH < 0 {
@@ -807,8 +856,8 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 			msgStyle := lipgloss.NewStyle().Width(w - 2).MaxWidth(w - 2).PaddingLeft(2)
 
 			for _, msg := range m.messages {
-				t := lipgloss.NewStyle().Foreground(cDim).Render(msg.Time)
-				n := lipgloss.NewStyle().Foreground(cSubtext).Bold(true).Render(msg.Nickname + ":")
+				t := styles.CDimStyle.Render(msg.Time)
+				n := styles.CSubTextStyle.Bold(true).Render(msg.Nickname + ":")
 
 				var renderedMsg string
 				if strings.HasPrefix(msg.Text, "\n") {
@@ -842,9 +891,9 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 }
 
 func (m Model) renderStartView(w, h int) string {
-	pulse := whitePulse
+	pulse := styles.WhitePulse
 	if !lipgloss.HasDarkBackground() {
-		pulse = blackPulse
+		pulse = styles.BlackPulse
 	}
 
 	currentColor := pulse[m.pulseFrame%len(pulse)]
@@ -861,12 +910,12 @@ func (m Model) renderErrView(w, h int, cText lipgloss.AdaptiveColor) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblLeft := lipgloss.NewStyle().Foreground(cErr).Bold(true).Render("► error detected")
+	lblLeft := styles.CErrBoldStyle.Render("► error detected")
 	errText := lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(tuierrs.CastError(m.err))
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", errText)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
-	lblRight := lipgloss.NewStyle().Foreground(cErr).Bold(true).Render("► resolution")
+	lblRight := styles.CErrBoldStyle.Render("► resolution")
 	var rightContent string
 	if !m.isLoggedIn() {
 		quote := ""
@@ -877,15 +926,15 @@ func (m Model) renderErrView(w, h int, cText lipgloss.AdaptiveColor) string {
 			quote = "please re-enter your unique credentials to login"
 		}
 		rightContent = lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render(safeTruncate(quote, rightW)),
+			styles.CDimStyle.Render(safeTruncate(quote, rightW)),
 		)
 	} else {
-		rightContent = lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim).Render("check logs")
+		rightContent = styles.CDimStyle.Render("check logs")
 	}
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, lblRight, "", rightContent)
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
-	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, styles.CDimStyle.Render(vertLine(h)))
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane)
 }
 
@@ -901,18 +950,17 @@ func (m Model) renderHelpView(w, h int, cText lipgloss.AdaptiveColor) string {
 		d := lipgloss.NewStyle().Foreground(cText).Render(desc)
 		return safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(k+d), leftW)
 	}
-	sectionLbl := lipgloss.NewStyle().PaddingLeft(2).Foreground(cDim)
 
-	quote := lipgloss.NewStyle().PaddingLeft(2).Foreground(cGray).Render("all new tabs opens with active left side of window")
+	quote := styles.PaddingLeftCGrayStyle.Render("all new tabs opens with active left side of window")
 
 	leftRows := []string{
 		lblLeft, "", quote, "",
-		sectionLbl.Render("app controls:"),
+		styles.PaddingLeftCGrayStyle.Render("app controls:"),
 		renderShortcut("ALT+Q", "- quit application"),
 		renderShortcut("ESC", "- go back / close error"),
 		renderShortcut("ENTER", "- confirm / connect / send msg"),
 		"",
-		sectionLbl.Render("navigation:"),
+		styles.PaddingLeftCGrayStyle.Render("navigation:"),
 		renderShortcut("TAB / RIGHT", "- next tab"),
 		renderShortcut("SHIFT+TAB / LEFT", "- previous tab"),
 		renderShortcut("ALT+RIGHT", "- right side"),
@@ -920,7 +968,7 @@ func (m Model) renderHelpView(w, h int, cText lipgloss.AdaptiveColor) string {
 		renderShortcut("SHIFT+TAB / LEFT", "- previous tab"),
 		renderShortcut("UP / DN", "- move cursor in lists/inputs"),
 		"",
-		sectionLbl.Render("quick jump:"),
+		styles.PaddingLeftCGrayStyle.Render("quick jump:"),
 		renderShortcut("ALT+F", "- go to friends tab"),
 		renderShortcut("ALT+C", "- go to chat tab"),
 		renderShortcut("ALT+G", "- go to voice tab"),
@@ -935,14 +983,14 @@ func (m Model) renderHelpView(w, h int, cText lipgloss.AdaptiveColor) string {
 
 	rightRows := []string{
 		lblRight, "",
-		sectionLbl.Render("voice controls:"),
+		styles.PaddingLeftCGrayStyle.Render("voice controls:"),
 		renderShortcut("ALT+V", "- toggle mic mute"),
 		renderShortcut("ALT+B", "- toggle full mute"),
 		renderShortcut("ALT+Z", "- toggle user's mute"),
 		renderShortcut("ALT+UP/DN", "- increase / decrease user's volume"), "",
-		sectionLbl.Render("chat controls:"),
+		styles.PaddingLeftCGrayStyle.Render("chat controls:"),
 		renderShortcut("CTRL+P", "- paste smth"), "",
-		sectionLbl.Render("friends contols:"),
+		styles.PaddingLeftCGrayStyle.Render("friends contols:"),
 		renderShortcut("ALT+X", "- deny friendship request"),
 		renderShortcut("ENTER", "- accept friendship request"),
 	}
@@ -950,7 +998,7 @@ func (m Model) renderHelpView(w, h int, cText lipgloss.AdaptiveColor) string {
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightRows...)
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
-	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, lipgloss.NewStyle().Foreground(cDim).Render(vertLine(h)))
+	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, styles.CDimStyle.Render(vertLine(h)))
 	return m.zone.Mark("profileW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
 }
 
@@ -974,7 +1022,7 @@ func safeTruncate(s string, maxW int) string {
 	cleanStr := ansi.Strip(s)
 	runes := []rune(cleanStr)
 	if len(runes) > maxW {
-		return lipgloss.NewStyle().Foreground(cErr).Render(string(runes[:maxW-2]) + "..")
+		return styles.CErrStyle.Render(string(runes[:maxW-2]) + "..")
 	}
 	return s
 }

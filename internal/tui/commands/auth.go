@@ -40,9 +40,10 @@ func AuthCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logge
 			msg.Err = err
 			return msg
 		}
+
 		var pd struct {
 			Nickname     string            `json:"nickname"`
-			RegisterTime time.Time         `json:"registerTime"`
+			RegisterTime string            `json:"registerTime"`
 			FriendsReqs  []users.FriendReq `json:"friendsReqs"`
 			Friends      []string          `json:"friends"`
 			BlockedUsers []string          `json:"blocked-users"`
@@ -54,7 +55,7 @@ func AuthCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logge
 		}
 
 		user.Data.Personal.Nickname = pd.Nickname
-		user.Data.Personal.RegisterTime = pd.RegisterTime.Local().Format("2006-01-02")
+		user.Data.Personal.RegisterTime = pd.RegisterTime
 		user.Data.Personal.FriendsReqs = pd.FriendsReqs
 		user.Data.Personal.Friends = pd.Friends
 		user.Data.Personal.BlockedUsers = pd.BlockedUsers
@@ -177,7 +178,7 @@ func LoginCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logg
 
 		var pd struct {
 			Nickname     string            `json:"nickname"`
-			RegisterTime time.Time         `json:"registerTime"`
+			RegisterTime string            `json:"registerTime"`
 			FriendsReqs  []users.FriendReq `json:"friendsReqs"`
 			Friends      []string          `json:"friends"`
 			BlockedUsers []string          `json:"blocked-users"`
@@ -189,7 +190,7 @@ func LoginCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logg
 		}
 
 		user.Data.Personal.Nickname = pd.Nickname
-		user.Data.Personal.RegisterTime = pd.RegisterTime.Local().Format("2006-01-02")
+		user.Data.Personal.RegisterTime = pd.RegisterTime
 		user.Data.Personal.FriendsReqs = pd.FriendsReqs
 		user.Data.Personal.Friends = pd.Friends
 		user.Data.Personal.BlockedUsers = pd.BlockedUsers

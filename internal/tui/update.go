@@ -6,12 +6,14 @@ import (
 	"aloh-tui/internal/tui/commands"
 	"aloh-tui/internal/tui/components/lists"
 	"aloh-tui/internal/tui/components/states"
+	"aloh-tui/internal/tui/components/styles"
 	"aloh-tui/internal/tui/components/windows"
 	"aloh-tui/internal/utils"
 	"bytes"
 	"fmt"
 	"image"
 	"math"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -59,7 +61,7 @@ func (m Model) syncTabState() Model {
 			switch m.sideState {
 			case states.LEFT_STATE:
 				m.state = states.CONN_STATE
-				m.setListVisible(&m.onlineList, true)
+				lists.SetListVisible(&m.onlineList.DefList, true)
 				m.unfocusInputs()
 			case states.RIGHT_STATE:
 				switch m.cursor {
@@ -69,7 +71,7 @@ func (m Model) syncTabState() Model {
 					m.state = states.FRIEND_STATE
 				}
 				m.focusInputs()
-				m.setListVisible(&m.onlineList, false)
+				lists.SetListVisible(&m.onlineList.DefList, false)
 			}
 			//}
 			delete(m.tabsNotifications, "friends")
@@ -90,31 +92,57 @@ func (m Model) syncTabState() Model {
 			delete(m.tabsNotifications, "profile")
 			switch m.sideState {
 			case states.LEFT_STATE:
-				m.setListVisible(&m.friendsReqsList, true)
-				m.setListVisible(&m.apearenceList, false)
+				lists.SetListVisible(&m.friendsReqsList.DefList, true)
+				lists.SetListVisible(&m.apearenceList.DefList, false)
 				m.unfocusInputs()
 			case states.RIGHT_STATE:
 				if m.cursor < len(m.profileInputs) {
 					//m.apearenceList.Select(-1)
-					m.setListVisible(&m.friendsReqsList, false)
-					m.setListVisible(&m.apearenceList, false)
+					lists.SetListVisible(&m.friendsReqsList.DefList, false)
+					lists.SetListVisible(&m.apearenceList.DefList, false)
 					m.focusInputs()
 				} else if m.cursor == len(m.profileInputs) {
-					m.setListVisible(&m.friendsReqsList, false)
-					m.setListVisible(&m.apearenceList, true)
+					lists.SetListVisible(&m.friendsReqsList.DefList, false)
+					lists.SetListVisible(&m.apearenceList.DefList, true)
 					//m.apearenceList.Select(0)
 					m.unfocusInputs()
 				}
 			}
 
 		case 5:
-			switch m.sideState {
-			case states.LEFT_STATE:
-				m.setListVisible(&m.microphonesList, false)
-				m.setListVisible(&m.settingsList, true)
-			case states.RIGHT_STATE:
-				m.setListVisible(&m.microphonesList, true)
-				m.setListVisible(&m.settingsList, false)
+			switch m.state {
+			case states.AUDIO_STATE:
+				switch m.sideState {
+				case states.RIGHT_STATE:
+					lists.SetListVisible(&m.audioList.DefList, true)
+					lists.SetListVisible(&m.settingsList.DefList, false)
+				case states.LEFT_STATE:
+					lists.SetListVisible(&m.audioList.DefList, false)
+					lists.SetListVisible(&m.settingsList.DefList, true)
+				}
+			case states.NOTIFICATIONS_STATE:
+				switch m.sideState {
+				case states.RIGHT_STATE:
+					lists.SetListVisible(&m.notificationsList.DefList, true)
+					lists.SetListVisible(&m.settingsList.DefList, false)
+				case states.LEFT_STATE:
+					lists.SetListVisible(&m.notificationsList.DefList, false)
+					lists.SetListVisible(&m.settingsList.DefList, true)
+				}
+			case states.DEVICES_STATE:
+				switch m.sideState {
+				case states.RIGHT_STATE:
+					lists.SetListVisible(&m.microphonesList.DefList, true)
+					lists.SetListVisible(&m.headphonesList.DefList, false)
+				case states.LEFT_STATE:
+					lists.SetListVisible(&m.microphonesList.DefList, false)
+					lists.SetListVisible(&m.headphonesList.DefList, true)
+				}
+			case states.BINDS_STATE:
+			default:
+				m.state = states.SETTINGS_STATE
+				m.sideState = states.LEFT_STATE
+				lists.SetListVisible(&m.settingsList.DefList, true)
 			}
 		default:
 			m.state = states.DEF_STATE
@@ -146,7 +174,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = states.LOAD_STATE
 					m.curWindow = windows.DEF_WINDOW
 					if m.user.Data.Personal.Nickname != "" && m.user.Data.Personal.RegisterTime != "" && m.user.Networking == nil {
-						cmds = append(cmds, commands.AuthCmd(m.user, m.eventsChan, m.log, nil))
+						cmds = append(cmds, commands.AuthCmd(m.user, m.sshEventsChan, m.log, nil))
 					} else {
 						m = m.syncTabState()
 					}
@@ -211,6 +239,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// 		//m.updateTick = false
 	// 		return m, nil
 	// 	}
+
+	// case commands.NetworkEventMsg:
+	// 	nickname := msg.Nickname
+	// 	us, ok := m.usersStates[nickname]
+	// 	if ok {
+	// 		switch msg.Event.Typee {
+	// 		case alohnetwork.MIC_MUTE:
+	// 			us.fullMute = false
+	// 			us.micMute = msg.Event.State
+	// 		case alohnetwork.FULL_MUTE:
+	// 			us.fullMute = msg.Event.State
+	// 			us.micMute = false
+	// 		}
+	// 	}
+
 	case sshclient.Event:
 		nickname := msg.Data
 		switch msg.Type {
@@ -230,21 +273,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			delete(m.online, nickname)
 			cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nickname, false),
-				m.updateOnlineList(), commands.NotifyCmd(nickname, "no longer your friend"))
+				m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)), commands.NotifyCmd(nickname, "no longer your friend"))
 		case sshclient.BLOCK_USER:
-
 			if m.user.IsFriend(nickname) {
-				m.log.Info("your friend blocked you")
 				if m.activeTab != 4 {
 					m.tabsNotifications["profile"] = struct{}{}
 				}
 				delete(m.online, nickname)
 				cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nickname, false),
-					m.updateOnlineList(), commands.NotifyCmd(nickname, "blocked you"))
+					m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)), commands.NotifyCmd(nickname, "blocked you"))
 			}
 
+		case sshclient.FRIEND_ONLINE:
+			//if m.user.IsFriend(nickname) {
+			if m.activeTab != 0 {
+				m.tabsNotifications["friends"] = struct{}{}
+			}
+
+			m.online[nickname] = make([]string, 0)
+			cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
+		//}
+		case sshclient.FRIEND_OFFLINE:
+			m.log.Info("friend offline")
+			delete(m.online, nickname)
+			cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
+
 		}
-		cmds = append(cmds, commands.WaitForEventMessageCmd(m.eventsChan))
+		cmds = append(cmds, commands.WaitForSSHEventMessageCmd(m.sshEventsChan))
 
 	case commands.AppereanceMsg:
 		err := msg.Err
@@ -261,38 +316,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.subThemeColor = lipgloss.Color(utils.DarkenHex(m.user.Data.Setup.Appereance.ThemeColor, 0.7))
 				m.headerActiveStyle = lipgloss.NewStyle().Foreground(m.themeColor).Bold(true)
 
-				m.microphonesList.lipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
-				m.microphonesList.lipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
-				m.microphonesList.lipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+				m.microphonesList.LipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+				m.microphonesList.LipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+				m.microphonesList.LipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-				m.settingsList.lipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
-				m.settingsList.lipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+				m.settingsList.LipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+				m.settingsList.LipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-				m.connectionsList.lipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+				m.connectionsList.LipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-				m.onlineList.lipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
-				m.onlineList.lipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+				m.onlineList.LipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+				m.onlineList.LipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-				m.friendsReqsList.lipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
-				m.friendsReqsList.lipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+				m.friendsReqsList.LipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+				m.friendsReqsList.LipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-				m.apearenceList.lipDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
-				m.apearenceList.lipDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+				m.apearenceList.LipDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+				m.apearenceList.LipDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-				m.microphonesList.lipList.SetDelegate(m.microphonesList.lipDelegate)
-				m.settingsList.lipList.SetDelegate(m.settingsList.lipDelegate)
-				m.connectionsList.lipList.SetDelegate(m.connectionsList.lipDelegate)
-				m.onlineList.lipList.SetDelegate(m.onlineList.lipDelegate)
-				m.friendsReqsList.lipList.SetDelegate(m.friendsReqsList.lipDelegate)
-				m.apearenceList.lipList.SetDelegate(m.apearenceList.lipDelegate)
+				m.microphonesList.LipList.SetDelegate(m.microphonesList.LipDelegate)
+				m.settingsList.LipList.SetDelegate(m.settingsList.LipDelegate)
+				m.connectionsList.LipList.SetDelegate(m.connectionsList.LipDelegate)
+				m.onlineList.LipList.SetDelegate(m.onlineList.LipDelegate)
+				m.friendsReqsList.LipList.SetDelegate(m.friendsReqsList.LipDelegate)
+				m.apearenceList.LipList.SetDelegate(m.apearenceList.LipDelegate)
 
-				m, cmd = m.syncTabState(), m.updateMicrophonesItemList(m.user.Data.Devices.Microphone)
+				m, cmd = m.syncTabState(), m.microphonesList.UpdateDevicesList(m.user, lists.MICROPHONE)
 				return m, cmd
 			case commands.BFTAG:
-				cmds = append(cmds, m.updateConnectionsList(), m.updateOnlineList())
+				cmds = append(cmds, m.connectionsList.UpdateConnectionsList(m.user, m.connections),
+					m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
 				return m, cmd
 			case commands.B_TAG:
-				cmds = append(cmds, m.updateOnlineList())
+				cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
 				return m, cmd
 			}
 		}
@@ -310,12 +366,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.Typee {
 			case sshclient.ACCEPT_FRIEND:
 				commands.NotifyCmd(nickname, "your new friend")
-				return m, m.updateFriendsReqList()
+				return m, m.friendsReqsList.UpdateFriendsReqList(m.user)
 			case sshclient.DENY_FRIEND:
-				return m, m.updateFriendsReqList()
+				return m, m.friendsReqsList.UpdateFriendsReqList(m.user)
 			case sshclient.DELETE_FRIEND:
 				delete(m.online, nickname)
-				cmds = append(cmds, m.updateOnlineList())
+				cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
 				return m, tea.Batch(cmds...)
 			case sshclient.BLOCK_USER:
 				delete(m.online, nickname)
@@ -323,13 +379,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmds = append(cmds, commands.DisconnFromOne(m.user.Networking, nickname))
 				}
 
-				cmds = append(cmds, m.updateOnlineList(), m.updateFriendsReqList(), commands.NotifyCmd(nickname, "blocked"))
+				cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)), m.friendsReqsList.UpdateFriendsReqList(m.user), commands.NotifyCmd(nickname, "blocked"))
 				return m, tea.Batch(cmds...)
 			case sshclient.UNBLOCK_USER:
-				cmds = append(cmds, m.updateOnlineList(), commands.NotifyCmd(nickname, "unblocked"))
+				cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)), commands.NotifyCmd(nickname, "unblocked"))
 				return m, tea.Batch(cmds...)
 			case sshclient.NEW_FRIEND_REQ:
-				cmds = append(cmds, m.updateFriendsReqList(),
+				cmds = append(cmds, m.friendsReqsList.UpdateFriendsReqList(m.user),
 					commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
 					commands.NotifyCmd(nickname, "new friend request"))
 				return m, tea.Batch(cmds...)
@@ -342,11 +398,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = states.ERR_STATE
 		} else if m.connected {
 			t := time.Now().Format("15:04:05")
-			red := lipgloss.NewStyle().Foreground(cErr)
 
-			m.messages = append(m.messages, commands.ChatMessage{Time: t, Nickname: "system", Text: red.Render(msg.Nickname) + red.Render(" banned!")})
-
-			cmds = append(cmds, m.updateConnectionsList())
+			m.messages = append(m.messages, commands.ChatMessage{Time: t, Nickname: "system", Text: styles.CErrStyle.Render(msg.Nickname) + styles.CErrStyle.Render(" banned!")})
+			//delete(m.usersStates, msg.Nickname)
+			cmds = append(cmds, m.connectionsList.UpdateConnectionsList(m.user, m.connections))
 			if len(m.connections) == 0 {
 				m.connected = false
 				m.connections = []string{}
@@ -367,7 +422,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg,
-		commands.MuteUnmuteUserMsg, commands.StatiscticsMsg, commands.NotificationMessage, commands.ChangeMicrophoneMessage:
+		commands.MuteUnmuteUserMsg, commands.StatiscticsMsg, commands.NotificationMessage, commands.ChangeDeviceMessage:
 		var err error
 		switch m := msg.(type) {
 		case commands.OnOffDenoiceMsg:
@@ -384,7 +439,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			err = m.Err
 		case commands.NotificationMessage:
 			err = m.Err
-		case commands.ChangeMicrophoneMessage:
+		case commands.ChangeDeviceMessage:
 			err = m.Err
 		}
 
@@ -400,18 +455,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.MuteMsg:
-		switch msg.Typee {
-		case commands.MIC:
-			if msg.Res {
-				m.muteState = "🙊"
-			} else {
-				m.muteState = ""
-			}
-		case commands.FULL:
-			if msg.Res {
-				m.muteState = "🙊🙉"
-			} else {
-				m.muteState = ""
+		if msg.Err != nil {
+			m.err = msg.Err
+			m.state = states.ERR_STATE
+		} else {
+			switch msg.Typee {
+			case commands.MIC:
+				if msg.Res {
+					m.muteState = "🙊"
+				} else {
+					m.muteState = ""
+				}
+
+			case commands.FULL:
+				if msg.Res {
+					m.muteState = "🙊🙉"
+				} else {
+					m.muteState = ""
+				}
 			}
 		}
 
@@ -420,39 +481,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
 		} else if m.state == states.LOAD_STATE {
-
 			m.state = m.prState
-
-			// if !m.connected {
-			// 	m.connected = true
-			// 	if m.user.Engines.AudioEngine != nil {
-			// 		m.user.Engines.AudioEngine.SetConnected()
-			// 	}
-			// 	cmds = append(cmds, commands.CountMaxTimeInConnectionCmd(m.user, m.stopCountMinutesChan),
-			// 		commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
-			// 		commands.IncreaseAmountOfConnectionsCmd(m.user), textinput.Blink)
-
-			// 	if m.activeTab != 2 {
-			// 		m.tabsNotifications["voice"] = struct{}{}
-			// 	}
-			// 	if m.activeTab == 0 {
-			// 		m.activeTab = 1
-			// 		m = m.syncTabState()
-			// 	}
-			// }
 		}
-		// } else if !m.connected {
-		// 	m.log.Info("state before conn cmd", logger.Attr("state", m.state), logger.Attr("prState", m.prState))
-		// 	m.connected = true
-		// 	if m.user.Engines.AudioEngine != nil {
-		// 		m.user.Engines.AudioEngine.SetConnected()
-		// 	}
-		// 	m.log.Info("state after conn cmd", logger.Attr("state", m.state), logger.Attr("prState", m.prState))
-		// 	cmds = append(cmds, commands.CountMaxTimeInConnectionCmd(m.user, m.stopCountMinutesChan), commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
-		// 		commands.IncreaseAmountOfConnectionsCmd(m.user), textinput.Blink)
-		// 	m.activeTab = 1
-		// 	m = m.syncTabState()
-		// }
 
 	case commands.SendInChatMsg:
 		if msg.Err != nil {
@@ -471,6 +501,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = states.ERR_STATE
 		} else if m.connected {
 			if m.user.Engines.AudioEngine != nil {
+				defer func() {
+					if r := recover(); r != nil {
+						m.log.Error("panic:", r, string(debug.Stack()))
+					}
+				}()
 				if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
 					m.err = err
 					m.state = states.ERR_STATE
@@ -491,6 +526,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.messages = []commands.ChatMessage{}
 			m.connections = []string{}
+			//clear(m.usersStates)
 			m.user.Engines.AudioEngine.PlayNotification()
 			//m.activeTab = 0
 			// m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: "you disconnected!"})
@@ -533,15 +569,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 			}
 
-			m.setupMicrohonesList()
-			m.setupSettingsList()
+			ls := lists.ListSetup{
+				ThemeColor:       m.themeColor,
+				SubColor:         m.subThemeColor,
+				NormalDescColor:  styles.CGray,
+				NormalTitleColor: styles.CText,
+			}
 
+			if m.user.Engines.AudioEngine != nil {
+				m.microphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.MICROPHONE, ls)
+				m.headphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.HEADPHONES, ls)
+			}
+			//friends := m.user.GetFriends()
 			cmds = append(cmds,
 				commands.WaitForChatMessageCmd(m.msgChan), commands.WaitForRawChatMessageCmd(m.rawMsgChan),
-				commands.WaitForEventMessageCmd(m.eventsChan),
+				commands.WaitForSSHEventMessageCmd(m.sshEventsChan),
+				commands.WaitForNetworkEventMessageCmd(m.netwEventsChan),
 				commands.WaitForPeerConnectionCmd(m.peerConnectionsChan),
 				commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan),
-				commands.FetchOnlineFriendsCmd(m.user.Networking, m.user.Data.Personal.Friends),
 				commands.TickCmd(), textinput.Blink)
 		}
 
@@ -586,10 +631,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.msgChan <- commands.ChatMessage{Nickname: msg.Nickname, Time: msg.Time, Text: textMsg}
 
-		if m.user.Data.Setup.Notifications.AudioNotifications {
+		userAudioN := m.user.GetAudioNotificationsState()
+		userDesktopN := m.user.GetDesktopNotificationsState()
+		if userAudioN {
 			cmds = append(cmds, commands.PlayNotificationCmd(m.user.Engines.AudioEngine))
 		}
-		if m.user.Data.Setup.Notifications.DesktopNotifications {
+		if userDesktopN {
 			cmds = append(cmds, commands.NotifyCmd(msg.Nickname, textForDesktopNotification))
 		}
 		cmds = append(cmds, commands.WaitForRawChatMessageCmd(m.rawMsgChan))
@@ -603,27 +650,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, commands.WaitForChatMessageCmd(m.msgChan)
 
-	case commands.OnlineMsg:
-		if msg.Err != nil {
-			m.err = msg.Err
-			m.state = states.ERR_STATE
-		} else {
-			if msg.Online != nil && !isEqualOnline(msg.Online, m.online) {
-				if m.activeTab != 0 && isNewInOnline(msg.Online, m.online) {
-					m.tabsNotifications["friends"] = struct{}{}
-				}
-				m.online = msg.Online
-				cmd = m.updateOnlineList()
-				return m, cmd
-			}
-		}
+	// case commands.OnlineMsg:
+	// 	if msg.Err != nil {
+	// 		m.err = msg.Err
+	// 		m.state = states.ERR_STATE
+	// 	} else {
+	// 		if msg.Online != nil && !isEqualOnline(msg.Online, m.online) {
+	// 			if m.activeTab != 0 && isNewInOnline(msg.Online, m.online) {
+	// 				m.tabsNotifications["friends"] = struct{}{}
+	// 			}
+	// 			m.online = msg.Online
+	// 			cmd = m.onlineList.UpdateOnlineList(m.user, m.online)
+	// 			return m, cmd
+	// 		}
+	// 	}
 
-	case commands.UpdateMicrophonesMsg:
+	case commands.UpdateDevicesMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
 		} else {
-			cmd = m.updateMicrophonesList()
+			switch msg.Typee {
+			case lists.HEADPHONES:
+				cmd = m.headphonesList.UpdateDevicesList(m.user, lists.HEADPHONES)
+			case lists.MICROPHONE:
+				cmd = m.microphonesList.UpdateDevicesList(m.user, lists.MICROPHONE)
+			default:
+				return m, nil
+			}
 			return m, cmd
 		}
 
@@ -648,19 +702,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		us := m.user.GetUsersSetup(msg.Nickname)
 		if us == nil {
-			m.user.Data.Setup.Audio.UsersSetup[msg.Nickname] = &users.UsersSetup{
-				VolumeCoefficient: 1,
-			}
-
-			if err := m.user.UpdateUserJSON(); err != nil {
+			if err := m.user.NewUserSetup(nickname); err != nil {
 				m.err = err
 				m.state = states.ERR_STATE
 				return m, nil
 			}
 		}
 
+		//m.usersStates[nick] = &userState{}
+
 		cmds = append(cmds, commands.IncreaseAmountOfConnectionsByUser(m.user, msg.Nickname), commands.SetupUserVolumeCmd(m.user, msg.Nickname),
-			commands.SetupUserMuteCmd(m.user, msg.Nickname), m.updateConnectionsList(),
+			commands.SetupUserMuteCmd(m.user, msg.Nickname), m.connectionsList.UpdateConnectionsList(m.user, m.connections),
 			commands.PlayNotificationCmd(m.user.Engines.AudioEngine),
 			commands.WaitForPeerConnectionCmd(m.peerConnectionsChan))
 		if !m.connected {
@@ -680,9 +732,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// }
 
 	case commands.PeerDisconnectedMsg:
-		m.log.Info("new disconn", msg.Nickname)
+		m.log.Info("peer disconnecting")
 		nick := msg.Nickname
 		cmds = append(cmds, commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan))
+		defer func() {
+			if r := recover(); r != nil {
+				m.log.Error("panic:", r, string(debug.Stack()))
+			}
+		}()
 		if !m.user.IsBlocked(nick) {
 			var colored string
 			m.connections = slices.DeleteFunc(m.connections, func(n string) bool {
@@ -692,11 +749,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return false
 			})
+			m.log.Info("deketed from connections")
 			if m.activeTab != 2 {
 				m.tabsNotifications["voice"] = struct{}{}
 			}
+			//delete(m.usersStates, nick)
 			m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: colored + " disconnected!"})
-			cmds = append(cmds, m.updateConnectionsList(),
+			cmds = append(cmds, m.connectionsList.UpdateConnectionsList(m.user, m.connections),
 				commands.PlayNotificationCmd(m.user.Engines.AudioEngine))
 			if len(m.connections) == 0 && m.connected {
 
@@ -718,41 +777,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case spinner.TickMsg:
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		if (m.isLoggedIn() && m.state == states.LOAD_STATE && (m.activeTab == 0 || m.activeTab == 4)) || (!m.isLoggedIn() && m.state == states.LOAD_STATE) {
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
 
 	case commands.TickMsg:
 		if m.state != states.LOAD_STATE {
-			if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" && len(m.user.Data.Personal.Friends) > 0 {
-				cmds = append(cmds, commands.FetchOnlineFriendsCmd(m.user.Networking, m.user.Data.Personal.Friends))
-			}
-			if m.user.Engines.AudioEngine != nil && m.activeTab == 5 {
-				cmds = append(cmds, commands.UpdateMicrophonesCmd(m.user))
+			// friends := m.user.GetFriends()
+			// if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" && len(friends) > 0 {
+			// 	cmds = append(cmds, commands.FetchOnlineFriendsCmd(m.user.Networking, friends))
+			// }
+			if m.user.Engines.AudioEngine != nil && m.activeTab == 5 && m.state == states.DEVICES_STATE {
+				updatesDevices := tea.Sequence(commands.UpdateMicrophonesCmd(m.user), commands.UpdateHeadphonesCmd(m.user))
+				cmds = append(cmds, updatesDevices)
 			}
 
-			// if m.user.Networking != nil && m.user.Data.Personal.Nickname != "" && m.activeTab == 0 {
-			// 	cmds = append(cmds, commands.FetchOnlineCmd(m.user.Networking, m.user.Data.Personal.Nickname))
-			// }
-			// if m.user.Engines.AudioEngine != nil && m.activeTab == 5 {
-			// 	cmds = append(cmds, commands.UpdateMicrophonesCmd(m.user))
-			// }
 		}
 		cmds = append(cmds, commands.TickCmd())
 
 	case commands.AnimTickMsg:
-		//if m.curWindow == windows.START_WINDOW || (m.activeTab == 2 && m.isLoggedIn()) {
-		m.animFrame++
-		return m, commands.AnimTickCmd()
+		if m.curWindow == windows.START_WINDOW {
+			m.animFrame++
+			return m, commands.AnimTickCmd()
+		}
 	//}
 	case commands.PulseTickMsg:
-		//if m.curWindow == windows.START_WINDOW || (m.activeTab == 2 && m.isLoggedIn()) {
-		m.pulseFrame++
-		return m, commands.PulseTickCmd()
-		//}
+		if m.curWindow == windows.START_WINDOW {
+			m.pulseFrame++
+			return m, commands.PulseTickCmd()
+		}
 
 	case time.Time:
-		m.curTime = msg
-		return m, commands.TimeTickCmd()
+		timeIsOn := m.user.GetShowTimeState()
+		if timeIsOn {
+			m.curTime = msg
+			return m, commands.TimeTickCmd()
+		}
 
 	case tea.KeyMsg:
 		if m.state == states.LOAD_STATE {
@@ -807,14 +868,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.user.Engines.AudioEngine != nil {
-				cmds = append(cmds, commands.MuteUnmuteMicCmd(m.user.Engines.AudioEngine))
+				cmds = append(cmds, commands.MuteUnmuteMicCmd(m.user.Engines.AudioEngine, m.user.Networking))
 			}
 		case "alt+b", "alt+и", "alt+B", "alt+И":
 			if m.state == states.ERR_STATE {
 				return m, nil
 			}
 			if m.user.Engines.AudioEngine != nil {
-				cmds = append(cmds, commands.MuteUnmuteCmd(m.user.Engines.AudioEngine))
+				cmds = append(cmds, commands.MuteUnmuteCmd(m.user.Engines.AudioEngine, m.user.Networking))
 			}
 
 		case "alt+h", "alt+H", "alt+р", "alt+Р":
@@ -853,17 +914,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.isLoggedIn() && m.activeTab == 2 && m.connected {
-				if i, ok := m.connectionsList.lipList.SelectedItem().(lists.ConnectionItem); ok {
+				if i, ok := m.connectionsList.LipList.SelectedItem().(lists.ConnectionItem); ok {
 					cmds = append(cmds, commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.Nickname)),
-						m.updateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted))
+						m.connectionsList.UpdateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted))
 				}
 			}
 		case "alt+x", "alt+X", "alt+ч", "alt+Ч":
 			if m.state == states.ERR_STATE {
 				return m, nil
 			}
-			if m.isLoggedIn() && m.activeTab == 4 && m.friendsReqsList.lipList.Index() >= 0 {
-				if i, ok := m.friendsReqsList.lipList.SelectedItem().(lists.FriendReqItem); ok {
+			if m.isLoggedIn() && m.activeTab == 4 && m.friendsReqsList.LipList.Index() >= 0 {
+				if i, ok := m.friendsReqsList.LipList.SelectedItem().(lists.FriendReqItem); ok {
 					cmds = append(cmds, commands.DenyFriendRequestCmd(m.user, i.Nickname))
 				}
 			}
@@ -873,7 +934,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
-				if i, ok := m.connectionsList.lipList.SelectedItem().(lists.ConnectionItem); ok {
+				if i, ok := m.connectionsList.LipList.SelectedItem().(lists.ConnectionItem); ok {
 					vc := i.VolumeCoefficient
 					if vc >= MAX_VOLUME {
 						return m, nil
@@ -883,7 +944,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						vc = MAX_VOLUME
 					}
 					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.Nickname), vc),
-						m.updateConnectionItemList(i.Nickname, vc, i.Muted))
+						m.connectionsList.UpdateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted))
 				}
 			}
 
@@ -892,7 +953,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
-				if i, ok := m.connectionsList.lipList.SelectedItem().(lists.ConnectionItem); ok {
+				if i, ok := m.connectionsList.LipList.SelectedItem().(lists.ConnectionItem); ok {
 					vc := i.VolumeCoefficient
 					if vc <= MIN_VOLUME {
 						return m, nil
@@ -902,7 +963,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						vc = MIN_VOLUME
 					}
 					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.Nickname), vc),
-						m.updateConnectionItemList(i.Nickname, vc, i.Muted))
+						m.connectionsList.UpdateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted))
 				}
 			}
 		case "alt+left":
@@ -914,21 +975,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.sideState == states.RIGHT_STATE {
 					m.cursor = 0
 					m.sideState = states.LEFT_STATE
-					m.unfocusInputs()
-
-					switch m.activeTab {
-					case 0:
-						m.setListVisible(&m.onlineList, true)
-						m.unfocusInputs()
-					case 4:
-						//m.apearenceList.Select(-1)
-						m.setListVisible(&m.apearenceList, false)
-						m.setListVisible(&m.friendsReqsList, true)
-						m.unfocusInputs()
-					case 5:
-						m.setListVisible(&m.microphonesList, false)
-						m.setListVisible(&m.settingsList, true)
-					}
+					m = m.syncTabState()
 				}
 
 			}
@@ -938,28 +985,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.isLoggedIn() && (m.activeTab == 0 || m.activeTab == 4 || m.activeTab == 5) {
-				if m.sideState == states.LEFT_STATE {
+				if m.sideState == states.LEFT_STATE && m.state != states.SETTINGS_STATE {
 					m.cursor = 0
 					m.sideState = states.RIGHT_STATE
-
-					switch m.activeTab {
-					case 0:
-						//m.onlineList.lipList.Select(-1)
-						//m.friendsReqsList.Select(-1)
-						m.setListVisible(&m.onlineList, false)
-						m.focusInputs()
-						return m, textinput.Blink
-					case 4:
-						// m.apearenceList.Select(-1)
-						m.setListVisible(&m.apearenceList, false)
-						m.setListVisible(&m.friendsReqsList, false)
-						//m.friendsReqsList.Select(-1)
-						m.focusInputs()
-						return m, textinput.Blink
-					case 5:
-						m.setListVisible(&m.microphonesList, true)
-						m.setListVisible(&m.settingsList, false)
-					}
+					m = m.syncTabState()
 				}
 			}
 
@@ -1045,6 +1074,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.state = m.prState
 				}
+			default:
+				if m.activeTab != 5 {
+					m.state = m.prState
+				} else {
+					m.state = states.SETTINGS_STATE
+				}
+				m = m.syncTabState()
 			}
 			return m, textinput.Blink
 
@@ -1068,7 +1104,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				case 4:
 					if m.cursor == len(m.profileInputs) {
-						if m.apearenceList.lipList.Index() <= 0 {
+						if m.apearenceList.LipList.Index() <= 0 {
 							m.cursor--
 							changed = true
 						}
@@ -1168,7 +1204,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					repPassword := m.regTextInputs[2].Value()
 					m.user.Data.Personal.RegisterTime = time.Now().Format("2006-01-02")
 
-					cmds = append(cmds, commands.RegisterCmd(m.user, m.eventsChan, m.log, []byte(password), []byte(repPassword)))
+					cmds = append(cmds, commands.RegisterCmd(m.user, m.sshEventsChan, m.log, []byte(password), []byte(repPassword)), m.spinner.Tick)
 					for i := range m.regTextInputs {
 						m.regTextInputs[i].Reset()
 					}
@@ -1179,7 +1215,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.user.Data.Personal.Nickname = m.logingInput[0].Value()
 					password := m.logingInput[1].Value()
 
-					cmds = append(cmds, commands.LoginCmd(m.user, m.eventsChan, m.log, []byte(password)))
+					cmds = append(cmds, commands.LoginCmd(m.user, m.sshEventsChan, m.log, []byte(password)), m.spinner.Tick)
 					for i := range m.logingInput {
 						m.logingInput[i].Reset()
 					}
@@ -1190,19 +1226,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					var nick string
 					switch m.sideState {
 					case states.LEFT_STATE:
-						if i, ok := m.onlineList.lipList.SelectedItem().(lists.OnlineItem); ok {
+						if i, ok := m.onlineList.LipList.SelectedItem().(lists.OnlineItem); ok {
 							nick := i.Name
 							conns := i.Connections
 							if !m.connected {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
-								m.log.Info("connecting...")
-								cmds = append(cmds, commands.ConnectToAllUsersCmd(m.user, nick))
+								cmds = append(cmds, commands.ConnectToAllUsersCmd(m.user, nick), m.spinner.Tick)
 							} else if m.connected && !isInConnections(conns, m.user.Data.Personal.Nickname) {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
 
-								sequence := tea.Sequence(commands.LeaveCmd(m.user.Networking), commands.ConnectToAllUsersCmd(m.user, nick))
+								sequence := tea.Sequence(commands.LeaveCmd(m.user.Networking), commands.ConnectToAllUsersCmd(m.user, nick), m.spinner.Tick)
 								cmds = append(cmds, sequence)
 							}
 						}
@@ -1233,7 +1268,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 							m.prState = m.state
 							m.state = states.LOAD_STATE
-							cmds = append(cmds, commands.SendFriendRequestCmd(m.user, nick))
+							cmds = append(cmds, commands.SendFriendRequestCmd(m.user, nick), m.spinner.Tick)
 						case 2:
 							nick = strings.TrimSpace(m.friendsInputs[m.cursor].Value())
 							if nick == "" {
@@ -1242,7 +1277,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 							m.prState = m.state
 							m.state = states.LOAD_STATE
-							cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nick, true))
+							cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nick, true), m.spinner.Tick)
 						case 3:
 							nick = strings.TrimSpace(m.friendsInputs[m.cursor].Value())
 							if nick == "" {
@@ -1251,7 +1286,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 							m.prState = m.state
 							m.state = states.LOAD_STATE
-							cmds = append(cmds, commands.BlockUserCmd(m.user, nick))
+							cmds = append(cmds, commands.BlockUserCmd(m.user, nick), m.spinner.Tick)
 						case 4:
 							nick = strings.TrimSpace(m.friendsInputs[m.cursor].Value())
 							if nick == "" {
@@ -1260,7 +1295,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 							m.prState = m.state
 							m.state = states.LOAD_STATE
-							cmds = append(cmds, commands.UnblockUserCmd(m.user, nick))
+							cmds = append(cmds, commands.UnblockUserCmd(m.user, nick), m.spinner.Tick)
 						}
 
 						m.friendsInputs[m.cursor].Reset()
@@ -1328,11 +1363,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case 4:
 					switch m.sideState {
 					case states.LEFT_STATE:
-						if i, ok := m.friendsReqsList.lipList.SelectedItem().(lists.FriendReqItem); ok {
+						if i, ok := m.friendsReqsList.LipList.SelectedItem().(lists.FriendReqItem); ok {
 							nick := i.Nickname
 							m.prState = m.state
 							m.state = states.LOAD_STATE
-							cmds = append(cmds, commands.AcceptFriendRequestCmd(m.user, nick))
+							cmds = append(cmds, commands.AcceptFriendRequestCmd(m.user, nick), m.spinner.Tick)
 						}
 					case states.RIGHT_STATE:
 						switch m.cursor {
@@ -1382,21 +1417,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							cmds = append(cmds, commands.ChangeBanTagCmd(m.user, newBanTag))
 							m.profileInputs[3].Reset()
 						case 4:
-							if i, ok := m.apearenceList.lipList.SelectedItem().(lists.ApearenceItem); ok {
+							if i, ok := m.apearenceList.LipList.SelectedItem().(lists.SwitcherItem); ok {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
 								switch i.Id {
-								case TIME:
-									cmds = append(cmds, commands.OnOffShowTime(m.user))
-								case DATE:
+								case lists.TIME:
+									timeSeq := tea.Sequence(commands.OnOffShowTime(m.user), commands.TimeTickCmd())
+									cmds = append(cmds, timeSeq)
+								case lists.DATE:
 									cmds = append(cmds, commands.OnOffShowDate(m.user))
-								case ZONE:
+								case lists.ZONE:
 									cmds = append(cmds, commands.OnOffShowZone(m.user))
 								default:
 									return m, nil
 								}
 
-								cmds = append(cmds, m.updateApearenceItemList(i.Id))
+								cmds = append(cmds, m.apearenceList.UpdateSwitcherItemList(i.Id))
 							}
 						}
 					}
@@ -1404,35 +1440,61 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case 5:
 					switch m.sideState {
 					case states.RIGHT_STATE:
-						m.prState = m.state
-						m.state = states.LOAD_STATE
-						if i, ok := m.microphonesList.lipList.SelectedItem().(lists.MicItem); ok {
-							cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.Name), m.updateMicrophonesItemList(i.Name))
-						}
-					case states.LEFT_STATE:
-						if i, ok := m.settingsList.lipList.SelectedItem().(lists.SettingsItem); ok {
+						switch m.state {
+						case states.DEVICES_STATE:
 							m.prState = m.state
 							m.state = states.LOAD_STATE
-							switch i.Id {
-							case HARD_DENOISE:
-								cmds = append(cmds, commands.OnOffHardDenoiceCmd(m.user))
-							case SOFT_DENOISE:
-								cmds = append(cmds, commands.OnOffSoftDenoiceCmd(m.user))
-							case AEC:
-								cmds = append(cmds, commands.OnOffAECCmd(m.user))
-							case EQUALIZER:
-								cmds = append(cmds, commands.OnOffFilterCmd(m.user))
-							case APP_N:
-								cmds = append(cmds, commands.OnOffAppNotifications(m.user))
-							case AUDIO_N:
-								cmds = append(cmds, commands.OnOffAudioNotifications(m.user))
-							case DESKTOP_N:
-								cmds = append(cmds, commands.OnOffDesktopNotifications(m.user))
-							default:
-								return m, nil
+							if i, ok := m.microphonesList.LipList.SelectedItem().(lists.DeviceItem); ok {
+								cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.Name),
+									m.microphonesList.UpdateDevicesItemList(i.Name))
+							}
+						case states.AUDIO_STATE:
+							if i, ok := m.audioList.LipList.SelectedItem().(lists.SwitcherItem); ok {
+								m.prState = m.state
+								m.state = states.LOAD_STATE
+								switch i.Id {
+								case lists.AEC:
+									cmds = append(cmds, commands.OnOffAECCmd(m.user))
+								case lists.HARD_DENOISE:
+									cmds = append(cmds, commands.OnOffHardDenoiceCmd(m.user))
+								case lists.SOFT_DENOISE:
+									cmds = append(cmds, commands.OnOffSoftDenoiceCmd(m.user))
+								case lists.EQUALIZER:
+									cmds = append(cmds, commands.OnOffFilterCmd(m.user))
+								}
+								cmds = append(cmds, m.audioList.UpdateSwitcherItemList(i.Id))
+							}
+						case states.NOTIFICATIONS_STATE:
+							if i, ok := m.notificationsList.LipList.SelectedItem().(lists.SwitcherItem); ok {
+								m.prState = m.state
+								m.state = states.LOAD_STATE
+								switch i.Id {
+								case lists.APP_N:
+									cmds = append(cmds, commands.OnOffAppNotifications(m.user))
+								case lists.AUDIO_N:
+									cmds = append(cmds, commands.OnOffAudioNotifications(m.user))
+								case lists.DESKTOP_N:
+									cmds = append(cmds, commands.OnOffDesktopNotifications(m.user))
+								}
+								cmds = append(cmds, m.notificationsList.UpdateSwitcherItemList(i.Id))
 							}
 
-							cmds = append(cmds, m.updateSettingsItemList(i.Id))
+						}
+					case states.LEFT_STATE:
+						switch m.state {
+						case states.SETTINGS_STATE:
+							return m.selectSetting()
+						case states.AUDIO_STATE:
+							return m.selectSetting()
+						case states.NOTIFICATIONS_STATE:
+							return m.selectSetting()
+						case states.DEVICES_STATE:
+							if i, ok := m.headphonesList.LipList.SelectedItem().(lists.DeviceItem); ok {
+								m.prState = m.state
+								m.state = states.LOAD_STATE
+								cmds = append(cmds, commands.ChangeHeadphonesCmd(m.user, i.Name),
+									m.headphonesList.UpdateDevicesItemList(i.Name))
+							}
 						}
 					}
 
@@ -1465,7 +1527,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						cmds = append(cmds, cmd)
 					}
 				case states.LEFT_STATE:
-					m.onlineList.lipList, cmd = m.onlineList.lipList.Update(msg)
+					m.onlineList.LipList, cmd = m.onlineList.LipList.Update(msg)
 					cmds = append(cmds, cmd)
 				}
 
@@ -1476,7 +1538,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case 2:
 				if m.sideState == states.LEFT_STATE {
-					m.connectionsList.lipList, cmd = m.connectionsList.lipList.Update(msg)
+					m.connectionsList.LipList, cmd = m.connectionsList.LipList.Update(msg)
 					cmds = append(cmds, cmd)
 				}
 			case 4:
@@ -1488,22 +1550,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							cmds = append(cmds, cmd)
 						}
 					} else if m.cursor == len(m.profileInputs) {
-						m.apearenceList.lipList, cmd = m.apearenceList.lipList.Update(msg)
+						m.apearenceList.LipList, cmd = m.apearenceList.LipList.Update(msg)
 						cmds = append(cmds, cmd)
 					}
 
 				case states.LEFT_STATE:
-					m.friendsReqsList.lipList, cmd = m.friendsReqsList.lipList.Update(msg)
+					m.friendsReqsList.LipList, cmd = m.friendsReqsList.LipList.Update(msg)
 					cmds = append(cmds, cmd)
 				}
 
 			case 5:
-				if m.sideState == states.RIGHT_STATE {
-					m.microphonesList.lipList, cmd = m.microphonesList.lipList.Update(msg)
-					cmds = append(cmds, cmd)
-				} else {
-					m.settingsList.lipList, cmd = m.settingsList.lipList.Update(msg)
-					cmds = append(cmds, cmd)
+				switch m.sideState {
+				case states.RIGHT_STATE:
+					switch m.state {
+					case states.AUDIO_STATE:
+						m.audioList.LipList, cmd = m.audioList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.NOTIFICATIONS_STATE:
+						m.notificationsList.LipList, cmd = m.notificationsList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.DEVICES_STATE:
+						m.microphonesList.LipList, cmd = m.microphonesList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					}
+				case states.LEFT_STATE:
+					switch m.state {
+					case states.SETTINGS_STATE:
+						m.settingsList.LipList, cmd = m.settingsList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.AUDIO_STATE:
+						m.settingsList.LipList, cmd = m.settingsList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.NOTIFICATIONS_STATE:
+						m.settingsList.LipList, cmd = m.settingsList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.DEVICES_STATE:
+						m.headphonesList.LipList, cmd = m.headphonesList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					}
 				}
 
 			}

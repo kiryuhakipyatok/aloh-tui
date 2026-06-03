@@ -40,6 +40,17 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 					ShowDate: true,
 					ShowZone: true,
 				},
+				Binds: Binds{
+					FriendsTab:  "ALT+F",
+					ChatTab:     "ALT+C",
+					VoiceTab:    "ALT+G",
+					VideoTab:    "ALT+D",
+					ProfileTab:  "ALT+E",
+					SettingsTab: "ALT+S",
+					MicMute:     "ALT+V",
+					FullMute:    "ALT+B",
+					UserMute:    "ALT+Z",
+				},
 			},
 			Statistics: Statistics{
 				BestFriend: noBF(),
@@ -91,6 +102,19 @@ type Setup struct {
 	Audio         Audio         `json:"audio"`
 	Appereance    Appereance    `json:"appereance"`
 	Notifications Notifications `json:"notifications"`
+	Binds         Binds         `json:"binds"`
+}
+
+type Binds struct {
+	FriendsTab  string `json:"friends-tab"`
+	ChatTab     string `json:"chat-tab"`
+	VoiceTab    string `json:"voice-tab"`
+	VideoTab    string `json:"video-tab"`
+	ProfileTab  string `json:"profile-tab"`
+	SettingsTab string `json:"settings-tab"`
+	MicMute     string `json:"mic-mute"`
+	FullMute    string `json:"full-mute"`
+	UserMute    string `json:"user-mute"`
 }
 
 type Appereance struct {

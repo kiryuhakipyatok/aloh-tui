@@ -10,6 +10,7 @@ import (
 	"aloh-tui/pkg/logger"
 	"errors"
 	"math"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -28,8 +29,11 @@ type AudioEngine interface {
 	SetConnected()
 	SetDisconnected() error
 	ChangeMicrophone(microphone string) error
-	FetchMicrophones() map[string]MicrophoneInfo
+	ChangeHeadphones(headphone string) error
+	FetchMicrophones() map[string]DeviceInfo
+	FetchHeadphones() map[string]DeviceInfo
 	UpdateMicrophones() error
+	UpdateHeadphones() error
 	MuteUnmuteMicro() bool
 	MuteUnmute() bool
 	SetVolume(nickname string, vc float32)
@@ -37,7 +41,8 @@ type AudioEngine interface {
 	SetMuteState(nickname string, mute bool)
 	FetchUsersMutes() map[string]struct{}
 	FetchSpeakingUsers() map[string]float64
-	GetCurrentMicrophone() MicrophoneInfo
+	GetCurrentMicrophone() DeviceInfo
+	GetCurrentHeadphones() DeviceInfo
 	UserIsSpeaking() bool
 	OnOffHardDenoice() bool
 	OnOffSoftDenoice() bool
@@ -125,9 +130,10 @@ type audioEngine struct {
 
 	log *logger.SparseLogger
 
-	Microphones       map[string]MicrophoneInfo
-	CurrentMicrophone MicrophoneInfo
-	CurrentHeadphones MicrophoneInfo
+	Microphones       map[string]DeviceInfo
+	Headphones        map[string]DeviceInfo
+	CurrentMicrophone DeviceInfo
+	CurrentHeadphones DeviceInfo
 
 	micDataChan chan []byte
 
@@ -143,7 +149,7 @@ type sounds struct {
 	notification []byte
 }
 
-type MicrophoneInfo struct {
+type DeviceInfo struct {
 	Index      int
 	Name       string
 	Channels   uint32
@@ -153,6 +159,7 @@ type MicrophoneInfo struct {
 
 type AudioSetup struct {
 	Microphone  string
+	Headphones  string
 	HardDenoice bool
 	SoftDenoice bool
 	Aec         bool
@@ -277,26 +284,34 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 
 	microphones, err := ctx.Devices(malgo.Capture)
 	if err != nil {
-		log.Error("failed to get devices", logger.Err(err))
+		log.Error("failed to get capture devices", logger.Err(err))
 		return nil, err
 	}
 
-	micsInfo := make(map[string]MicrophoneInfo, 0)
+	heeadphones, err := ctx.Devices(malgo.Playback)
+	if err != nil {
+		log.Error("failed to get playback devices", logger.Err(err))
+		return nil, err
+	}
+
+	micsInfo := make(map[string]DeviceInfo, 0)
+	headsInfo := make(map[string]DeviceInfo, 0)
 
 	var (
-		ch    uint32
-		micId unsafe.Pointer
+		ch     uint32
+		micId  unsafe.Pointer
+		headId unsafe.Pointer
 	)
 
 	for i, m := range microphones {
 		di, err := ctx.DeviceInfo(malgo.Capture, m.ID, malgo.Shared)
 		if err != nil {
-			log.Error("failed to get devices info", logger.Err(err))
+			log.Error("failed to get capture devices info", logger.Err(err))
 			return nil, err
 		}
 		log.Debug("mic's info", logger.Attr("name", m.Name()), logger.Attr("formats", di.Formats))
 		format := di.Formats[0]
-		mi := MicrophoneInfo{
+		mi := DeviceInfo{
 			Index:      i,
 			Name:       m.Name(),
 			SampleRate: format.SampleRate,
@@ -335,7 +350,55 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 
 	}
 
+	for i, m := range heeadphones {
+		di, err := ctx.DeviceInfo(malgo.Playback, m.ID, malgo.Shared)
+		if err != nil {
+			log.Error("failed to get playback devices info", logger.Err(err))
+			return nil, err
+		}
+		log.Debug("headphones's info", logger.Attr("name", m.Name()), logger.Attr("formats", di.Formats))
+		format := di.Formats[0]
+		hi := DeviceInfo{
+			Index:      i,
+			Name:       m.Name(),
+			SampleRate: format.SampleRate,
+			Channels:   format.Channels,
+		}
+
+		switch format.Format {
+		case malgo.FormatU8:
+			hi.Format = int8f
+		case malgo.FormatS16:
+			hi.Format = int16f
+		case malgo.FormatS24:
+			hi.Format = int24f
+		case malgo.FormatS32:
+			hi.Format = int32f
+		case malgo.FormatF32:
+			hi.Format = float32f
+		default:
+			hi.Format = unk
+		}
+		headsInfo[m.Name()] = hi
+
+		if di.IsDefault == 1 {
+			ae.CurrentHeadphones = hi
+			ch = format.Channels
+		}
+
+		if as.Headphones != "" && heeadphones[i].Name() == as.Microphone {
+			headId = heeadphones[i].ID.Pointer()
+			ch = format.Channels
+			ae.CurrentHeadphones = hi
+			log.Debug("current headphones's info", logger.Attr("name", hi.Name),
+				logger.Attr("sampleRate", format.SampleRate), logger.Attr("channels", format.Channels),
+				logger.Attr("format", format.Format))
+		}
+
+	}
+
 	ae.Microphones = micsInfo
+	ae.Headphones = headsInfo
 
 	captureConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	playbackConfig := malgo.DefaultDeviceConfig(malgo.Playback)
@@ -352,6 +415,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 	playbackConfig.Playback.Format = malgo.FormatS16
 	playbackConfig.SampleRate = 0
 	playbackConfig.PeriodSizeInFrames = 960
+	playbackConfig.Playback.DeviceID = headId
 
 	ae.captureCallback = ae.newCaptureCallback()
 	ae.playbackCallback = ae.newPlaybackCallback()
@@ -408,8 +472,8 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 	return ae, nil
 }
 
-func (ae *audioEngine) resolveCaptureDeviceByName(name string) (unsafe.Pointer, error) {
-	devices, err := ae.malgoCtx.Devices(malgo.Capture)
+func (ae *audioEngine) resolveDeviceByName(name string, typee malgo.DeviceType) (unsafe.Pointer, error) {
+	devices, err := ae.malgoCtx.Devices(typee)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +482,7 @@ func (ae *audioEngine) resolveCaptureDeviceByName(name string) (unsafe.Pointer, 
 			return devices[i].ID.Pointer(), nil
 		}
 	}
-	return nil, errors.New("selected microphone not found")
+	return nil, errs.ErrNotFound()
 }
 
 func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
@@ -602,6 +666,9 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 
 func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 	data := func(pOutputSample, pInputSamples []byte, framecount uint32) {
+		if ae.switching.Load() {
+			return
+		}
 
 		if pOutputSample != nil {
 			ae.playbackReady.Store(true)
@@ -861,29 +928,34 @@ func (ae *audioEngine) MuteUnmuteUser(nickname string) (bool, error) {
 
 func (ae *audioEngine) SetMuteState(nickname string, mute bool) {
 	ae.mu.Lock()
-	defer ae.mu.Unlock()
 	ua, ok := ae.usersAudio[nickname]
-	if !ok {
-		opusDecoder, err := opus.NewDecoder(48000, 1)
-		if err != nil {
-			ae.log.Error(ae.errLogCount, "failed to create new opus decoder", logger.Err(err))
-			return
-		}
-		ua = &usersAudio{
-			data:              make([]byte, 0, 48000),
-			decoder:           opusDecoder,
-			volumeCoefficient: 1,
-			decodedBuffer:     make([]byte, 5760),
-			samples:           make([]int16, frameLen),
-		}
-
+	if ok {
 		ua.muted.Store(mute)
-
-		ae.usersAudio[nickname] = ua
-
+		ae.mu.Unlock()
 		return
 	}
-	ua.muted.Store(mute)
+	ae.mu.Unlock()
+
+	opusDecoder, err := opus.NewDecoder(48000, 1)
+	if err != nil {
+		ae.log.Error(ae.errLogCount, "failed to create new opus decoder", logger.Err(err))
+		return
+	}
+	newUa := &usersAudio{
+		data:              make([]byte, 0, 48000),
+		decoder:           opusDecoder,
+		volumeCoefficient: 1,
+		decodedBuffer:     make([]byte, 5760),
+		samples:           make([]int16, frameLen),
+	}
+
+	ae.mu.Lock()
+	defer ae.mu.Unlock()
+	if existingUa, ok := ae.usersAudio[nickname]; ok {
+		existingUa.muted.Store(mute)
+	} else {
+		ae.usersAudio[nickname] = newUa
+	}
 }
 
 func (ae *audioEngine) PlayUserVoice(nickname string, userVoiceByte []byte) {
@@ -923,10 +995,11 @@ func (ae *audioEngine) PlayUserVoice(nickname string, userVoiceByte []byte) {
 		return
 	}
 	setupVolume(v, pcmBuffer[:n])
-	casters.Int16ToBytes(pcmBuffer[:n], ua.decodedBuffer[:n*2])
 	ae.mu.Lock()
-	ae.int16BuffersPool.Put(pcmBuffer[:4096])
+	casters.Int16ToBytes(pcmBuffer[:n], ua.decodedBuffer[:n*2])
+
 	ua.data = append(ua.data, ua.decodedBuffer[:n*2]...)
+	ae.int16BuffersPool.Put(pcmBuffer[:4096])
 
 	if len(ua.data) > 96000 {
 		ua.data = ua.data[len(ua.data)-jitterSize:]
@@ -940,27 +1013,34 @@ func (ae *audioEngine) UserIsSpeaking() bool {
 
 func (ae *audioEngine) SetVolume(nickname string, vc float32) {
 	ae.mu.Lock()
-	defer ae.mu.Unlock()
 	ua, ok := ae.usersAudio[nickname]
-	if !ok {
-		opusDecoder, err := opus.NewDecoder(48000, 1)
-		if err != nil {
-			ae.log.Error(ae.errLogCount, "failed to create new opus decoder", logger.Err(err))
-			return
-		}
-		ua = &usersAudio{
-			data:              make([]byte, 0, 48000),
-			decoder:           opusDecoder,
-			volumeCoefficient: vc,
-			decodedBuffer:     make([]byte, 5760),
-			samples:           make([]int16, frameLen),
-		}
-
-		ae.usersAudio[nickname] = ua
-
+	if ok {
+		ua.volumeCoefficient = vc
+		ae.mu.Unlock()
 		return
 	}
-	ua.volumeCoefficient = vc
+	ae.mu.Unlock()
+
+	opusDecoder, err := opus.NewDecoder(48000, 1)
+	if err != nil {
+		ae.log.Error(ae.errLogCount, "failed to create new opus decoder", logger.Err(err))
+		return
+	}
+	newUa := &usersAudio{
+		data:              make([]byte, 0, 48000),
+		decoder:           opusDecoder,
+		volumeCoefficient: vc,
+		decodedBuffer:     make([]byte, 5760),
+		samples:           make([]int16, frameLen),
+	}
+
+	ae.mu.Lock()
+	defer ae.mu.Unlock()
+	if existingUa, ok := ae.usersAudio[nickname]; ok {
+		existingUa.volumeCoefficient = vc
+	} else {
+		ae.usersAudio[nickname] = newUa
+	}
 }
 
 func (ae *audioEngine) SetNetworking(netw networking.Networking) error {
@@ -1002,6 +1082,11 @@ func (ae *audioEngine) SetConnected() {
 }
 
 func (ae *audioEngine) SetDisconnected() error {
+	defer func() {
+		if r := recover(); r != nil {
+			ae.log.Error(0, "panic:", r, string(debug.Stack()))
+		}
+	}()
 	ae.connected.Store(false)
 	ae.voiceHolder.Store(0)
 	ae.userIsSpeaking.Store(false)
@@ -1009,28 +1094,37 @@ func (ae *audioEngine) SetDisconnected() error {
 	// ae.workMic = ae.workMic[:0]
 	// ae.resampledWorkMic = ae.resampledWorkMic[:0]
 	// ae.monoCaptureBuffer = ae.monoCaptureBuffer
+	ae.mu.Lock()
+	defer ae.mu.Unlock()
 	if ae.opusEncoder != nil {
 		if err := ae.opusEncoder.Reset(); err != nil {
 			return err
 		}
 	}
 
-	ae.mu.Lock()
+
 	for _, ua := range ae.usersAudio {
 		ua.data = ua.data[:0]
 		ua.playing = false
 		ua.framesCount = 0
 		ua.isSpeaking.Store(false)
 	}
-	ae.mu.Unlock()
+
 	return nil
 }
 
-func (ae *audioEngine) FetchMicrophones() map[string]MicrophoneInfo {
+func (ae *audioEngine) FetchMicrophones() map[string]DeviceInfo {
 	ae.mu.RLock()
 	mics := ae.Microphones
 	ae.mu.RUnlock()
 	return mics
+}
+
+func (ae *audioEngine) FetchHeadphones() map[string]DeviceInfo {
+	ae.mu.RLock()
+	heads := ae.Headphones
+	ae.mu.RUnlock()
+	return heads
 }
 
 func (ae *audioEngine) ChangeMicrophone(microphone string) error {
@@ -1048,7 +1142,7 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 	)
 
 	if microphone != "" {
-		id, err := ae.resolveCaptureDeviceByName(microphone)
+		id, err := ae.resolveDeviceByName(microphone, malgo.Capture)
 		if err != nil {
 			micId = nil
 		} else {
@@ -1056,13 +1150,12 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 		}
 	}
 
-	ae.mu.Lock()
+	ae.mu.RLock()
 	micInfo, ok := ae.Microphones[microphone]
 	if ok && micId != nil {
-		ae.CurrentMicrophone = micInfo
 		ch = micInfo.Channels
 	}
-	ae.mu.Unlock()
+	ae.mu.RUnlock()
 
 	captureConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	captureConfig.Capture.Format = 0
@@ -1072,48 +1165,168 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 	captureConfig.SampleRate = 0
 	captureConfig.Capture.DeviceID = micId
 
-	captureDevice, err := malgo.InitDevice(ae.malgoCtx.Context, captureConfig, ae.captureCallback)
+	newCaptureDevice, err := malgo.InitDevice(ae.malgoCtx.Context, captureConfig, ae.captureCallback)
 	if err != nil && captureConfig.Capture.DeviceID != nil {
 		captureConfig.Capture.DeviceID = nil
-		captureDevice, err = malgo.InitDevice(ae.malgoCtx.Context, captureConfig, ae.captureCallback)
+		newCaptureDevice, err = malgo.InitDevice(ae.malgoCtx.Context, captureConfig, ae.captureCallback)
 	}
 	if err != nil {
 		return err
 	}
 
-	if ae.captureDevice != nil {
-		ae.captureDevice.Stop()
-		ae.captureDevice.Uninit()
-		ae.mu.Lock()
-		ae.captureDevice = nil
-		ae.voiceHolder.Store(0)
-		ae.mu.Unlock()
-	}
+	captureSampleRate := int(newCaptureDevice.SampleRate())
 
-	if err := ae.captureResampler.Close(); err != nil {
-		ae.log.Error(ae.errLogCount, "failed to close old capture resampler", logger.Err(err))
-		return err
-	}
-
-	captureSampleRate := int(captureDevice.SampleRate())
-
-	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 7)
+	newCaptureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 7)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
+		newCaptureDevice.Uninit()
 		return err
 	}
 
 	ae.mu.Lock()
-	ae.captureDevice = captureDevice
-	ae.captureResampler = captureResampler
+	oldCaptureDevice := ae.captureDevice
+	oldCaptureResampler := ae.captureResampler
+	oldMicrophone := ae.CurrentMicrophone
+
+	if ok && micId != nil {
+		ae.CurrentMicrophone = micInfo
+	}
+
+	ae.captureDevice = newCaptureDevice
+	ae.captureResampler = newCaptureResampler
+
+	ae.voiceHolder.Store(0)
+	ae.workMic = ae.workMic[:0]
+	ae.micNativeBuffer = ae.micNativeBuffer[:0]
 	ae.mu.Unlock()
 
-	if err := ae.start(); err != nil {
-		ae.captureDevice.Uninit()
+	if oldCaptureDevice != nil {
+		oldCaptureDevice.Stop()
+	}
+
+	if err := newCaptureDevice.Start(); err != nil {
+		ae.log.Error(ae.errLogCount, "failed to start new microphone, rolling back", logger.Err(err))
+
+		newCaptureDevice.Uninit()
+		newCaptureResampler.Close()
+
 		ae.mu.Lock()
-		ae.captureDevice = nil
+		ae.captureDevice = oldCaptureDevice
+		ae.captureResampler = oldCaptureResampler
+		ae.CurrentMicrophone = oldMicrophone
 		ae.mu.Unlock()
+
+		if oldCaptureDevice != nil {
+			if startErr := oldCaptureDevice.Start(); startErr != nil {
+				ae.log.Error(ae.errLogCount, "failed to restart old microphone after rollback", logger.Err(startErr))
+			}
+		}
+
 		return err
+	}
+
+	if oldCaptureDevice != nil {
+		oldCaptureDevice.Uninit()
+	}
+	if oldCaptureResampler != nil {
+		oldCaptureResampler.Close()
+	}
+
+	return nil
+}
+
+func (ae *audioEngine) ChangeHeadphones(headphones string) error {
+	ae.lifecycleMu.Lock()
+	defer ae.lifecycleMu.Unlock()
+
+	ae.switching.Store(true)
+	defer ae.switching.Store(false)
+
+	ae.playbackReady.Store(false)
+
+	var (
+		headsId unsafe.Pointer
+	)
+
+	if headphones != "" {
+		id, err := ae.resolveDeviceByName(headphones, malgo.Playback)
+		if err != nil {
+			headsId = nil
+		} else {
+			headsId = id
+		}
+	}
+
+	playbackConfig := malgo.DefaultDeviceConfig(malgo.Playback)
+	playbackConfig.Playback.Format = malgo.FormatS16
+	playbackConfig.Playback.Channels = 1
+	playbackConfig.SampleRate = 0
+	playbackConfig.Playback.DeviceID = headsId
+
+	newPlaybackDevice, err := malgo.InitDevice(ae.malgoCtx.Context, playbackConfig, ae.playbackCallback)
+	if err != nil && playbackConfig.Playback.DeviceID != nil {
+		playbackConfig.Playback.DeviceID = nil
+		newPlaybackDevice, err = malgo.InitDevice(ae.malgoCtx.Context, playbackConfig, ae.playbackCallback)
+	}
+	if err != nil {
+		return err
+	}
+
+	playbackSampleRate := int(newPlaybackDevice.SampleRate())
+
+	newPlaybackResampler, err := speexdsp.NewResampler(1, playbackSampleRate, 48000, 7)
+	if err != nil {
+		ae.log.Error(ae.errLogCount, "failed to create new playback resampler", logger.Err(err))
+		newPlaybackDevice.Uninit()
+		return err
+	}
+
+	ae.mu.Lock()
+	oldPlaybackDevice := ae.playbackDevice
+	oldPlaybackResampler := ae.playbackResampler
+	oldHeadphones := ae.CurrentHeadphones
+
+	headsInfo, ok := ae.Headphones[headphones]
+	if ok && headsId != nil {
+		ae.CurrentHeadphones = headsInfo
+	}
+
+	ae.playbackDevice = newPlaybackDevice
+	ae.playbackResampler = newPlaybackResampler
+
+	ae.playbackNativeBuffer = ae.playbackNativeBuffer[:0]
+	ae.mu.Unlock()
+
+	if oldPlaybackDevice != nil {
+		oldPlaybackDevice.Stop()
+	}
+
+	if err := newPlaybackDevice.Start(); err != nil {
+		ae.log.Error(ae.errLogCount, "failed to start new headphones, rolling back", logger.Err(err))
+
+		newPlaybackDevice.Uninit()
+		newPlaybackResampler.Close()
+
+		ae.mu.Lock()
+		ae.playbackDevice = oldPlaybackDevice
+		ae.playbackResampler = oldPlaybackResampler
+		ae.CurrentHeadphones = oldHeadphones
+		ae.mu.Unlock()
+
+		if oldPlaybackDevice != nil {
+			if startErr := oldPlaybackDevice.Start(); startErr != nil {
+				ae.log.Error(ae.errLogCount, "failed to restart old headphones after rollback", logger.Err(startErr))
+			}
+		}
+
+		return err
+	}
+
+	if oldPlaybackDevice != nil {
+		oldPlaybackDevice.Uninit()
+	}
+	if oldPlaybackResampler != nil {
+		oldPlaybackResampler.Close()
 	}
 
 	return nil
@@ -1150,11 +1363,18 @@ func (ae *audioEngine) OnOffSoftDenoice() bool {
 	return !s
 }
 
-func (ae *audioEngine) GetCurrentMicrophone() MicrophoneInfo {
+func (ae *audioEngine) GetCurrentMicrophone() DeviceInfo {
 	ae.mu.RLock()
 	curMic := ae.CurrentMicrophone
 	ae.mu.RUnlock()
 	return curMic
+}
+
+func (ae *audioEngine) GetCurrentHeadphones() DeviceInfo {
+	ae.mu.RLock()
+	curH := ae.CurrentHeadphones
+	ae.mu.RUnlock()
+	return curH
 }
 
 func (ae *audioEngine) OnOffAEC() bool {
@@ -1179,20 +1399,20 @@ func (ae *audioEngine) OnOffFilter() bool {
 func (ae *audioEngine) UpdateMicrophones() error {
 	microphones, err := ae.malgoCtx.Devices(malgo.Capture)
 	if err != nil {
-		ae.log.Error(0, "failed to get devices", logger.Err(err))
+		ae.log.Error(0, "failed to get capture devices", logger.Err(err))
 		return err
 	}
 
-	micsInfo := make(map[string]MicrophoneInfo, 0)
+	micsInfo := make(map[string]DeviceInfo, 0)
 
 	for i, m := range microphones {
 		di, err := ae.malgoCtx.DeviceInfo(malgo.Capture, m.ID, malgo.Shared)
 		if err != nil {
-			ae.log.Error(0, "failed to get devices info", logger.Err(err))
+			ae.log.Error(0, "failed to get capture devices info", logger.Err(err))
 			return err
 		}
 		format := di.Formats[0]
-		mi := MicrophoneInfo{
+		mi := DeviceInfo{
 			Index:      i,
 			Name:       m.Name(),
 			SampleRate: format.SampleRate,
@@ -1217,6 +1437,51 @@ func (ae *audioEngine) UpdateMicrophones() error {
 	}
 	ae.mu.Lock()
 	ae.Microphones = micsInfo
+	ae.mu.Unlock()
+	return nil
+}
+
+func (ae *audioEngine) UpdateHeadphones() error {
+	headphones, err := ae.malgoCtx.Devices(malgo.Playback)
+	if err != nil {
+		ae.log.Error(0, "failed to get playback devices", logger.Err(err))
+		return err
+	}
+
+	headsInfo := make(map[string]DeviceInfo, 0)
+
+	for i, m := range headphones {
+		di, err := ae.malgoCtx.DeviceInfo(malgo.Playback, m.ID, malgo.Shared)
+		if err != nil {
+			ae.log.Error(0, "failed to get playback devices info", logger.Err(err))
+			return err
+		}
+		format := di.Formats[0]
+		hi := DeviceInfo{
+			Index:      i,
+			Name:       m.Name(),
+			SampleRate: format.SampleRate,
+			Channels:   format.Channels,
+		}
+
+		switch format.Format {
+		case malgo.FormatU8:
+			hi.Format = int8f
+		case malgo.FormatS16:
+			hi.Format = int16f
+		case malgo.FormatS24:
+			hi.Format = int24f
+		case malgo.FormatS32:
+			hi.Format = int32f
+		case malgo.FormatF32:
+			hi.Format = float32f
+		default:
+			hi.Format = unk
+		}
+		headsInfo[m.Name()] = hi
+	}
+	ae.mu.Lock()
+	ae.Headphones = headsInfo
 	ae.mu.Unlock()
 	return nil
 }
