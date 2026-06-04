@@ -1,7 +1,7 @@
 package networking
 
 import (
-	networkapi "github.com/kiryuhakipyatok/aloh-networking/cmd/api"
+	alohnetwork "github.com/kiryuhakipyatok/aloh-networking"
 )
 
 type Networking interface {
@@ -28,11 +28,17 @@ type Networking interface {
 }
 
 type networking struct {
-	*networkapi.Netwoking
+	*alohnetwork.Netwoking
 }
 
 func NewNetworking(nickname, logPath string) (Networking, error) {
-	netw, err := networkapi.NewNetworking(nickname, logPath)
+	if len(embeddedConfig) == 0 {
+		panic("embedded config is empty")
+	}
+
+	cfg := setupConfig()
+	cfg.App.LogPath = logPath
+	netw, err := alohnetwork.NewNetworking(nickname, cfg)
 	if err != nil {
 		return nil, err
 	}
