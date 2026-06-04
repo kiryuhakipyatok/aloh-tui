@@ -52,6 +52,7 @@ var (
 	PaddingLeftCDimStyle  = CDimStyle.PaddingLeft(2)
 	CErrPaddingStyle      = CErrStyle.PaddingRight(1)
 	CErrBoldStyle         = CErrStyle.Bold(true)
+	CGrayBold             = CGrayStyle.Bold(true)
 
 	InactiveTabStyle = lipgloss.NewStyle().BorderForeground(CDim).BorderBottomForeground(CDim).Foreground(CDim).Align(lipgloss.Center)
 	ActiveTabStyle   = lipgloss.NewStyle().BorderForeground(CDim).Bold(true).Align(lipgloss.Center)

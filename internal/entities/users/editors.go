@@ -215,34 +215,37 @@ func (u *User) ChangeNotificationTag(tag string) error {
 	return nil
 }
 
-func (u *User) OnOffShowTime() error {
+func (u *User) OnOffShowTime() (bool, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Appereance.ShowTime = !u.Data.Setup.Appereance.ShowTime
+	res := !u.Data.Setup.Appereance.ShowTime
+	u.Data.Setup.Appereance.ShowTime = res
 	if err := u.UpdateUserJSON(); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return res, nil
 }
 
-func (u *User) OnOffShowDate() error {
+func (u *User) OnOffShowDate() (bool, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Appereance.ShowDate = !u.Data.Setup.Appereance.ShowDate
+	res := !u.Data.Setup.Appereance.ShowDate
+	u.Data.Setup.Appereance.ShowDate = res
 	if err := u.UpdateUserJSON(); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return res, nil
 }
 
-func (u *User) OnOffShowZone() error {
+func (u *User) OnOffShowZone() (bool, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Appereance.ShowZone = !u.Data.Setup.Appereance.ShowZone
+	res := !u.Data.Setup.Appereance.ShowZone
+	u.Data.Setup.Appereance.ShowZone = res
 	if err := u.UpdateUserJSON(); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return res, nil
 }
 
 func (u *User) MuteUnmuteUser(nickname string, res bool) error {

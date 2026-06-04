@@ -58,24 +58,7 @@ func (m Model) View() string {
 	footer := lipgloss.JoinHorizontal(lipgloss.Bottom, leftFooterPart, rightFooterPart)
 	footerH := lipgloss.Height(footer)
 
-	rightHeaderData := make([]string, 0, 3)
-	curTime := m.curTime
-	if m.user.GetShowDateState() {
-		curDate := curTime.Format("2006-01-02")
-		rightHeaderData = append(rightHeaderData, curDate)
-	}
-
-	if m.user.GetShowTimeState() {
-		curTime := curTime.Format("15:04:05")
-		rightHeaderData = append(rightHeaderData, curTime)
-	}
-
-	if m.user.GetShowZoneState() {
-		curZone := curTime.Format("-07:00")
-		rightHeaderData = append(rightHeaderData, curZone)
-	}
-
-	rightHeaderPart := styles.CDimStyle.Padding(1, 1, 0, 0).Render(strings.Join(rightHeaderData, " "))
+	rightHeaderPart := styles.CDimStyle.Padding(1, 1, 0, 0).Render(strings.Join(m.rightHeaderData, " "))
 	rightHeaderW := lipgloss.Width(rightHeaderPart)
 
 	leftHeaderPart := lipgloss.NewStyle().Width(usableW-rightHeaderW).Foreground(m.themeColor).Padding(1, 0, 0, 1).Render(titles.A)
@@ -175,9 +158,9 @@ func (m Model) View() string {
 	var uiContent string
 	switch m.state {
 	case states.ERR_STATE:
-		uiContent = m.renderErrView(windowInnerW, windowInnerH, styles.CText)
+		uiContent = m.renderErrView(windowInnerW, windowInnerH)
 	case states.HELP_STATE:
-		uiContent = m.renderHelpView(windowInnerW, windowInnerH, styles.CText)
+		uiContent = m.renderHelpView(windowInnerW, windowInnerH)
 	default:
 		if !m.isLoggedIn() {
 			switch m.activeTab {
@@ -229,13 +212,21 @@ func (m Model) renderVoiceTab(w, h int) string {
 		clearNick := ansi.Strip(c)
 		state := ""
 		userColors := m.usersColors[clearNick]
+		mainStyle := lipgloss.NewStyle().Foreground(userColors.mainColor)
+		subStyle := lipgloss.NewStyle().Foreground(userColors.subColor)
 		bar := lipgloss.NewStyle().Foreground(userColors.subColor).Render(fmt.Sprintf("voice power %.1f: ", 0.0))
 		if _, ok := mutedUsers[clearNick]; ok {
 			state = " 🔇"
 		} else if rms, ok := speakingUsers[clearNick]; ok {
 			state = " 🔊"
-			bar = lipgloss.NewStyle().Foreground(userColors.mainColor).Render(fmt.Sprintf("voice power %.1f:", rms)) +
-				lipgloss.NewStyle().Foreground(userColors.subColor).Render(strings.Repeat("▐", int(rms)/100))
+			bar = mainStyle.Render(fmt.Sprintf("voice power %.1f:", rms)) +
+				subStyle.Render(strings.Repeat("▐", int(rms)/100))
+		} else if us, ok := m.usersStates[clearNick]; ok {
+			if us.fullMute {
+				state = " 🙊🙉"
+			} else if us.micMute {
+				state = " 🙊"
+			}
 		}
 		bars = append(bars, bar)
 		states = append(states, state)
@@ -248,13 +239,7 @@ func (m Model) renderVoiceTab(w, h int) string {
 	}
 	var leftMiddleSect string
 	if !m.connected {
-		pulse := styles.WhitePulse
-		if !lipgloss.HasDarkBackground() {
-			pulse = styles.BlackPulse
-		}
-		aloneLogo := m.aloneAnim[m.animFrame%len(m.aloneAnim)]
-		currentColor := pulse[m.pulseFrame%len(pulse)]
-		textStyle := lipgloss.NewStyle().MaxWidth(leftW).Foreground(lipgloss.Color(currentColor)).Render(aloneLogo)
+		textStyle := styles.CGrayBold.Render(titles.ALONE1)
 		leftMiddleSect = lipgloss.Place(
 			leftW,
 			leftMiddleHeight,
@@ -306,13 +291,7 @@ func (m Model) renderVoiceTab(w, h int) string {
 	}
 	var rightMiddleSect string
 	if !m.connected {
-		pulse := styles.WhitePulse
-		if !lipgloss.HasDarkBackground() {
-			pulse = styles.BlackPulse
-		}
-		currentColor := pulse[m.pulseFrame%len(pulse)]
-		notConnLogo := m.notConnAnim[m.animFrame%len(m.notConnAnim)]
-		textStyle := lipgloss.NewStyle().MaxWidth(rightW).Foreground(lipgloss.Color(currentColor)).Render(notConnLogo)
+		textStyle := styles.CGrayBold.Render(titles.NOT_CONN1)
 		rightMiddleSect = lipgloss.Place(
 			rightW,
 			rightMiddleHeight,
@@ -769,17 +748,15 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 		usersAudioState = coloredUserNickname + " 🔊"
 	}
 	if m.muteState != "" {
-		usersAudioState += " " + m.muteState
+		usersAudioState += m.muteState
 	}
 	topSect := usersAudioState
 
 	chatW := w - 4
-
 	m.chatTextInput.Width = max(1, chatW)
 
 	var bottomSect string
-
-	middleH := h - lipgloss.Height(topSect) - lipgloss.Height(bottomSect) - 1
+	middleH := h - lipgloss.Height(topSect) - 2
 	if middleH < 0 {
 		middleH = 0
 	}
@@ -787,18 +764,8 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 	var middleSect string
 
 	if !m.connected {
-		pulse := styles.WhitePulse
-		if !lipgloss.HasDarkBackground() {
-			pulse = styles.BlackPulse
-		}
-		aloneLogo := m.aloneAnim[m.animFrame%len(m.aloneAnim)]
-		currentColor := pulse[m.pulseFrame%len(pulse)]
 
-		textStyle := lipgloss.NewStyle().
-			MaxWidth(w).
-			Foreground(lipgloss.Color(currentColor)).
-			Bold(true).
-			Render(aloneLogo)
+		textStyle := styles.CGrayBold.Render(titles.ALONE1)
 
 		middleSect = lipgloss.Place(
 			w,
@@ -814,32 +781,27 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 
 		for _, c := range m.connections {
 			clearNick := ansi.Strip(c)
-			var (
-				state string
-				rel   string
-				res   string
-			)
+			var state, rel string
 
 			if _, ok := mutedUsers[clearNick]; ok {
 				state = " 🔇"
 			} else if _, ok := speakingUsers[clearNick]; ok {
 				state = " 🔊"
+			} else if us, ok := m.usersStates[clearNick]; ok {
+				if us.fullMute {
+					state = " 🙊🙉"
+				} else if us.micMute {
+					state = " 🙊"
+				}
 			}
-			// } else if us, ok := m.usersStates[clearNick]; ok {
-			// 	if us.fullMute {
-			// 		state = "🙊🙉"
-			// 	} else if us.micMute {
-			// 		state = "🙊"
-			// 	}
-			// }
+
 			bfTag := m.user.GetBFTag()
 			bf := m.user.GetBestFriend()
 			if clearNick == bf.Nickname {
 				rel = bfTag + " "
 			}
 
-			res = rel + c + state
-			cons = append(cons, res)
+			cons = append(cons, rel+c+state)
 		}
 
 		rawConnStr := styles.CDimStyle.Render("with: ") + strings.Join(cons, " · ")
@@ -852,41 +814,61 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 
 		var historyBox string
 		if historyMaxH > 0 {
-			var allMsgsLines []string
 			msgStyle := lipgloss.NewStyle().Width(w - 2).MaxWidth(w - 2).PaddingLeft(2)
+			fgColorStyle := lipgloss.NewStyle().Foreground(c)
+			boldSubText := styles.CSubTextStyle.Bold(true)
 
-			for _, msg := range m.messages {
+			var gatheredLines []string
+			linesNeeded := historyMaxH + m.chatOffset
+
+			for i := len(m.messages) - 1; i >= 0; i-- {
+				msg := m.messages[i]
 				t := styles.CDimStyle.Render(msg.Time)
-				n := styles.CSubTextStyle.Bold(true).Render(msg.Nickname + ":")
+				n := boldSubText.Render(msg.Nickname + ":")
 
 				var renderedMsg string
 				if strings.HasPrefix(msg.Text, "\n") {
-					txt := msg.Text
-					renderedMsg = lipgloss.NewStyle().PaddingLeft(2).Render(fmt.Sprintf("%s %s %s", t, n, txt))
+					renderedMsg = styles.PaddingLeftStyle.Render(fmt.Sprintf("%s %s %s", t, n, msg.Text))
 				} else {
-					txt := lipgloss.NewStyle().Foreground(c).Render(msg.Text)
+					txt := fgColorStyle.Render(msg.Text)
 					renderedMsg = msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
 				}
-				allMsgsLines = append(allMsgsLines, strings.Split(renderedMsg, "\n")...)
+
+				lines := strings.Split(renderedMsg, "\n")
+
+				for j := len(lines) - 1; j >= 0; j-- {
+					gatheredLines = append(gatheredLines, lines[j])
+				}
+
+				if len(gatheredLines) >= linesNeeded {
+					break
+				}
 			}
 
-			lenAll := len(allMsgsLines)
-			m.chatOffset = min(m.chatOffset, max(0, lenAll-historyMaxH))
-			startIdx := max(0, lenAll-historyMaxH-m.chatOffset)
-			endIdx := max(0, lenAll-m.chatOffset)
+			start := m.chatOffset
+			if start > len(gatheredLines) {
+				start = len(gatheredLines)
+			}
+			end := start + historyMaxH
+			if end > len(gatheredLines) {
+				end = len(gatheredLines)
+			}
+			viewportLinesReversed := gatheredLines[start:end]
 
-			visibleMsgs := allMsgsLines[startIdx:endIdx]
+			viewportLines := make([]string, len(viewportLinesReversed))
+			for i, line := range viewportLinesReversed {
+				viewportLines[len(viewportLinesReversed)-1-i] = line
+			}
 
-			historyBox = lipgloss.Place(w, historyMaxH, lipgloss.Left, lipgloss.Bottom, strings.Join(visibleMsgs, "\n"))
+			historyBox = lipgloss.Place(w, historyMaxH, lipgloss.Left, lipgloss.Bottom, strings.Join(viewportLines, "\n"))
 		}
 
 		middleContent := lipgloss.JoinVertical(lipgloss.Left, connView, "", historyBox)
 		middleSect = lipgloss.Place(w, middleH, lipgloss.Left, lipgloss.Top, middleContent)
-		bottomSect = lipgloss.NewStyle().MaxWidth(chatW).PaddingLeft(2).Render(m.chatTextInput.View())
+		bottomSect = styles.PaddingLeftStyle.MaxWidth(chatW).Render(m.chatTextInput.View())
 	}
 
 	finalView := lipgloss.JoinVertical(lipgloss.Left, topSect, middleSect, "", bottomSect)
-
 	return m.zone.Mark("chatW", finalView)
 }
 
@@ -906,12 +888,12 @@ func (m Model) renderStartView(w, h int) string {
 	return m.zone.Mark("start", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, content))
 }
 
-func (m Model) renderErrView(w, h int, cText lipgloss.AdaptiveColor) string {
+func (m Model) renderErrView(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
 	lblLeft := styles.CErrBoldStyle.Render("► error detected")
-	errText := lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render(tuierrs.CastError(m.err))
+	errText := styles.PaddingLeftCTextStyle.Render(tuierrs.CastError(m.err))
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", errText)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
@@ -938,7 +920,7 @@ func (m Model) renderErrView(w, h int, cText lipgloss.AdaptiveColor) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane)
 }
 
-func (m Model) renderHelpView(w, h int, cText lipgloss.AdaptiveColor) string {
+func (m Model) renderHelpView(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
@@ -947,8 +929,8 @@ func (m Model) renderHelpView(w, h int, cText lipgloss.AdaptiveColor) string {
 
 	renderShortcut := func(keys, desc string) string {
 		k := lipgloss.NewStyle().Foreground(m.themeColor).Width(22).Render(keys)
-		d := lipgloss.NewStyle().Foreground(cText).Render(desc)
-		return safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(k+d), leftW)
+		d := styles.CTextStyle.Render(desc)
+		return safeTruncate(styles.PaddingLeftStyle.Render(k+d), leftW)
 	}
 
 	quote := styles.PaddingLeftCGrayStyle.Render("all new tabs opens with active left side of window")

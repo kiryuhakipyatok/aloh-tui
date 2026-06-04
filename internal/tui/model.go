@@ -26,6 +26,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	alohnetwork "github.com/kiryuhakipyatok/aloh-networking"
 	bz "github.com/lrstanley/bubblezone"
 )
 
@@ -63,6 +64,8 @@ type Model struct {
 
 	curWindow uint
 
+	rightHeaderData []string
+
 	regTextInputs []textinput.Model
 	chatTextInput textinput.Model
 	logingInput   []textinput.Model
@@ -99,7 +102,7 @@ type Model struct {
 	usersColors map[string]userColors
 	connections []string
 	online      map[string][]string
-	//usersStates map[string]*userState
+	usersStates map[string]*userState
 
 	connectionsList lists.ConnectionsList
 
@@ -174,6 +177,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		defaultNotificationTag: "🔔",
 		defaultBanTag:          "🚫",
 
+		rightHeaderData: make([]string, 3),
+
 		spinner: sp,
 
 		online: make(map[string][]string, 5),
@@ -181,7 +186,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		stopCountMinutesChan: make(chan struct{}, 1),
 
 		usersColors: make(map[string]userColors, 5),
-		//usersStates: make(map[string]*userState, 5),
+		usersStates: make(map[string]*userState, 5),
 
 		zone: bz.New(),
 
@@ -321,14 +326,9 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 				m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
 			})
 
-			// networking.EventCallback(func(id string, e alohnetwork.Event) {
-			// 	defer func() {
-			// 		if r := recover(); r != nil {
-			// 			m.log.Error("panic:", r, string(debug.Stack()))
-			// 		}
-			// 	}()
-			// 	m.netwEventsChan <- commands.NetworkEventMsg{Nickname: id, Event: e}
-			// })
+			networking.EventCallback(func(id string, e alohnetwork.Event) {
+				m.netwEventsChan <- commands.NetworkEventMsg{Nickname: id, Event: e}
+			})
 			user.SSHClient = client
 			user.Engines.AudioEngine = audioEngine
 			user.Networking = networking
@@ -337,6 +337,21 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	}
 
 	m.user = user
+
+	if m.user.GetShowDateState() {
+		curDate := m.curTime.Format("2006-01-02")
+		m.rightHeaderData[0] = curDate
+	}
+
+	if m.user.GetShowTimeState() {
+		curTime := m.curTime.Format("15:04:05")
+		m.rightHeaderData[1] = curTime
+	}
+
+	if m.user.GetShowZoneState() {
+		curZone := m.curTime.Format("-07:00")
+		m.rightHeaderData[2] = curZone
+	}
 
 	ls := lists.ListSetup{
 		ThemeColor:       m.themeColor,
@@ -449,12 +464,10 @@ func (m Model) Init() tea.Cmd {
 			commands.WaitForNetworkEventMessageCmd(m.netwEventsChan),
 			commands.WaitForRawChatMessageCmd(m.rawMsgChan),
 			commands.WaitForPeerConnectionCmd(m.peerConnectionsChan),
-			commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan),
-			commands.TickCmd(), tea.EnableMouseCellMotion)
+			commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan), tea.EnableMouseCellMotion)
 		if m.user.GetShowTimeState() {
 			cmds = append(cmds, commands.TimeTickCmd())
 		}
-		return tea.Batch(cmds...)
 	}
 	return tea.Batch(cmds...)
 }

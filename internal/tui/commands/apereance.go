@@ -19,6 +19,7 @@ const (
 
 type AppereanceMsg struct {
 	Typee uint
+	Res   bool
 	Err   error
 }
 
@@ -75,9 +76,11 @@ func OnOffShowTime(user *users.User) tea.Cmd {
 		msg := AppereanceMsg{
 			Typee: S_TIME,
 		}
-		if err := user.OnOffShowTime(); err != nil {
+		res, err := user.OnOffShowTime()
+		if err != nil {
 			msg.Err = err
 		}
+		msg.Res = res
 		return msg
 	}
 }
@@ -87,9 +90,11 @@ func OnOffShowDate(user *users.User) tea.Cmd {
 		msg := AppereanceMsg{
 			Typee: S_DATE,
 		}
-		if err := user.OnOffShowDate(); err != nil {
+		res, err := user.OnOffShowDate()
+		if err != nil {
 			msg.Err = err
 		}
+		msg.Res = res
 		return msg
 	}
 }
@@ -99,9 +104,11 @@ func OnOffShowZone(user *users.User) tea.Cmd {
 		msg := AppereanceMsg{
 			Typee: S_ZONE,
 		}
-		if err := user.OnOffShowZone(); err != nil {
+		res, err := user.OnOffShowZone()
+		if err != nil {
 			msg.Err = err
 		}
+		msg.Res = res
 		return msg
 	}
 }

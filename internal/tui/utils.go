@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -81,7 +80,7 @@ func (m Model) getChatSizes() (int, int, int) {
 
 		lenAll := len(allMsgsLines)
 
-		maxOffset = lenAll - historyMaxH
+		maxOffset = lenAll - historyMaxH - 1
 	}
 
 	return maxOffset, w, historyMaxH
@@ -166,8 +165,7 @@ func (m Model) selectSetting() (Model, tea.Cmd) {
 		default:
 			return m, nil
 		}
-		m = m.syncTabState()
-		return m, textinput.Blink
+		return m.syncTabState()
 	}
 	return m, nil
 }

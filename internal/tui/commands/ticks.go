@@ -13,7 +13,7 @@ type (
 	UpdateTickMsg time.Time
 )
 
-func TickCmd() tea.Cmd {
+func SecTickCmd() tea.Cmd {
 	return tea.Tick(time.Millisecond*1000, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
@@ -34,5 +34,11 @@ func PulseTickCmd() tea.Cmd {
 func TimeTickCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
 		return t
+	})
+}
+
+func UpdateTickCmd() tea.Cmd {
+	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+		return UpdateTickMsg(t)
 	})
 }
