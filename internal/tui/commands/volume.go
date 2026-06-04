@@ -26,10 +26,10 @@ func MuteUnmuteCmd(ae audio.AudioEngine, netw networking.Networking) tea.Cmd {
 			msg.Typee = FULL
 			msg.Res = res
 
-			e := networking.MuteFullEvent(msg.Res)
-			if err := netw.NewEvent(e); err != nil {
-				msg.Err = err
-			}
+			// e := networking.MuteFullEvent(msg.Res)
+			// if err := netw.NewEvent(e); err != nil {
+			// 	msg.Err = err
+			// }
 		}
 
 		return msg
@@ -44,10 +44,10 @@ func MuteUnmuteMicCmd(ae audio.AudioEngine, netw networking.Networking) tea.Cmd 
 			msg.Typee = FULL
 			msg.Res = res
 
-			e := networking.MuteMicEvent(msg.Res)
-			if err := netw.NewEvent(e); err != nil {
-				msg.Err = err
-			}
+			// e := networking.MuteMicEvent(msg.Res)
+			// if err := netw.NewEvent(e); err != nil {
+			// 	msg.Err = err
+			// }
 		}
 		return msg
 	}

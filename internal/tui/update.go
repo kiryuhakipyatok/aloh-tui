@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"image"
 	"math"
-	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -501,11 +500,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = states.ERR_STATE
 		} else if m.connected {
 			if m.user.Engines.AudioEngine != nil {
-				defer func() {
-					if r := recover(); r != nil {
-						m.log.Error("panic:", r, string(debug.Stack()))
-					}
-				}()
 				if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
 					m.err = err
 					m.state = states.ERR_STATE
@@ -735,11 +729,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.log.Info("peer disconnecting")
 		nick := msg.Nickname
 		cmds = append(cmds, commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan))
-		defer func() {
-			if r := recover(); r != nil {
-				m.log.Error("panic:", r, string(debug.Stack()))
-			}
-		}()
 		if !m.user.IsBlocked(nick) {
 			var colored string
 			m.connections = slices.DeleteFunc(m.connections, func(n string) bool {

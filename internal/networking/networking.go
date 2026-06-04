@@ -14,13 +14,13 @@ type Networking interface {
 	VoiceCallback(cb func(id string, data []byte))
 	PeerConnectedCallback(cb func(id string))
 	PeerDisconnectedCallback(cb func(id string))
-	EventCallback(cb func(id string, e alohnetwork.Event))
+	//EventCallback(cb func(id string, e alohnetwork.Event))
 
 	SendMessageInChat(msg []byte) error
 	SendVoiceData(data []byte) error
 	SendVideoData(data []byte) error
 
-	NewEvent(e alohnetwork.Event) error
+	//NewEvent(e alohnetwork.Event) error
 
 	ConnectToAllUsers(nickname string) error
 	ConnectToUser(nickname string) error

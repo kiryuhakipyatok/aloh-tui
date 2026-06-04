@@ -10,7 +10,6 @@ import (
 	"aloh-tui/pkg/logger"
 	"errors"
 	"math"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -386,7 +385,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 			ch = format.Channels
 		}
 
-		if as.Headphones != "" && heeadphones[i].Name() == as.Microphone {
+		if as.Headphones != "" && heeadphones[i].Name() == as.Headphones {
 			headId = heeadphones[i].ID.Pointer()
 			ch = format.Channels
 			ae.CurrentHeadphones = hi
@@ -1082,11 +1081,6 @@ func (ae *audioEngine) SetConnected() {
 }
 
 func (ae *audioEngine) SetDisconnected() error {
-	defer func() {
-		if r := recover(); r != nil {
-			ae.log.Error(0, "panic:", r, string(debug.Stack()))
-		}
-	}()
 	ae.connected.Store(false)
 	ae.voiceHolder.Store(0)
 	ae.userIsSpeaking.Store(false)
@@ -1094,22 +1088,22 @@ func (ae *audioEngine) SetDisconnected() error {
 	// ae.workMic = ae.workMic[:0]
 	// ae.resampledWorkMic = ae.resampledWorkMic[:0]
 	// ae.monoCaptureBuffer = ae.monoCaptureBuffer
-	ae.mu.Lock()
-	defer ae.mu.Unlock()
+	// ae.mu.Lock()
+	// defer ae.mu.Unlock()
 	if ae.opusEncoder != nil {
 		if err := ae.opusEncoder.Reset(); err != nil {
 			return err
 		}
 	}
 
-
+	ae.mu.Lock()
 	for _, ua := range ae.usersAudio {
 		ua.data = ua.data[:0]
 		ua.playing = false
 		ua.framesCount = 0
 		ua.isSpeaking.Store(false)
 	}
-
+	ae.mu.Unlock()
 	return nil
 }
 
@@ -1195,14 +1189,14 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 	ae.captureDevice = newCaptureDevice
 	ae.captureResampler = newCaptureResampler
 
+	if oldCaptureDevice != nil {
+		oldCaptureDevice.Stop()
+	}
+
 	ae.voiceHolder.Store(0)
 	ae.workMic = ae.workMic[:0]
 	ae.micNativeBuffer = ae.micNativeBuffer[:0]
 	ae.mu.Unlock()
-
-	if oldCaptureDevice != nil {
-		oldCaptureDevice.Stop()
-	}
 
 	if err := newCaptureDevice.Start(); err != nil {
 		ae.log.Error(ae.errLogCount, "failed to start new microphone, rolling back", logger.Err(err))
@@ -1294,12 +1288,12 @@ func (ae *audioEngine) ChangeHeadphones(headphones string) error {
 	ae.playbackDevice = newPlaybackDevice
 	ae.playbackResampler = newPlaybackResampler
 
-	ae.playbackNativeBuffer = ae.playbackNativeBuffer[:0]
-	ae.mu.Unlock()
-
 	if oldPlaybackDevice != nil {
 		oldPlaybackDevice.Stop()
 	}
+
+	ae.playbackNativeBuffer = ae.playbackNativeBuffer[:0]
+	ae.mu.Unlock()
 
 	if err := newPlaybackDevice.Start(); err != nil {
 		ae.log.Error(ae.errLogCount, "failed to start new headphones, rolling back", logger.Err(err))

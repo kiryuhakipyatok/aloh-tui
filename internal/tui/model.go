@@ -19,7 +19,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"runtime/debug"
 	"time"
 
 	"github.com/AvraamMavridis/randomcolor"
@@ -27,7 +26,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	alohnetwork "github.com/kiryuhakipyatok/aloh-networking"
 	bz "github.com/lrstanley/bubblezone"
 )
 
@@ -308,50 +306,29 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			log.Info("setting netwoking callbacks...", logNickname)
 
 			networking.ChatCallback(func(id string, data []byte) {
-				defer func() {
-					if r := recover(); r != nil {
-						m.log.Error("panic:", r, string(debug.Stack()))
-					}
-				}()
 				t := time.Now().Format("15:04:05")
 				m.rawMsgChan <- commands.RawChatMessage{Time: t, Nickname: id, Data: data}
-
 			})
 			networking.VoiceCallback(func(id string, data []byte) {
-				defer func() {
-					if r := recover(); r != nil {
-						m.log.Error("panic:", r, string(debug.Stack()))
-					}
-				}()
 				audioEngine.PlayUserVoice(id, data)
 			})
 			networking.PeerConnectedCallback(func(id string) {
-				defer func() {
-					if r := recover(); r != nil {
-						m.log.Error("panic:", r, string(debug.Stack()))
-					}
-				}()
 				t := time.Now().Format("15:04:05")
 				m.peerConnectionsChan <- commands.PeerConnectedMsg{Nickname: id, Time: t}
 			})
 			networking.PeerDisconnectedCallback(func(id string) {
-				defer func() {
-					if r := recover(); r != nil {
-						m.log.Error("panic:", r, string(debug.Stack()))
-					}
-				}()
 				t := time.Now().Format("15:04:05")
 				m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
 			})
 
-			networking.EventCallback(func(id string, e alohnetwork.Event) {
-				defer func() {
-					if r := recover(); r != nil {
-						m.log.Error("panic:", r, string(debug.Stack()))
-					}
-				}()
-				m.netwEventsChan <- commands.NetworkEventMsg{Nickname: id, Event: e}
-			})
+			// networking.EventCallback(func(id string, e alohnetwork.Event) {
+			// 	defer func() {
+			// 		if r := recover(); r != nil {
+			// 			m.log.Error("panic:", r, string(debug.Stack()))
+			// 		}
+			// 	}()
+			// 	m.netwEventsChan <- commands.NetworkEventMsg{Nickname: id, Event: e}
+			// })
 			user.SSHClient = client
 			user.Engines.AudioEngine = audioEngine
 			user.Networking = networking
