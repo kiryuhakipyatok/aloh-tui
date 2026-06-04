@@ -2,6 +2,7 @@ package sshclient
 
 import (
 	"aloh-tui/pkg/errs"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -169,19 +170,25 @@ func (sc *sshClient) proccessEventsChan() {
 			log.Error("failed to read data", logger.Err(err))
 			continue
 		}
+
 		if len(data[:n]) > 0 {
-			e, err := proccessEvent(data[:n])
-			if err != nil {
-				log.Error("failed to proccess event", logger.Err(err))
-				continue
+			events := bytes.Split(data[:n], []byte("\n"))
+
+			for _, e := range events {
+				e, err := proccessEvent(e)
+				if err != nil {
+					log.Error("failed to proccess event", logger.Err(err))
+					continue
+				}
+				eventLog := logger.Attr("event", e)
+				select {
+				case sc.eventsChan <- e:
+					log.Info("new event in events chan", eventLog)
+				default:
+					log.Error("events chan is full, event skipped", eventLog)
+				}
 			}
-			eventLog := logger.Attr("event", e)
-			select {
-			case sc.eventsChan <- e:
-				log.Info("new event in events chan", eventLog)
-			default:
-				log.Error("events chan is full, event skipped", eventLog)
-			}
+
 		}
 	}
 }

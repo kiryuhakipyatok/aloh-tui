@@ -279,6 +279,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case sshclient.FRIEND_ONLINE:
+			m.log.Info("friend online", nickname)
 			//if m.user.IsFriend(nickname) {
 			if m.activeTab != 0 {
 				m.tabsNotifications["friends"] = struct{}{}
@@ -288,7 +289,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
 		//}
 		case sshclient.FRIEND_OFFLINE:
-			m.log.Info("friend offline")
+			m.log.Info("friend offline", nickname)
 			delete(m.online, nickname)
 			cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
 
