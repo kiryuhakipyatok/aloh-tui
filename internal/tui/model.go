@@ -5,6 +5,7 @@ import (
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
+
 	"aloh-tui/internal/tui/commands"
 	"aloh-tui/internal/tui/components/lists"
 	"aloh-tui/internal/tui/components/states"
@@ -29,11 +30,6 @@ import (
 	alohnetwork "github.com/kiryuhakipyatok/aloh-networking"
 	bz "github.com/lrstanley/bubblezone"
 )
-
-type userColors struct {
-	mainColor lipgloss.Color
-	subColor  lipgloss.Color
-}
 
 type userState struct {
 	fullMute bool
@@ -99,7 +95,7 @@ type Model struct {
 
 	zone *bz.Manager
 
-	usersColors map[string]userColors
+	usersColors map[string]styles.UserColors
 	connections []string
 	online      map[string][]string
 	usersStates map[string]*userState
@@ -185,7 +181,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		stopCountMinutesChan: make(chan struct{}, 1),
 
-		usersColors: make(map[string]userColors, 5),
+		usersColors: make(map[string]styles.UserColors, 5),
 		usersStates: make(map[string]*userState, 5),
 
 		zone: bz.New(),

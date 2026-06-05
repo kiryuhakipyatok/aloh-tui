@@ -2,13 +2,13 @@ package lists
 
 import (
 	"aloh-tui/internal/entities/users"
+	"aloh-tui/internal/tui/components/styles"
 	"fmt"
 	"slices"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 )
 
 type ConnectionItem struct {
@@ -89,12 +89,11 @@ func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float
 	return tea.Batch(cmds...)
 }
 
-func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []string) tea.Cmd {
+func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []string, colors map[string]styles.UserColors) tea.Cmd {
 	names := make([]string, 0, len(connections))
-	var clearName string
+
 	for _, name := range connections {
-		clearName = ansi.Strip(name)
-		if !user.IsBlocked(clearName) {
+		if !user.IsBlocked(name) {
 			names = append(names, name)
 		}
 	}
@@ -105,18 +104,18 @@ func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []
 	for _, name := range names {
 		var vc float32 = 1
 		var muted bool
-		clearName = ansi.Strip(name)
-		us, ok := user.Data.Setup.Audio.UsersSetup[clearName]
+		us, ok := user.Data.Setup.Audio.UsersSetup[name]
 		if ok {
 			vc = us.VolumeCoefficient
 			muted = us.Muted
 		}
 		var rel string
-		if user.Data.Statistics.BestFriend.Nickname == clearName {
+		if user.Data.Statistics.BestFriend.Nickname == name {
 			rel = user.Data.Setup.Appereance.BestFriendTag
 		}
+		coloredName := lipgloss.NewStyle().Foreground(colors[name].MainColor).Render(name)
 		newItems = append(newItems, ConnectionItem{
-			Nickname:          name,
+			Nickname:          coloredName,
 			VolumeCoefficient: vc,
 			Muted:             muted,
 			Relation:          rel,

@@ -2,11 +2,9 @@ package sshclient
 
 import (
 	"aloh-tui/pkg/errs"
-	"bytes"
+	"bufio"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 
 	"aloh-tui/pkg/logger"
 
@@ -31,12 +29,13 @@ const (
 )
 
 type SSHClient interface {
-	NewFriendReq(ctx context.Context, friendNickname string) error
-	AcceptFriendReq(ctx context.Context, friendNickname string) error
-	DenyFriendReq(ctx context.Context, friendNickname string) error
-	DeleteFromFriends(ctx context.Context, friendNickname string) error
-	BlockUser(ctx context.Context, friendNickname string) error
-	UnblockUser(ctx context.Context, friendNickname string) error
+	NewFriendReq(ctx context.Context, friendNickname []byte) error
+	AcceptFriendReq(ctx context.Context, friendNickname []byte) error
+	DenyFriendReq(ctx context.Context, friendNickname []byte) error
+	DeleteFromFriends(ctx context.Context, friendNickname []byte) error
+	BlockUser(ctx context.Context, friendNickname []byte) error
+	UnblockUser(ctx context.Context, friendNickname []byte) error
+	UpdateCurrentConnects(ctx context.Context, conns []byte) error
 	Close()
 }
 
@@ -159,46 +158,42 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 func (sc *sshClient) proccessEventsChan() {
 	op := "sshClient.proccessEvents"
 	log := sc.log.AddOp(op)
-	data := make([]byte, 1024)
-	for {
-		n, err := sc.eventSSHChannel.Read(data)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				log.Info("events processing canceled")
-				break
-			}
-			log.Error("failed to read data", logger.Err(err))
+	scanner := bufio.NewScanner(sc.eventSSHChannel)
+	for scanner.Scan() {
+		rawBytes := scanner.Bytes()
+
+		if len(rawBytes) == 0 {
 			continue
 		}
 
-		if len(data[:n]) > 0 {
-			events := bytes.Split(data[:n], []byte("\n"))
-
-			for _, e := range events {
-				e, err := proccessEvent(e)
-				if err != nil {
-					log.Error("failed to proccess event", logger.Err(err))
-					continue
-				}
-				eventLog := logger.Attr("event", e)
-				select {
-				case sc.eventsChan <- e:
-					log.Info("new event in events chan", eventLog)
-				default:
-					log.Error("events chan is full, event skipped", eventLog)
-				}
-			}
-
+		e, err := proccessEvent(rawBytes)
+		if err != nil {
+			log.Error("failed to proccess event", logger.Err(err))
+			continue
 		}
+		eventLog := logger.Attr("event", e)
+		select {
+		case sc.eventsChan <- e:
+			log.Info("new event in events chan", eventLog)
+		default:
+			log.Error("events chan is full, event skipped", eventLog)
+		}
+
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Error("failed to read data stream", logger.Err(err))
+	} else {
+		log.Info("event processing canceled successfully")
 	}
 }
 
-func (sc *sshClient) NewFriendReq(ctx context.Context, friendNickname string) error {
+func (sc *sshClient) NewFriendReq(ctx context.Context, friendNickname []byte) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		status, payload, err := sc.client.SendRequest("new-friend", true, []byte(friendNickname))
+		status, payload, err := sc.client.SendRequest("new-friend", true, friendNickname)
 		if err != nil {
 			return err
 		}
@@ -209,12 +204,12 @@ func (sc *sshClient) NewFriendReq(ctx context.Context, friendNickname string) er
 	}
 }
 
-func (sc *sshClient) AcceptFriendReq(ctx context.Context, friendNickname string) error {
+func (sc *sshClient) AcceptFriendReq(ctx context.Context, friendNickname []byte) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		status, payload, err := sc.client.SendRequest("accept-friend", true, []byte(friendNickname))
+		status, payload, err := sc.client.SendRequest("accept-friend", true, friendNickname)
 		if err != nil {
 			return err
 		}
@@ -225,12 +220,12 @@ func (sc *sshClient) AcceptFriendReq(ctx context.Context, friendNickname string)
 	}
 }
 
-func (sc *sshClient) DenyFriendReq(ctx context.Context, friendNickname string) error {
+func (sc *sshClient) DenyFriendReq(ctx context.Context, friendNickname []byte) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		status, payload, err := sc.client.SendRequest("deny-friend", true, []byte(friendNickname))
+		status, payload, err := sc.client.SendRequest("deny-friend", true, friendNickname)
 		if err != nil {
 			return err
 		}
@@ -241,12 +236,12 @@ func (sc *sshClient) DenyFriendReq(ctx context.Context, friendNickname string) e
 	}
 }
 
-func (sc *sshClient) DeleteFromFriends(ctx context.Context, friendNickname string) error {
+func (sc *sshClient) DeleteFromFriends(ctx context.Context, friendNickname []byte) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		status, payload, err := sc.client.SendRequest("delete-friend", true, []byte(friendNickname))
+		status, payload, err := sc.client.SendRequest("delete-friend", true, friendNickname)
 		if err != nil {
 			return err
 		}
@@ -257,12 +252,12 @@ func (sc *sshClient) DeleteFromFriends(ctx context.Context, friendNickname strin
 	}
 }
 
-func (sc *sshClient) BlockUser(ctx context.Context, friendNickname string) error {
+func (sc *sshClient) BlockUser(ctx context.Context, friendNickname []byte) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		status, payload, err := sc.client.SendRequest("block-user", true, []byte(friendNickname))
+		status, payload, err := sc.client.SendRequest("block-user", true, friendNickname)
 		if err != nil {
 			return err
 		}
@@ -272,12 +267,28 @@ func (sc *sshClient) BlockUser(ctx context.Context, friendNickname string) error
 		return nil
 	}
 }
-func (sc *sshClient) UnblockUser(ctx context.Context, friendNickname string) error {
+func (sc *sshClient) UnblockUser(ctx context.Context, friendNickname []byte) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		status, payload, err := sc.client.SendRequest("unblock-user", true, []byte(friendNickname))
+		status, payload, err := sc.client.SendRequest("unblock-user", true, friendNickname)
+		if err != nil {
+			return err
+		}
+		if !status {
+			return castErr(payload)
+		}
+		return nil
+	}
+}
+
+func (sc *sshClient) UpdateCurrentConnects(ctx context.Context, conns []byte) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		status, payload, err := sc.client.SendRequest("conns-update", true, conns)
 		if err != nil {
 			return err
 		}

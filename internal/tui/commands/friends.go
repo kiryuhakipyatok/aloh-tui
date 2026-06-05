@@ -5,6 +5,7 @@ import (
 	"aloh-tui/internal/sshclient"
 	"aloh-tui/pkg/errs"
 	"context"
+	"encoding/json"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -63,7 +64,7 @@ func SendFriendRequestCmd(user *users.User, nickname string) tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
-		if err := user.SSHClient.NewFriendReq(ctx, nickname); err != nil {
+		if err := user.SSHClient.NewFriendReq(ctx, []byte(nickname)); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -83,7 +84,7 @@ func AcceptFriendRequestCmd(user *users.User, nickname string) tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
-		if err := user.SSHClient.AcceptFriendReq(ctx, nickname); err != nil {
+		if err := user.SSHClient.AcceptFriendReq(ctx, []byte(nickname)); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -101,7 +102,7 @@ func DenyFriendRequestCmd(user *users.User, nickname string) tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
-		if err := user.SSHClient.DenyFriendReq(ctx, nickname); err != nil {
+		if err := user.SSHClient.DenyFriendReq(ctx, []byte(nickname)); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -123,7 +124,7 @@ func DeleteFromFriendsCmd(user *users.User, nickname string, isInitiator bool) t
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		if isInitiator {
-			if err := user.SSHClient.DeleteFromFriends(ctx, nickname); err != nil {
+			if err := user.SSHClient.DeleteFromFriends(ctx, []byte(nickname)); err != nil {
 				msg.Err = err
 				return msg
 			}
@@ -147,7 +148,7 @@ func BlockUserCmd(user *users.User, nickname string) tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
-		if err := user.SSHClient.BlockUser(ctx, nickname); err != nil {
+		if err := user.SSHClient.BlockUser(ctx, []byte(nickname)); err != nil {
 			msg.Err = err
 			return msg
 		}
@@ -168,11 +169,31 @@ func UnblockUserCmd(user *users.User, nickname string) tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
-		if err := user.SSHClient.UnblockUser(ctx, nickname); err != nil {
+		if err := user.SSHClient.UnblockUser(ctx, []byte(nickname)); err != nil {
 			msg.Err = err
 			return msg
 		}
 		user.UnblockUser(nickname)
+		return msg
+	}
+}
+
+func UpdateCurrentConnectsCmd(user *users.User, conns []string) tea.Cmd {
+	return func() tea.Msg {
+		msg := FriendsMsg{
+			Typee: sshclient.FRIEND_CONNECTIONS,
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		data, err := json.Marshal(&conns)
+		if err != nil {
+			msg.Err = err
+			return msg
+		}
+		if err := user.SSHClient.UpdateCurrentConnects(ctx, data); err != nil {
+			msg.Err = err
+		}
 		return msg
 	}
 }

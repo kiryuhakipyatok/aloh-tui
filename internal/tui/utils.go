@@ -86,14 +86,14 @@ func (m Model) getChatSizes() (int, int, int) {
 	return maxOffset, w, historyMaxH
 }
 
-func (m Model) coloredNickname(nickname string) string {
-	for _, v := range m.connections {
-		if nickname == ansi.Strip(v) {
-			nickname = v
-		}
-	}
-	return nickname
-}
+// func (m Model) coloredNickname(nickname string) string {
+// 	for _, v := range m.connections {
+// 		if nickname == ansi.Strip(v) {
+// 			nickname = v
+// 		}
+// 	}
+// 	return nickname
+// }
 
 func (m Model) getOfflineUsers() []string {
 	onlineMap := make(map[string]struct{})

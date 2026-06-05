@@ -209,19 +209,18 @@ func (m Model) renderVoiceTab(w, h int) string {
 	mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
 
 	for _, c := range m.connections {
-		clearNick := ansi.Strip(c)
 		state := ""
-		userColors := m.usersColors[clearNick]
-		mainStyle := lipgloss.NewStyle().Foreground(userColors.mainColor)
-		subStyle := lipgloss.NewStyle().Foreground(userColors.subColor)
-		bar := lipgloss.NewStyle().Foreground(userColors.subColor).Render(fmt.Sprintf("voice power %.1f: ", 0.0))
-		if _, ok := mutedUsers[clearNick]; ok {
+		userColors := m.usersColors[c]
+		mainStyle := lipgloss.NewStyle().Foreground(userColors.MainColor)
+		subStyle := lipgloss.NewStyle().Foreground(userColors.SubColor)
+		bar := lipgloss.NewStyle().Foreground(userColors.SubColor).Render(fmt.Sprintf("voice power %.1f: ", 0.0))
+		if _, ok := mutedUsers[c]; ok {
 			state = " 🔇"
-		} else if rms, ok := speakingUsers[clearNick]; ok {
+		} else if rms, ok := speakingUsers[c]; ok {
 			state = " 🔊"
 			bar = mainStyle.Render(fmt.Sprintf("voice power %.1f:", rms)) +
 				subStyle.Render(strings.Repeat("▐", int(rms)/100))
-		} else if us, ok := m.usersStates[clearNick]; ok {
+		} else if us, ok := m.usersStates[c]; ok {
 			if us.fullMute {
 				state = " 🙊🙉"
 			} else if us.micMute {
@@ -780,14 +779,14 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 		mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
 
 		for _, c := range m.connections {
-			clearNick := ansi.Strip(c)
+
 			var state, rel string
 
-			if _, ok := mutedUsers[clearNick]; ok {
+			if _, ok := mutedUsers[c]; ok {
 				state = " 🔇"
-			} else if _, ok := speakingUsers[clearNick]; ok {
+			} else if _, ok := speakingUsers[c]; ok {
 				state = " 🔊"
-			} else if us, ok := m.usersStates[clearNick]; ok {
+			} else if us, ok := m.usersStates[c]; ok {
 				if us.fullMute {
 					state = " 🙊🙉"
 				} else if us.micMute {
@@ -797,11 +796,15 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 
 			bfTag := m.user.GetBFTag()
 			bf := m.user.GetBestFriend()
-			if clearNick == bf.Nickname {
+			if c == bf.Nickname {
 				rel = bfTag + " "
 			}
 
-			cons = append(cons, rel+c+state)
+			usersColor := m.usersColors[c]
+
+			coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c)
+
+			cons = append(cons, rel+coloredNick+state)
 		}
 
 		rawConnStr := styles.CDimStyle.Render("with: ") + strings.Join(cons, " · ")
@@ -824,14 +827,21 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 			for i := len(m.messages) - 1; i >= 0; i-- {
 				msg := m.messages[i]
 				t := styles.CDimStyle.Render(msg.Time)
-				n := boldSubText.Render(msg.Nickname + ":")
+				var coloredNick string
+				usersColor, ok := m.usersColors[msg.Nickname]
+				if ok {
+					coloredNick = lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(msg.Nickname)
+				} else {
+					coloredNick = boldSubText.Render(msg.Nickname)
+
+				}
 
 				var renderedMsg string
 				if strings.HasPrefix(msg.Text, "\n") {
-					renderedMsg = styles.PaddingLeftStyle.Render(fmt.Sprintf("%s %s %s", t, n, msg.Text))
+					renderedMsg = styles.PaddingLeftStyle.Render(fmt.Sprintf("%s %s %s", t, coloredNick, msg.Text))
 				} else {
 					txt := fgColorStyle.Render(msg.Text)
-					renderedMsg = msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
+					renderedMsg = msgStyle.Render(fmt.Sprintf("%s %s %s", t, coloredNick, txt))
 				}
 
 				lines := strings.Split(renderedMsg, "\n")

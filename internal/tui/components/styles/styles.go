@@ -2,6 +2,11 @@ package styles
 
 import "github.com/charmbracelet/lipgloss"
 
+type UserColors struct {
+	MainColor lipgloss.Color
+	SubColor  lipgloss.Color
+}
+
 var (
 	CDim  = lipgloss.Color("#75715E")
 	CGray = lipgloss.Color("#5f5f5f")
