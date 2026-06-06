@@ -855,6 +855,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		timeIsOn := m.user.GetShowTimeState()
 		if timeIsOn {
 			m.curTime = msg
+			m.rightHeaderData[1] = m.curTime.Format("15:04:05")
 			return m, commands.TimeTickCmd()
 		}
 
