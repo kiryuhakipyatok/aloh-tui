@@ -1103,6 +1103,7 @@ func (ae *audioEngine) SetDisconnected() error {
 		ua.framesCount = 0
 		ua.isSpeaking.Store(false)
 	}
+
 	ae.mu.Unlock()
 	return nil
 }

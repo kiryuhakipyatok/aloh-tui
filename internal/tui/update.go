@@ -957,12 +957,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.state == states.ERR_STATE {
 				return m, nil
 			}
-			if m.isLoggedIn() && m.activeTab == 2 && m.connected {
+			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
 				if i, ok := m.connectionsList.LipList.SelectedItem().(lists.ConnectionItem); ok {
-					cmds = append(cmds, commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.Nickname)),
+					seq := tea.Sequence(commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.Nickname)),
 						m.connectionsList.UpdateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted))
+					cmds = append(cmds, seq)
 				}
 			}
+			
 		case "alt+x", "alt+X", "alt+ч", "alt+Ч":
 			if m.state == states.ERR_STATE {
 				return m, nil
@@ -987,8 +989,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if vc > MAX_VOLUME {
 						vc = MAX_VOLUME
 					}
-					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.Nickname), vc),
-						m.connectionsList.UpdateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted))
+					seq := tea.Sequence(commands.SetUserVolumeCmd(m.user, ansi.Strip(i.Nickname), vc),
+						m.connectionsList.UpdateConnectionItemList(i.Nickname, vc, i.Muted))
+					cmds = append(cmds, seq)
 				}
 			}
 
@@ -1006,8 +1009,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if vc < MIN_VOLUME {
 						vc = MIN_VOLUME
 					}
-					cmds = append(cmds, commands.SetUserVolumeCmd(m.user, ansi.Strip(i.Nickname), vc),
-						m.connectionsList.UpdateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted))
+					seq := tea.Sequence(commands.SetUserVolumeCmd(m.user, ansi.Strip(i.Nickname), vc),
+						m.connectionsList.UpdateConnectionItemList(i.Nickname, vc, i.Muted))
+					cmds = append(cmds, seq)
 				}
 			}
 		case "alt+left":
