@@ -47,19 +47,28 @@ type AudioEngine interface {
 	OnOffSoftDenoice() bool
 	OnOffAEC() bool
 	OnOffFilter() bool
+	OnOffUsersHardDenoise(nickname string) error
+	OnOffUsersSoftDenoise(nickname string) error
+	RemoveFromUsersAudio(nickname string) error
 }
 
 type usersAudio struct {
-	data              []byte
-	decoder           *opus.Decoder
-	isSpeaking        atomic.Bool
-	playing           bool
-	framesCount       uint
-	muted             atomic.Bool
-	volumeCoefficient float32
-	decodedBuffer     []byte
-	rms               float64
-	samples           []int16
+	data                 []byte
+	decoder              *opus.Decoder
+	isSpeaking           atomic.Bool
+	playing              bool
+	framesCount          uint
+	muted                atomic.Bool
+	volumeCoefficient    float32
+	decodedBuffer        []byte
+	rms                  float64
+	samples              []int16
+	float32Buffer        []float32
+	denoicedBuffer       []float32
+	personalPreprocessor *speexdsp.Preprocessor
+	softDenoised         atomic.Bool
+	personalHardDenoise  *rnnoise.RNNoise
+	hardDenoised         atomic.Bool
 }
 
 type audioEngine struct {
@@ -723,7 +732,28 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 					}
 
 					casters.BytesS16ToInt16(ua.samples, ua.data[:readLen])
+
+					if ua.hardDenoised.Load() {
+						casters.Int16ToFloat32(ua.samples, ua.float32Buffer)
+
+						for i := 0; i+rnnoiseFrameSize <= len(ua.float32Buffer); i += rnnoiseFrameSize {
+							rnnFrame := ua.float32Buffer[i : i+rnnoiseFrameSize]
+							outChunk := ua.denoicedBuffer[i : i+rnnoiseFrameSize]
+							_, err := ua.personalHardDenoise.Denoise(outChunk, rnnFrame)
+							if err != nil {
+								ae.log.Error(0, "failed to denoise frame", logger.Err(err))
+							}
+						}
+
+						casters.Float32ToInt16(ua.samples, ua.denoicedBuffer)
+					}
+
+					if ua.softDenoised.Load() {
+						ua.personalPreprocessor.Run(ua.samples)
+					}
+
 					ua.rms = getRms(ua.samples)
+
 					casters.MixToInt16(ae.workMix, ua.samples)
 
 					if readLen < len(ua.data) {
@@ -942,6 +972,8 @@ func (ae *audioEngine) SetMuteState(nickname string, mute bool) {
 	}
 	newUa := &usersAudio{
 		data:              make([]byte, 0, 48000),
+		float32Buffer:     make([]float32, frameLen),
+		denoicedBuffer:    make([]float32, frameLen),
 		decoder:           opusDecoder,
 		volumeCoefficient: 1,
 		decodedBuffer:     make([]byte, 5760),
@@ -973,6 +1005,8 @@ func (ae *audioEngine) PlayUserVoice(nickname string, userVoiceByte []byte) {
 
 		ua = &usersAudio{
 			data:              make([]byte, 0, 48000),
+			float32Buffer:     make([]float32, frameLen),
+			denoicedBuffer:    make([]float32, frameLen),
 			decoder:           opusDecoder,
 			volumeCoefficient: 1,
 			decodedBuffer:     make([]byte, 5760),
@@ -1027,6 +1061,8 @@ func (ae *audioEngine) SetVolume(nickname string, vc float32) {
 	}
 	newUa := &usersAudio{
 		data:              make([]byte, 0, 48000),
+		float32Buffer:     make([]float32, frameLen),
+		denoicedBuffer:    make([]float32, frameLen),
 		decoder:           opusDecoder,
 		volumeCoefficient: vc,
 		decodedBuffer:     make([]byte, 5760),
@@ -1040,6 +1076,68 @@ func (ae *audioEngine) SetVolume(nickname string, vc float32) {
 	} else {
 		ae.usersAudio[nickname] = newUa
 	}
+}
+
+func (ae *audioEngine) OnOffUsersHardDenoise(nickname string) error {
+	ae.mu.Lock()
+	defer ae.mu.Unlock()
+	ua, ok := ae.usersAudio[nickname]
+	if !ok {
+		return errs.ErrNotFound()
+	}
+	s := ua.hardDenoised.Load()
+	if !s == true && ua.personalHardDenoise == nil {
+		ua.personalHardDenoise = rnnoise.NewRNNoise()
+	} else if !s == false && ua.personalHardDenoise != nil {
+		if err := ua.personalHardDenoise.Close(); err != nil {
+			return err
+		}
+		ua.personalHardDenoise = nil
+	}
+	ua.hardDenoised.Store(!s)
+	return nil
+}
+
+func (ae *audioEngine) OnOffUsersSoftDenoise(nickname string) error {
+	ae.mu.Lock()
+	defer ae.mu.Unlock()
+	ua, ok := ae.usersAudio[nickname]
+	if !ok {
+		return errs.ErrNotFound()
+	}
+	s := ua.softDenoised.Load()
+	if !s == true && ua.personalPreprocessor == nil {
+		ua.personalPreprocessor = speexdsp.NewPreprocessor(48000, 960)
+		ua.personalPreprocessor.EnableDenoise(true)
+		ua.personalPreprocessor.SetEchoCanceller(nil)
+	} else if !s == false && ua.personalPreprocessor != nil {
+		if err := ua.personalPreprocessor.Close(); err != nil {
+			return err
+		}
+		ua.personalPreprocessor = nil
+	}
+	ua.softDenoised.Store(!s)
+
+	return nil
+}
+
+func (ae *audioEngine) RemoveFromUsersAudio(nickname string) error {
+	ua, ok := ae.usersAudio[nickname]
+	if !ok {
+		return errs.ErrNotFound()
+	}
+	if ua.personalPreprocessor != nil {
+		if err := ua.personalPreprocessor.Close(); err != nil {
+			return err
+		}
+	}
+	if ua.personalHardDenoise != nil {
+		if err := ua.personalHardDenoise.Close(); err != nil {
+			return err
+		}
+	}
+	delete(ae.usersAudio, nickname)
+	return nil
 }
 
 func (ae *audioEngine) SetNetworking(netw networking.Networking) error {
@@ -1102,7 +1200,20 @@ func (ae *audioEngine) SetDisconnected() error {
 		ua.playing = false
 		ua.framesCount = 0
 		ua.isSpeaking.Store(false)
+
+		if ua.personalPreprocessor != nil {
+			if err := ua.personalPreprocessor.Close(); err != nil {
+				return err
+			}
+		}
+		if ua.personalHardDenoise != nil {
+			if err := ua.personalHardDenoise.Close(); err != nil {
+				return err
+			}
+		}
 	}
+
+	clear(ae.usersAudio)
 
 	ae.mu.Unlock()
 	return nil

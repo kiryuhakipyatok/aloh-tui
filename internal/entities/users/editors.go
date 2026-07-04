@@ -350,18 +350,6 @@ func (u *User) UnblockUser(nickname string) {
 
 }
 
-func (u *User) IsFriend(nickname string) bool {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return slices.Contains(u.Data.Personal.Friends, nickname)
-}
-
-func (u *User) IsBlocked(nickname string) bool {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return slices.Contains(u.Data.Personal.BlockedUsers, nickname)
-}
-
 func (u *User) NewUserSetup(nickname string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()

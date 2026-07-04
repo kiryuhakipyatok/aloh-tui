@@ -27,7 +27,7 @@ func ConnectToAllUsersCmd(user *users.User, nickname string) tea.Cmd {
 	}
 }
 
-func ConnectToUserCmd(user *users.User, nickname string) tea.Cmd {
+func ConnectToUserCmd(user *users.User, id, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		msg := ConnectMsg{}
 		if user.Networking != nil {

@@ -12,10 +12,12 @@ import (
 )
 
 type ConnectionItem struct {
-	Nickname          string
-	VolumeCoefficient float32
-	Muted             bool
-	Relation          string
+	Nickname            string
+	VolumeCoefficient   float32
+	Muted               bool
+	PersonalHardDenoise bool
+	PersonalSoftDenoise bool
+	Relation            string
 }
 
 func (ci ConnectionItem) Title() string {
@@ -34,10 +36,12 @@ func (ci ConnectionItem) FilterValue() string {
 
 func (ci ConnectionItem) DynamicDescription(isSelected bool) string {
 	if isSelected {
-		return fmt.Sprintf("volume: %.1f, muted: %t, ALT+UP/DN to set volume, ALT+F to switch mute", ci.VolumeCoefficient, ci.Muted)
+		return fmt.Sprintf("volume: %.1f, muted: %t, personal soft denoise: %t, hard denoise: %t\nALT+UP/DN to set volume, ALT+F to switch mute",
+			ci.VolumeCoefficient, ci.Muted, ci.PersonalSoftDenoise, ci.PersonalHardDenoise)
 	}
 
-	return fmt.Sprintf("volume: %.1f, muted: %t", ci.VolumeCoefficient, ci.Muted)
+	return fmt.Sprintf("volume: %.1f, muted: %t, personal soft denoise: %t, hard denoise: %t",
+		ci.VolumeCoefficient, ci.Muted, ci.PersonalSoftDenoise, ci.PersonalHardDenoise)
 }
 
 func SetupConnestionsList(ls ListSetup) ConnectionsList {
@@ -71,7 +75,7 @@ func SetupConnestionsList(ls ListSetup) ConnectionsList {
 	}
 }
 
-func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float32, muted bool) tea.Cmd {
+func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float32, muted, phd, psd bool) tea.Cmd {
 	var cmds []tea.Cmd
 	items := l.LipList.Items()
 	for i, v := range items {
@@ -82,6 +86,8 @@ func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float
 		if conn.Nickname == nickname {
 			conn.VolumeCoefficient = volume
 			conn.Muted = muted
+			conn.PersonalHardDenoise = phd
+			conn.PersonalSoftDenoise = psd
 		}
 
 		cmds = append(cmds, l.LipList.SetItem(i, conn))

@@ -732,10 +732,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.PeerConnectedMsg:
-		m.log.Info("new connect", msg.Nickname)
 		nickname := msg.Nickname
 		if m.user.IsBlocked(nickname) {
-			m.log.Info("disconn from blocked", nickname)
 			cmds = append(cmds, commands.DisconnFromOne(m.user.Networking, nickname),
 				commands.WaitForPeerConnectionCmd(m.peerConnectionsChan))
 			return m, tea.Batch(cmds...)
@@ -782,14 +780,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// }
 
 	case commands.PeerDisconnectedMsg:
-		m.log.Info("peer disconnecting")
 		nick := msg.Nickname
 		cmds = append(cmds, commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan))
 		if !m.user.IsBlocked(nick) {
 			m.connections = slices.DeleteFunc(m.connections, func(n string) bool {
 				return nick == n
 			})
-			m.log.Info("deketed from connections")
 			if m.activeTab != 2 {
 				m.tabsNotifications["voice"] = struct{}{}
 			}
@@ -797,6 +793,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			coloredNickname := lipgloss.NewStyle().Foreground(m.usersColors[nick].MainColor).Render(nick)
 			delete(m.usersColors, nick)
+			if err := m.user.Engines.AudioEngine.RemoveFromUsersAudio(nick); err != nil {
+				m.err = err
+				m.state = states.ERR_STATE
+			}
 			m.messages = append(m.messages, commands.ChatMessage{Time: msg.Time, Nickname: "system", Text: coloredNickname + " disconnected!"})
 			cmds = append(cmds, m.connectionsList.UpdateConnectionsList(m.user, m.connections, m.usersColors),
 				commands.PlayNotificationCmd(m.user.Engines.AudioEngine), commands.UpdateCurrentConnectsCmd(m.user, m.connections))
@@ -815,7 +815,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 
-				m.log.Info("peer disconnected you are solo")
 			}
 		}
 
@@ -862,7 +861,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.state == states.LOAD_STATE {
 			switch msg.String() {
-			case "alt+q", "alt+Q", "ctrl+c":
+			case "alt+й", "alt+Й", "alt+q", "alt+Q":
 				return m, tea.Quit
 			default:
 				return m, nil
@@ -887,6 +886,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.isLoggedIn() {
 				m.activeTab = 2
 				m, cmd = m.syncTabState()
+			}
+
+		case "alt+ц", "alt+Ц", "alt+w", "alt+W":
+			if m.state == states.ERR_STATE {
+				return m, nil
+			}
+			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
+				if i, ok := m.connectionsList.LipList.SelectedItem().(lists.ConnectionItem); ok {
+					seq := tea.Sequence(commands.OnOffUsersSoftDenoise(m.user, ansi.Strip(i.Nickname)),
+						m.connectionsList.UpdateConnectionItemList(i.Nickname, i.VolumeCoefficient, i.Muted,
+							i.PersonalHardDenoise, !i.PersonalSoftDenoise))
+					cmds = append(cmds, seq)
+				}
+			}
+
+		case "alt+r", "alt+R", "alt+к", "alt+К":
+			if m.state == states.ERR_STATE {
+				return m, nil
+			}
+			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
+				if i, ok := m.connectionsList.LipList.SelectedItem().(lists.ConnectionItem); ok {
+					seq := tea.Sequence(commands.OnOffUsersHardDenoise(m.user, ansi.Strip(i.Nickname)),
+						m.connectionsList.UpdateConnectionItemList(i.Nickname, i.VolumeCoefficient, i.Muted,
+							!i.PersonalHardDenoise, i.PersonalSoftDenoise))
+					cmds = append(cmds, seq)
+				}
 			}
 
 		case "alt+с", "alt+С", "alt+c", "alt+C":
@@ -960,11 +985,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.isLoggedIn() && m.activeTab == 2 && m.connected && m.user.Engines.AudioEngine != nil {
 				if i, ok := m.connectionsList.LipList.SelectedItem().(lists.ConnectionItem); ok {
 					seq := tea.Sequence(commands.MuteUnmuteUserCmd(m.user, ansi.Strip(i.Nickname)),
-						m.connectionsList.UpdateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted))
+						m.connectionsList.UpdateConnectionItemList(i.Nickname, i.VolumeCoefficient, !i.Muted, i.PersonalHardDenoise, i.PersonalSoftDenoise))
 					cmds = append(cmds, seq)
 				}
 			}
-			
+
 		case "alt+x", "alt+X", "alt+ч", "alt+Ч":
 			if m.state == states.ERR_STATE {
 				return m, nil
@@ -990,7 +1015,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						vc = MAX_VOLUME
 					}
 					seq := tea.Sequence(commands.SetUserVolumeCmd(m.user, ansi.Strip(i.Nickname), vc),
-						m.connectionsList.UpdateConnectionItemList(i.Nickname, vc, i.Muted))
+						m.connectionsList.UpdateConnectionItemList(i.Nickname, vc, i.Muted, i.PersonalHardDenoise, i.PersonalSoftDenoise))
 					cmds = append(cmds, seq)
 				}
 			}
@@ -1010,7 +1035,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						vc = MIN_VOLUME
 					}
 					seq := tea.Sequence(commands.SetUserVolumeCmd(m.user, ansi.Strip(i.Nickname), vc),
-						m.connectionsList.UpdateConnectionItemList(i.Nickname, vc, i.Muted))
+						m.connectionsList.UpdateConnectionItemList(i.Nickname, vc, i.Muted, i.PersonalHardDenoise, i.PersonalSoftDenoise))
 					cmds = append(cmds, seq)
 				}
 			}

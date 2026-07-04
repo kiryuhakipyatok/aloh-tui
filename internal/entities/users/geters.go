@@ -1,5 +1,7 @@
 package users
 
+import "slices"
+
 func (u *User) GetUsersSetup(nickname string) *UsersSetup {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
@@ -152,4 +154,16 @@ func (u *User) GetAppereance() Appereance {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	return u.Data.Setup.Appereance
+}
+
+func (u *User) IsFriend(nickname string) bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return slices.Contains(u.Data.Personal.Friends, nickname)
+}
+
+func (u *User) IsBlocked(nickname string) bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return slices.Contains(u.Data.Personal.BlockedUsers, nickname)
 }

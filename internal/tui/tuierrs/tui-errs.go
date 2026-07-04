@@ -7,19 +7,6 @@ import (
 	herr "github.com/kiryuhakipyatok/aloh-networking/pkg/errs/handlers"
 )
 
-const (
-	SUCCESS = iota
-	NOT_FOUND
-	ALREADY_EXISTS
-	REQUEST_TIMEOUT
-	VALIDATION_ERROR
-	CHAT_ERROR
-	VOICE_ERROR
-	VIDEO_ERROR
-	OFFLINE
-	INTERNAL_ERROR
-)
-
 func CastError(err error) string {
 	var (
 		resErr string = "internal error"
@@ -27,21 +14,21 @@ func CastError(err error) string {
 	errCode, ok := errors.AsType[herr.ErrorCode](err)
 	if ok {
 		switch errCode.Code {
-		case NOT_FOUND:
+		case herr.NOT_FOUND:
 			resErr = "not found"
-		case ALREADY_EXISTS:
+		case herr.ALREADY_EXISTS:
 			resErr = "already exists"
-		case REQUEST_TIMEOUT:
+		case herr.REQUEST_TIMEOUT:
 			resErr = "request timeout"
-		case VALIDATION_ERROR:
+		case herr.VALIDATION_ERROR:
 			resErr = "invalid data"
-		case CHAT_ERROR:
+		case herr.CHAT_ERROR:
 			resErr = "chat error"
-		case VOICE_ERROR:
+		case herr.VOICE_ERROR:
 			resErr = "voice error"
-		case VIDEO_ERROR:
+		case herr.VIDEO_ERROR:
 			resErr = "video error"
-		case OFFLINE:
+		case herr.OFFLINE:
 			resErr = "offline"
 		}
 	} else {

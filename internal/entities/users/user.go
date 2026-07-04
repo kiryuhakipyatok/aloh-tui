@@ -6,6 +6,8 @@ import (
 	"aloh-tui/internal/sshclient"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type User struct {
@@ -71,6 +73,7 @@ type Data struct {
 }
 
 type Personal struct {
+	ID           uuid.UUID   `json:"id"`
 	Nickname     string      `json:"nickname"`
 	RegisterTime string      `json:"registerTime"`
 	FriendsReqs  []FriendReq `json:"-"`

@@ -25,7 +25,7 @@ type Networking interface {
 	ConnectToAllUsers(nickname string) error
 	ConnectToUser(nickname string) error
 	DisconnectFromAllUsers() error
-	DisconnectFromUser(id string) error
+	DisconnectFromUser(nickname string) error
 
 	Close()
 }
@@ -137,6 +137,7 @@ func (n *networking) ConnectToAllUsers(nickname string) error {
 }
 
 func (n *networking) ConnectToUser(nickname string) error {
+
 	if err := n.ConnectById(nickname); err != nil {
 		return err
 	}
@@ -150,8 +151,8 @@ func (n *networking) DisconnectFromAllUsers() error {
 	return nil
 }
 
-func (n *networking) DisconnectFromUser(id string) error {
-	if err := n.DisconnectById(id); err != nil {
+func (n *networking) DisconnectFromUser(nickname string) error {
+	if err := n.DisconnectById(nickname); err != nil {
 		return err
 	}
 	return nil

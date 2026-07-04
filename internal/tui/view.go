@@ -979,6 +979,8 @@ func (m Model) renderHelpView(w, h int) string {
 		renderShortcut("ALT+V", "- toggle mic mute"),
 		renderShortcut("ALT+B", "- toggle full mute"),
 		renderShortcut("ALT+Z", "- toggle user's mute"),
+		renderShortcut("ALT+W", "- toggle personal soft denoise"),
+		renderShortcut("ALT+R", "- toggle personal hard denoise"),
 		renderShortcut("ALT+UP/DN", "- increase / decrease user's volume"), "",
 		styles.PaddingLeftCGrayStyle.Render("chat controls:"),
 		renderShortcut("CTRL+P", "- paste smth"), "",
