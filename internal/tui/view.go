@@ -332,23 +332,15 @@ func (m Model) renderFriendsTab(w, h int) string {
 	leftW := (w - 3) / 2
 	rightW := w - leftW - 3
 
-	lblTopLeft := m.headerActiveStyle.Render("► online friends")
+	lblTopLeft := m.headerActiveStyle.Render("► friends states")
 
-	leftTopContent := lipgloss.NewStyle().PaddingLeft(2).Height(h - 4).Render("zero friends online")
-	if len(m.onlineList.DefList.LipList.Items()) > 0 {
-		m.onlineList.DefList.LipList.SetSize(leftW-2, h-4)
+	m.friendsList.DefList.LipList.SetSize(leftW-2, h-4)
 
-		leftTopContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.onlineList.DefList.LipList.View())
-	}
+	leftTopContent := lipgloss.NewStyle().PaddingLeft(2).Render(m.friendsList.DefList.LipList.View())
 
-	leftBotContent := "offline: "
-
-	offline := m.getOfflineUsers()
-	if len(offline) > 0 {
-		leftBotContent = styles.CDimStyle.Render(leftBotContent + strings.Join(m.getOfflineUsers(), " · "))
-	} else {
-		leftBotContent = styles.CDimStyle.Render(leftBotContent + "all friends are online")
-	}
+	on := len(m.online)
+	of := len(m.user.Data.Personal.Friends) - on
+	leftBotContent := styles.CDimStyle.Render(fmt.Sprintf("online: %d, offline: %d", on, of))
 
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblTopLeft, "", leftTopContent, "", leftBotContent)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
@@ -943,10 +935,11 @@ func (m Model) renderHelpView(w, h int) string {
 		return safeTruncate(styles.PaddingLeftStyle.Render(k+d), leftW)
 	}
 
-	quote := styles.PaddingLeftCGrayStyle.Render("all new tabs opens with active left side of window")
+	quote := styles.PaddingLeftCGrayStyle.
+		Render("hint - phd: personal hard denoise, psd: personal soft denoise")
 
 	leftRows := []string{
-		lblLeft, "", quote, "",
+		lblLeft, "",
 		styles.PaddingLeftCGrayStyle.Render("app controls:"),
 		renderShortcut("ALT+Q", "- quit application"),
 		renderShortcut("ESC", "- go back / close error"),
@@ -974,7 +967,7 @@ func (m Model) renderHelpView(w, h int) string {
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	rightRows := []string{
-		lblRight, "",
+		lblRight, "", quote, "",
 		styles.PaddingLeftCGrayStyle.Render("voice controls:"),
 		renderShortcut("ALT+V", "- toggle mic mute"),
 		renderShortcut("ALT+B", "- toggle full mute"),

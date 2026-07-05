@@ -13,7 +13,7 @@ type SwitcherList struct {
 	DefList
 }
 
-type OnlineList struct {
+type FriendsList struct {
 	DefList
 }
 

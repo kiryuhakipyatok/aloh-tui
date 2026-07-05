@@ -142,7 +142,7 @@ func (m *Model) unfocusLists() {
 	lists.SetListVisible(&m.connectionsList.DefList, false)
 	lists.SetListVisible(&m.friendsReqsList.DefList, false)
 	lists.SetListVisible(&m.settingsList.DefList, false)
-	lists.SetListVisible(&m.onlineList.DefList, false)
+	lists.SetListVisible(&m.friendsList.DefList, false)
 	lists.SetListVisible(&m.microphonesList.DefList, false)
 	lists.SetListVisible(&m.headphonesList.DefList, false)
 }

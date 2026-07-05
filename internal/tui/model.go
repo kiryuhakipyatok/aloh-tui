@@ -102,7 +102,7 @@ type Model struct {
 
 	connectionsList lists.ConnectionsList
 
-	onlineList lists.OnlineList
+	friendsList lists.FriendsList
 
 	settingsList      lists.SettingsList
 	notificationsList lists.SwitcherList
@@ -362,7 +362,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	}
 
 	m.connectionsList = lists.SetupConnestionsList(ls)
-	m.onlineList = lists.SetupOnlineList(m.online, ls)
+	m.friendsList = lists.SetupFriendsList(m.user, ls)
 	m.friendsReqsList = lists.SetupFriendsReqsList(m.user, ls)
 	m.apearenceList = lists.SetupSwitcherList(m.user, lists.APEREANCE, lists.ListSetup{
 		ThemeColor:       m.themeColor,

@@ -36,11 +36,11 @@ func (ci ConnectionItem) FilterValue() string {
 
 func (ci ConnectionItem) DynamicDescription(isSelected bool) string {
 	if isSelected {
-		return fmt.Sprintf("volume: %.1f, muted: %t, personal soft denoise: %t, hard denoise: %t\nALT+UP/DN to set volume, ALT+F to switch mute",
+		return fmt.Sprintf("volume: %.1f, muted: %t, psd: %t, phd: %t",
 			ci.VolumeCoefficient, ci.Muted, ci.PersonalSoftDenoise, ci.PersonalHardDenoise)
 	}
 
-	return fmt.Sprintf("volume: %.1f, muted: %t, personal soft denoise: %t, hard denoise: %t",
+	return fmt.Sprintf("volume: %.1f, muted: %t, psd: %t, phd: %t",
 		ci.VolumeCoefficient, ci.Muted, ci.PersonalSoftDenoise, ci.PersonalHardDenoise)
 }
 

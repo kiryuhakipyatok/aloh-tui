@@ -62,7 +62,7 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 			switch m.sideState {
 			case states.LEFT_STATE:
 				m.state = states.CONN_STATE
-				lists.SetListVisible(&m.onlineList.DefList, true)
+				lists.SetListVisible(&m.friendsList.DefList, true)
 				m.unfocusInputs()
 			case states.RIGHT_STATE:
 				switch m.cursor {
@@ -72,7 +72,7 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 					m.state = states.FRIEND_STATE
 				}
 				m.focusInputs()
-				lists.SetListVisible(&m.onlineList.DefList, false)
+				lists.SetListVisible(&m.friendsList.DefList, false)
 			}
 			//}
 			delete(m.tabsNotifications, "friends")
@@ -288,7 +288,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			delete(m.online, nickname)
 			cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nickname, false),
-				m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)), commands.NotifyCmd(nickname, "no longer your friend"))
+				m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)), commands.NotifyCmd(nickname, "no longer your friend"))
 		case sshclient.BLOCK_USER:
 			nickname, err = sshclient.CastToNicknameData(msg.Data)
 			if err != nil {
@@ -302,7 +302,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				delete(m.online, nickname)
 				cmds = append(cmds, commands.DeleteFromFriendsCmd(m.user, nickname, false),
-					m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)), commands.NotifyCmd(nickname, "blocked you"))
+					m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)), commands.NotifyCmd(nickname, "blocked you"))
 			}
 
 		case sshclient.FRIEND_ONLINE:
@@ -318,12 +318,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			m.online[fcd.Nickname] = fcd.Connects
-			cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
+			cmds = append(cmds, m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)))
 		//}
 		case sshclient.FRIEND_OFFLINE:
 			nickname, err = sshclient.CastToNicknameData(msg.Data)
 			delete(m.online, nickname)
-			cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
+			cmds = append(cmds, m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)))
 
 		}
 		cmds = append(cmds, commands.WaitForSSHEventMessageCmd(m.sshEventsChan))
@@ -352,8 +352,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				m.connectionsList.LipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
-				m.onlineList.LipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
-				m.onlineList.LipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
+				m.friendsList.LipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
+				m.friendsList.LipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
 
 				m.friendsReqsList.LipDelegate.DefaultDelegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(m.themeColor)
 				m.friendsReqsList.LipDelegate.DefaultDelegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(m.subThemeColor)
@@ -364,7 +364,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.microphonesList.LipList.SetDelegate(m.microphonesList.LipDelegate)
 				m.settingsList.LipList.SetDelegate(m.settingsList.LipDelegate)
 				m.connectionsList.LipList.SetDelegate(m.connectionsList.LipDelegate)
-				m.onlineList.LipList.SetDelegate(m.onlineList.LipDelegate)
+				m.friendsList.LipList.SetDelegate(m.friendsList.LipDelegate)
 				m.friendsReqsList.LipList.SetDelegate(m.friendsReqsList.LipDelegate)
 				m.apearenceList.LipList.SetDelegate(m.apearenceList.LipDelegate)
 
@@ -373,10 +373,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			case commands.BFTAG:
 				cmds = append(cmds, m.connectionsList.UpdateConnectionsList(m.user, m.connections, m.usersColors),
-					m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
+					m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)))
 				return m, cmd
 			case commands.B_TAG:
-				cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
+				cmds = append(cmds, m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)))
 				return m, cmd
 			case commands.S_TIME:
 				switch msg.Res {
@@ -420,7 +420,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.friendsReqsList.UpdateFriendsReqList(m.user)
 			case sshclient.DELETE_FRIEND:
 				delete(m.online, nickname)
-				cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)))
+				cmds = append(cmds, m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)))
 				return m, tea.Batch(cmds...)
 			case sshclient.BLOCK_USER:
 				delete(m.online, nickname)
@@ -428,11 +428,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmds = append(cmds, commands.DisconnFromOne(m.user.Networking, nickname))
 				}
 
-				cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)),
+				cmds = append(cmds, m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)),
 					m.friendsReqsList.UpdateFriendsReqList(m.user), commands.NotifyCmd(nickname, "blocked"))
 				return m, tea.Batch(cmds...)
 			case sshclient.UNBLOCK_USER:
-				cmds = append(cmds, m.onlineList.UpdateOnlineList(m.user, cloneMap(m.online)), commands.NotifyCmd(nickname, "unblocked"))
+				cmds = append(cmds, m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)), commands.NotifyCmd(nickname, "unblocked"))
 				return m, tea.Batch(cmds...)
 			case sshclient.NEW_FRIEND_REQ:
 				cmds = append(cmds, m.friendsReqsList.UpdateFriendsReqList(m.user),
@@ -710,7 +710,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// 				m.tabsNotifications["friends"] = struct{}{}
 	// 			}
 	// 			m.online = msg.Online
-	// 			cmd = m.onlineList.UpdateOnlineList(m.user, m.online)
+	// 			cmd = m.friendsList.UpdateFriendsList(m.user, m.online)
 	// 			return m, cmd
 	// 		}
 	// 	}
@@ -1299,7 +1299,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					var nick string
 					switch m.sideState {
 					case states.LEFT_STATE:
-						if i, ok := m.onlineList.LipList.SelectedItem().(lists.OnlineItem); ok {
+						if i, ok := m.friendsList.LipList.SelectedItem().(lists.FriendItem); ok && i.IsOnline{
 							nick := i.Name
 							conns := i.Connections
 							if !m.connected {
@@ -1599,7 +1599,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						cmds = append(cmds, cmd)
 					}
 				case states.LEFT_STATE:
-					m.onlineList.LipList, cmd = m.onlineList.LipList.Update(msg)
+					m.friendsList.LipList, cmd = m.friendsList.LipList.Update(msg)
 					cmds = append(cmds, cmd)
 				}
 
