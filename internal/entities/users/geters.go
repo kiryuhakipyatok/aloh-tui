@@ -126,6 +126,12 @@ func (u *User) GetBFTag() string {
 	return u.Data.Setup.Appereance.BestFriendTag
 }
 
+func (u *User) GetTagline() string {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Appereance.Tagline
+}
+
 func (u *User) GetBinds() Binds {
 	u.mu.RLock()
 	defer u.mu.RUnlock()

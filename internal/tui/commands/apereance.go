@@ -15,6 +15,7 @@ const (
 	S_DATE
 	S_WEATHER
 	S_ZONE
+	TAGLINE
 )
 
 type AppereanceMsg struct {
@@ -65,6 +66,18 @@ func ChangeBanTagCmd(user *users.User, newBanTag string) tea.Cmd {
 			Typee: B_TAG,
 		}
 		if err := user.ChangeBanTag(newBanTag); err != nil {
+			msg.Err = err
+		}
+		return msg
+	}
+}
+
+func ChangeTagLineCmd(user *users.User, newTagline string) tea.Cmd {
+	return func() tea.Msg {
+		msg := AppereanceMsg{
+			Typee: TAGLINE,
+		}
+		if err := user.ChangeTagline(newTagline); err != nil {
 			msg.Err = err
 		}
 		return msg

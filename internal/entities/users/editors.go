@@ -205,6 +205,16 @@ func (u *User) ChangeBanTag(tag string) error {
 	return nil
 }
 
+func (u *User) ChangeTagline(tagline string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Setup.Appereance.Tagline = tagline
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (u *User) ChangeNotificationTag(tag string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()

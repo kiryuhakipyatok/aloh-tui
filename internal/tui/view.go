@@ -644,10 +644,10 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, leftTop, dividerHorizPane, leftBot)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, lipgloss.NewStyle().MaxHeight(h).Render(leftBox))
 
-	lblRight := m.headerActiveStyle.Render("► apereance")
+	lblRight := m.headerActiveStyle.Render("► appereance")
 
-	for i := range m.profileInputs {
-		m.profileInputs[i].Width = max(1, rightW-6)
+	for i := range m.appereanceInputs {
+		m.appereanceInputs[i].Width = max(1, rightW-6)
 	}
 	colors := lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render("colors")
 	tags := lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render("tags")
@@ -657,16 +657,19 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 
 	rightTopBox := lipgloss.JoinVertical(lipgloss.Left, colors, "",
 		styles.PaddingLeftCDimStyle.Render("theme color: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.ThemeColor)),
-		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[0].View()),
+		lipgloss.NewStyle().PaddingLeft(2).Render(m.appereanceInputs[0].View()),
 		"", tags, "",
 		styles.PaddingLeftCDimStyle.Render("best friend tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.BestFriendTag)),
-		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[1].View()),
+		lipgloss.NewStyle().PaddingLeft(2).Render(m.appereanceInputs[1].View()),
 		"",
 		styles.PaddingLeftCDimStyle.Render("notification tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.NotificaionTag)),
-		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[2].View()),
+		lipgloss.NewStyle().PaddingLeft(2).Render(m.appereanceInputs[2].View()),
 		"",
 		styles.PaddingLeftCDimStyle.Render("ban tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.BanTag)),
-		lipgloss.NewStyle().PaddingLeft(2).Render(m.profileInputs[3].View()),
+		lipgloss.NewStyle().PaddingLeft(2).Render(m.appereanceInputs[3].View()),
+		"",
+		styles.PaddingLeftCDimStyle.Render("tagline: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.Tagline)),
+		lipgloss.NewStyle().PaddingLeft(2).Render(m.appereanceInputs[4].View()),
 	)
 
 	rightTopH := lipgloss.Height(rightTopBox)

@@ -177,3 +177,10 @@ func cloneMap(original map[string][]string) map[string][]string {
 	}
 	return cp
 }
+
+func (m Model) inCurrentWindow(msg tea.MouseMsg) bool {
+	return m.zone.Get("registerW").InBounds(msg) || m.zone.Get("videoW").InBounds(msg) ||
+		m.zone.Get("friendsW").InBounds(msg) || m.zone.Get("chatW").InBounds(msg) ||
+		m.zone.Get("voiceW").InBounds(msg) || m.zone.Get("videoW").InBounds(msg) ||
+		m.zone.Get("profileW").InBounds(msg) || m.zone.Get("settingsW").InBounds(msg)
+}

@@ -93,16 +93,22 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 			delete(m.tabsNotifications, "profile")
 			switch m.sideState {
 			case states.LEFT_STATE:
-				lists.SetListVisible(&m.friendsReqsList.DefList, true)
-				lists.SetListVisible(&m.apearenceList.DefList, false)
-				m.unfocusInputs()
+				if len(m.friendsReqsList.LipList.Items()) > 0 {
+					lists.SetListVisible(&m.friendsReqsList.DefList, true)
+					lists.SetListVisible(&m.apearenceList.DefList, false)
+					m.unfocusInputs()
+				} else {
+					m.sideState = states.RIGHT_STATE
+					return m.syncTabState()
+				}
+
 			case states.RIGHT_STATE:
-				if m.cursor < len(m.profileInputs) {
+				if m.cursor < len(m.appereanceInputs) {
 					//m.apearenceList.Select(-1)
 					lists.SetListVisible(&m.friendsReqsList.DefList, false)
 					lists.SetListVisible(&m.apearenceList.DefList, false)
 					m.focusInputs()
-				} else if m.cursor == len(m.profileInputs) {
+				} else if m.cursor == len(m.appereanceInputs) {
 					lists.SetListVisible(&m.friendsReqsList.DefList, false)
 					lists.SetListVisible(&m.apearenceList.DefList, true)
 					//m.apearenceList.Select(0)
@@ -182,6 +188,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, cmd
 				} else if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
+					if !m.inCurrentWindow(msg) {
+						m.cursor = 0
+					}
 					if m.zone.Get("registerT").InBounds(msg) || m.zone.Get("registerW").InBounds(msg) {
 						m.activeTab = 0
 					} else if m.zone.Get("loginT").InBounds(msg) || m.zone.Get("loginW").InBounds(msg) {
@@ -264,7 +273,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activeTab != 4 {
 				m.tabsNotifications["profile"] = struct{}{}
 			}
-			cmds = append(cmds, commands.NewFriendReqCmd(m.user, nickname))
+			cmds = append(cmds, commands.NewFriendReqCmd(m.user, nickname), commands.NotifyCmd(nickname, "new friend request"))
 		case sshclient.ACCEPT_FRIEND:
 			nickname, err = sshclient.CastToNicknameData(msg.Data)
 			if err != nil {
@@ -275,7 +284,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activeTab != 4 {
 				m.tabsNotifications["profile"] = struct{}{}
 			}
-			cmds = append(cmds, commands.NewFriendCmd(m.user, nickname))
+			cmds = append(cmds, commands.NewFriendCmd(m.user, nickname), commands.NotifyCmd(nickname, "your new friend"))
 		case sshclient.DELETE_FRIEND:
 			nickname, err = sshclient.CastToNicknameData(msg.Data)
 			if err != nil {
@@ -400,6 +409,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case false:
 					m.rightHeaderData[2] = ""
 				}
+			case commands.TAGLINE:
+
 			}
 		}
 
@@ -415,12 +426,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			nickname := msg.Nickname
 			switch msg.Typee {
 			case sshclient.ACCEPT_FRIEND:
-				return m, m.friendsReqsList.UpdateFriendsReqList(m.user)
+				cmds = append(cmds, m.friendsReqsList.UpdateFriendsReqList(m.user), commands.NotifyCmd(nickname, "your new  friend"))
+				return m, tea.Batch(cmds...)
 			case sshclient.DENY_FRIEND:
-				return m, m.friendsReqsList.UpdateFriendsReqList(m.user)
+				cmds = append(cmds, m.friendsReqsList.UpdateFriendsReqList(m.user), commands.NotifyCmd(nickname, "friend request denied"))
+				return m, tea.Batch(cmds...)
 			case sshclient.DELETE_FRIEND:
 				delete(m.online, nickname)
-				cmds = append(cmds, m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)))
+				cmds = append(cmds, m.friendsList.UpdateFriendsList(m.user, cloneMap(m.online)), commands.NotifyCmd(nickname, "no longer your friend"))
 				return m, tea.Batch(cmds...)
 			case sshclient.BLOCK_USER:
 				delete(m.online, nickname)
@@ -1176,7 +1189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						changed = true
 					}
 				case 4:
-					if m.cursor == len(m.profileInputs) {
+					if m.cursor == len(m.appereanceInputs) {
 						if m.apearenceList.LipList.Index() <= 0 {
 							m.cursor--
 							changed = true
@@ -1219,8 +1232,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						changed = true
 					}
 				case 4:
-					if m.cursor < len(m.profileInputs) {
-						// if m.cursor == len(m.profileInputs)-1 {
+					if m.cursor < len(m.appereanceInputs) {
+						// if m.cursor == len(m.appereanceInputs)-1 {
 						// 	changed = true
 						// 	break
 						// }
@@ -1299,7 +1312,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					var nick string
 					switch m.sideState {
 					case states.LEFT_STATE:
-						if i, ok := m.friendsList.LipList.SelectedItem().(lists.FriendItem); ok && i.IsOnline{
+						if i, ok := m.friendsList.LipList.SelectedItem().(lists.FriendItem); ok && i.IsOnline {
 							nick := i.Name
 							conns := i.Connections
 							if !m.connected {
@@ -1445,7 +1458,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case states.RIGHT_STATE:
 						switch m.cursor {
 						case 0:
-							newColor := strings.TrimSpace(m.profileInputs[0].Value())
+							newColor := strings.TrimSpace(m.appereanceInputs[0].Value())
 							if newColor == "" {
 
 								return m, nil
@@ -1461,35 +1474,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.prState = m.state
 							m.state = states.LOAD_STATE
 							cmds = append(cmds, commands.ChangeThemeColorCmd(m.user, newColor))
-							m.profileInputs[0].Reset()
+							m.appereanceInputs[0].Reset()
 						case 1:
-							newBFTag := strings.TrimSpace(m.profileInputs[1].Value())
+							newBFTag := strings.TrimSpace(m.appereanceInputs[1].Value())
 							if newBFTag == "d" {
 								newBFTag = m.defaultBFTag
 							}
 							m.prState = m.state
 							m.state = states.LOAD_STATE
 							cmds = append(cmds, commands.ChangeBFTagCmd(m.user, newBFTag))
-							m.profileInputs[1].Reset()
+							m.appereanceInputs[1].Reset()
 						case 2:
-							newNotifyTag := strings.TrimSpace(m.profileInputs[2].Value())
+							newNotifyTag := strings.TrimSpace(m.appereanceInputs[2].Value())
 							if newNotifyTag == "d" {
 								newNotifyTag = m.defaultNotificationTag
 							}
 							m.prState = m.state
 							m.state = states.LOAD_STATE
 							cmds = append(cmds, commands.ChangeNotificationTagCmd(m.user, newNotifyTag))
-							m.profileInputs[2].Reset()
+							m.appereanceInputs[2].Reset()
 						case 3:
-							newBanTag := strings.TrimSpace(m.profileInputs[3].Value())
+							newBanTag := strings.TrimSpace(m.appereanceInputs[3].Value())
 							if newBanTag == "d" {
 								newBanTag = m.defaultBanTag
 							}
 							m.prState = m.state
 							m.state = states.LOAD_STATE
 							cmds = append(cmds, commands.ChangeBanTagCmd(m.user, newBanTag))
-							m.profileInputs[3].Reset()
+							m.appereanceInputs[3].Reset()
 						case 4:
+							newTagline := strings.TrimSpace(m.appereanceInputs[4].Value())
+							m.prState = m.state
+							m.state = states.LOAD_STATE
+							cmds = append(cmds, commands.ChangeTagLineCmd(m.user, newTagline))
+							m.appereanceInputs[4].Reset()
+						case 5:
 							if i, ok := m.apearenceList.LipList.SelectedItem().(lists.SwitcherItem); ok {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
@@ -1616,12 +1635,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case 4:
 				switch m.sideState {
 				case states.RIGHT_STATE:
-					if m.cursor < len(m.profileInputs) {
-						for i := range m.profileInputs {
-							m.profileInputs[i], cmd = m.profileInputs[i].Update(msg)
+					if m.cursor < len(m.appereanceInputs) {
+						for i := range m.appereanceInputs {
+							m.appereanceInputs[i], cmd = m.appereanceInputs[i].Update(msg)
 							cmds = append(cmds, cmd)
 						}
-					} else if m.cursor == len(m.profileInputs) {
+					} else if m.cursor == len(m.appereanceInputs) {
 						m.apearenceList.LipList, cmd = m.apearenceList.LipList.Update(msg)
 						cmds = append(cmds, cmd)
 					}

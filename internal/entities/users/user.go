@@ -128,6 +128,7 @@ type Appereance struct {
 	ShowTime       bool   `json:"show-time"`
 	ShowDate       bool   `json:"show-date"`
 	ShowZone       bool   `json:"show-zone"`
+	Tagline        string `json:"tagline"`
 }
 
 type Notifications struct {

@@ -62,11 +62,11 @@ type Model struct {
 
 	rightHeaderData []string
 
-	regTextInputs []textinput.Model
-	chatTextInput textinput.Model
-	logingInput   []textinput.Model
-	friendsInputs []textinput.Model
-	profileInputs []textinput.Model
+	regTextInputs    []textinput.Model
+	chatTextInput    textinput.Model
+	logingInput      []textinput.Model
+	friendsInputs    []textinput.Model
+	appereanceInputs []textinput.Model
 
 	sshEventsChan  chan sshclient.Event
 	netwEventsChan chan commands.NetworkEventMsg
@@ -157,13 +157,13 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		defTabs: []string{"friends", "chat", "voice", "video", "profile", "settings"},
 		regTabs: []string{"registration", "login"},
 
-		regTextInputs: make([]textinput.Model, 3),
-		logingInput:   make([]textinput.Model, 2),
-		logoAnim:      make([]string, 0, 4),
-		notConnAnim:   make([]string, 0, 4),
-		profileInputs: make([]textinput.Model, 4),
-		friendsInputs: make([]textinput.Model, 5),
-		messages:      make([]commands.ChatMessage, 0, 20),
+		regTextInputs:    make([]textinput.Model, 3),
+		logingInput:      make([]textinput.Model, 2),
+		logoAnim:         make([]string, 0, 4),
+		notConnAnim:      make([]string, 0, 4),
+		appereanceInputs: make([]textinput.Model, 5),
+		friendsInputs:    make([]textinput.Model, 5),
+		messages:         make([]commands.ChatMessage, 0, 20),
 
 		sshEventsChan:  make(chan sshclient.Event, 50),
 		netwEventsChan: make(chan commands.NetworkEventMsg, 50),
@@ -428,7 +428,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	chatInput.Placeholder = "type a message..."
 	m.chatTextInput = chatInput
 
-	for i := range m.profileInputs {
+	for i := range m.appereanceInputs {
 		ti := textinput.New()
 		ti.PlaceholderStyle = styles.CGrayStyle
 		ti.CharLimit = 7
@@ -441,8 +441,11 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			ti.Placeholder = "new notification tag, d to default"
 		case 3:
 			ti.Placeholder = "new ban tag, d to default"
+		case 4:
+			ti.CharLimit = 28
+			ti.Placeholder = "new tagline"
 		}
-		m.profileInputs[i] = ti
+		m.appereanceInputs[i] = ti
 	}
 
 	log.Info("model created successfully")
