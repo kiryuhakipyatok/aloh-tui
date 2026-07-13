@@ -14,7 +14,7 @@ require (
 	github.com/gen2brain/malgo v0.11.24
 	github.com/google/uuid v1.6.0
 	github.com/kechako/go-speexdsp v0.2.2
-	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260704153707-c0f4f9abb7e7
+	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260712205031-7e0e2d888db7
 	github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/spf13/viper v1.21.0
@@ -49,7 +49,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/jackmordaunt/icns/v3 v3.0.1 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
-	github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260704153312-056e8212344a // indirect
+	github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260711163751-7832eb6158f3 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/makeworld-the-better-one/dither/v2 v2.4.0 // indirect

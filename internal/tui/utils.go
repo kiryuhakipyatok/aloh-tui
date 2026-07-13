@@ -11,7 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
+	"github.com/google/uuid"
 )
 
 func (m Model) getChatSizes() (int, int, int) {
@@ -95,19 +95,19 @@ func (m Model) getChatSizes() (int, int, int) {
 // 	return nickname
 // }
 
-func (m Model) getOfflineUsers() []string {
-	onlineMap := make(map[string]struct{})
+func (m Model) getOfflineUsers() []uuid.UUID {
+	onlineMap := make(map[uuid.UUID]struct{})
 	for o := range m.online {
 		onlineMap[o] = struct{}{}
 	}
 
 	friends := m.user.GetFriends()
 
-	offline := make([]string, 0, len(friends))
+	offline := make([]uuid.UUID, 0, len(friends))
 
 	for _, f := range friends {
-		if _, ok := onlineMap[f]; !ok {
-			offline = append(offline, f)
+		if _, ok := onlineMap[f.ID]; !ok {
+			offline = append(offline, f.ID)
 		}
 	}
 
@@ -133,7 +133,7 @@ func isEqualOnline(newOnline, oldOnline map[string][]string) bool {
 
 func isInConnections(conns []string, nickname string) bool {
 	return slices.ContainsFunc(conns, func(c string) bool {
-		return nickname == ansi.Strip(c)
+		return nickname == c
 	})
 }
 
@@ -170,8 +170,8 @@ func (m Model) selectSetting() (Model, tea.Cmd) {
 	return m, nil
 }
 
-func cloneMap(original map[string][]string) map[string][]string {
-	cp := make(map[string][]string, len(original))
+func cloneMap(original map[uuid.UUID][]string) map[uuid.UUID][]string {
+	cp := make(map[uuid.UUID][]string, len(original))
 	for k, v := range original {
 		cp[k] = v
 	}
@@ -183,4 +183,10 @@ func (m Model) inCurrentWindow(msg tea.MouseMsg) bool {
 		m.zone.Get("friendsW").InBounds(msg) || m.zone.Get("chatW").InBounds(msg) ||
 		m.zone.Get("voiceW").InBounds(msg) || m.zone.Get("videoW").InBounds(msg) ||
 		m.zone.Get("profileW").InBounds(msg) || m.zone.Get("settingsW").InBounds(msg)
+}
+
+func (m Model) Err(err error) (Model, tea.Cmd) {
+	m.err = err
+	m.state = states.ERR_STATE
+	return m, nil
 }

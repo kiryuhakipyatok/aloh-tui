@@ -27,13 +27,16 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/google/uuid"
 	alohnetwork "github.com/kiryuhakipyatok/aloh-networking"
 	bz "github.com/lrstanley/bubblezone"
 )
 
 type userState struct {
-	fullMute bool
-	micMute  bool
+	fullMute     bool
+	micMute      bool
+	hardDenoised bool
+	softDenoised bool
 }
 
 type Model struct {
@@ -89,7 +92,7 @@ type Model struct {
 
 	user *users.User
 
-	muteState string
+	//muteState string
 
 	messages []commands.ChatMessage
 
@@ -97,8 +100,8 @@ type Model struct {
 
 	usersColors map[string]styles.UserColors
 	connections []string
-	online      map[string][]string
-	usersStates map[string]*userState
+	online      map[uuid.UUID][]string
+	usersStates map[uuid.UUID]*userState
 
 	connectionsList lists.ConnectionsList
 
@@ -177,12 +180,12 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 		spinner: sp,
 
-		online: make(map[string][]string, 5),
+		online: make(map[uuid.UUID][]string, 5),
 
 		stopCountMinutesChan: make(chan struct{}, 1),
 
 		usersColors: make(map[string]styles.UserColors, 5),
-		usersStates: make(map[string]*userState, 5),
+		usersStates: make(map[uuid.UUID]*userState, 5),
 
 		zone: bz.New(),
 
@@ -258,10 +261,12 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			}
 		} else {
 			var pd struct {
+				ID           uuid.UUID         `json:"id"`
 				Nickname     string            `json:"nickname"`
-				RegisterTime string            `json:"registerTime"`
+				Tagline      string            `json:"tagline"`
+				RegisterTime time.Time         `json:"registerTime"`
 				FriendsReqs  []users.FriendReq `json:"friendsReqs"`
-				Friends      []string          `json:"friends"`
+				Friends      []users.Friend    `json:"friends"`
 				BlockedUsers []string          `json:"blocked-users"`
 			}
 
@@ -270,11 +275,21 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 				return nil, err
 			}
 
+			fr := make(map[uuid.UUID]*users.Friend)
+			for _, f := range pd.Friends {
+				fr[f.ID] = &f
+			}
+
+			user.Data.Personal.ID = pd.ID
 			user.Data.Personal.Nickname = pd.Nickname
-			user.Data.Personal.RegisterTime = pd.RegisterTime
+			user.Data.Personal.RegisterTime = pd.RegisterTime.Format("2006-01-02")
 			user.Data.Personal.FriendsReqs = pd.FriendsReqs
-			user.Data.Personal.Friends = pd.Friends
+			user.Data.Personal.Friends = fr
 			user.Data.Personal.BlockedUsers = pd.BlockedUsers
+			if err := user.UpdateUserJSON(); err != nil {
+				log.Error("failed to update user json", logger.Err(err))
+				return nil, err
+			}
 			user.SSHClient = client
 			if len(user.Data.Personal.FriendsReqs) > 0 {
 				m.tabsNotifications["profile"] = struct{}{}
@@ -282,7 +297,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 			log.Info("user authorized successfully, networking setting...", logNickname)
 
-			networking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
+			networking, err := networking.NewNetworking(user.Data.Personal.ID, user.Paths.LogFilePath)
 			if err != nil {
 				log.Error("failed to create networking", logger.Err(err), logNickname)
 				return nil, err
@@ -290,8 +305,8 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
 				Microphone:  user.Data.Devices.Microphone,
 				Aec:         user.Data.Setup.Audio.AEC,
-				HardDenoice: user.Data.Setup.Audio.HardDenoise,
-				SoftDenoice: user.Data.Setup.Audio.SoftDenoise,
+				HardDenoice: user.Data.Setup.Audio.Denoises.HardDenoise,
+				SoftDenoice: user.Data.Setup.Audio.Denoises.SoftDenoise,
 				Filtered:    user.Data.Setup.Audio.Filter,
 			})
 			if err != nil {
@@ -306,24 +321,24 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 			log.Info("setting netwoking callbacks...", logNickname)
 
-			networking.ChatCallback(func(id string, data []byte) {
+			networking.ChatCallback(func(id uuid.UUID, data []byte) {
 				t := time.Now().Format("15:04:05")
-				m.rawMsgChan <- commands.RawChatMessage{Time: t, Nickname: id, Data: data}
+				m.rawMsgChan <- commands.RawChatMessage{Time: t, Id: id, Data: data}
 			})
-			networking.VoiceCallback(func(id string, data []byte) {
+			networking.VoiceCallback(func(id uuid.UUID, data []byte) {
 				audioEngine.PlayUserVoice(id, data)
 			})
-			networking.PeerConnectedCallback(func(id string) {
+			networking.PeerConnectedCallback(func(id uuid.UUID) {
 				t := time.Now().Format("15:04:05")
-				m.peerConnectionsChan <- commands.PeerConnectedMsg{Nickname: id, Time: t}
+				m.peerConnectionsChan <- commands.PeerConnectedMsg{Id: id, Time: t}
 			})
-			networking.PeerDisconnectedCallback(func(id string) {
+			networking.PeerDisconnectedCallback(func(id uuid.UUID) {
 				t := time.Now().Format("15:04:05")
-				m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Nickname: id, Time: t}
+				m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Id: id, Time: t}
 			})
 
-			networking.EventCallback(func(id string, e alohnetwork.Event) {
-				m.netwEventsChan <- commands.NetworkEventMsg{Nickname: id, Event: e}
+			networking.EventCallback(func(id uuid.UUID, e alohnetwork.Event) {
+				m.netwEventsChan <- commands.NetworkEventMsg{Id: id, Event: e}
 			})
 			user.SSHClient = client
 			user.Engines.AudioEngine = audioEngine

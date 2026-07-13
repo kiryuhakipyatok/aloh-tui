@@ -214,13 +214,14 @@ func (m Model) renderVoiceTab(w, h int) string {
 		mainStyle := lipgloss.NewStyle().Foreground(userColors.MainColor)
 		subStyle := lipgloss.NewStyle().Foreground(userColors.SubColor)
 		bar := lipgloss.NewStyle().Foreground(userColors.SubColor).Render(fmt.Sprintf("voice power %.1f: ", 0.0))
-		if _, ok := mutedUsers[c]; ok {
+		id := m.user.GetFriendId(c)
+		if _, ok := mutedUsers[id]; ok {
 			state = " 🔇"
-		} else if rms, ok := speakingUsers[c]; ok {
+		} else if rms, ok := speakingUsers[id]; ok {
 			state = " 🔊"
 			bar = mainStyle.Render(fmt.Sprintf("voice power %.1f:", rms)) +
 				subStyle.Render(strings.Repeat("▐", int(rms)/100))
-		} else if us, ok := m.usersStates[c]; ok {
+		} else if us, ok := m.usersStates[id]; ok {
 			if us.fullMute {
 				state = " 🙊🙉"
 			} else if us.micMute {
@@ -469,8 +470,8 @@ func (m Model) renderSettingsView(w, h int) string {
 		)
 
 		leftLeft := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("audio"),
-			renderSetup("hard denoise", fmt.Sprintf("%t", audio.HardDenoise), colW),
-			renderSetup("soft denoise", fmt.Sprintf("%t", audio.SoftDenoise), colW),
+			renderSetup("hard denoise", fmt.Sprintf("%t", audio.Denoises.HardDenoise), colW),
+			renderSetup("soft denoise", fmt.Sprintf("%t", audio.Denoises.SoftDenoise), colW),
 			renderSetup("echocanceller", fmt.Sprintf("%t", audio.AEC), colW),
 			renderSetup("equalizer", fmt.Sprintf("%t", audio.Filter), colW),
 			"", styles.PaddingLeftCGrayStyle.Render("notifications"),
@@ -741,9 +742,18 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 	if m.user.Engines.AudioEngine.UserIsSpeaking() {
 		usersAudioState = coloredUserNickname + " 🔊"
 	}
-	if m.muteState != "" {
-		usersAudioState += m.muteState
+
+	mutes := m.user.GetMutes()
+
+	if mutes.FullMute {
+		usersAudioState += " 🙊🙉"
+	} else if mutes.MicMute {
+		usersAudioState += " 🙊"
 	}
+
+	// if m.muteState != "" {
+	// 	usersAudioState += m.muteState
+	// }
 	topSect := usersAudioState
 
 	chatW := w - 4
@@ -776,12 +786,12 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 		for _, c := range m.connections {
 
 			var state, rel string
-
-			if _, ok := mutedUsers[c]; ok {
+			id := m.user.GetFriendId(c)
+			if _, ok := mutedUsers[id]; ok {
 				state = " 🔇"
-			} else if _, ok := speakingUsers[c]; ok {
+			} else if _, ok := speakingUsers[id]; ok {
 				state = " 🔊"
-			} else if us, ok := m.usersStates[c]; ok {
+			} else if us, ok := m.usersStates[id]; ok {
 				if us.fullMute {
 					state = " 🙊🙉"
 				} else if us.micMute {

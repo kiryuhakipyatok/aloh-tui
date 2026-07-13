@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type ConnectionItem struct {
@@ -83,7 +84,7 @@ func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float
 		if !ok {
 			continue
 		}
-		if conn.Nickname == nickname {
+		if ansi.Strip(conn.Nickname) == nickname {
 			conn.VolumeCoefficient = volume
 			conn.Muted = muted
 			conn.PersonalHardDenoise = phd
@@ -95,7 +96,8 @@ func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float
 	return tea.Batch(cmds...)
 }
 
-func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []string, colors map[string]styles.UserColors) tea.Cmd {
+func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []string,
+	colors map[string]styles.UserColors) tea.Cmd {
 	names := make([]string, 0, len(connections))
 
 	for _, name := range connections {
@@ -129,4 +131,21 @@ func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []
 	}
 
 	return l.LipList.SetItems(newItems)
+}
+
+func (l *ConnectionsList) GetConnectionItem(nickname string) ConnectionItem {
+	var ci ConnectionItem
+
+	items := l.LipList.Items()
+	for _, v := range items {
+		conn, ok := v.(ConnectionItem)
+		if !ok {
+			continue
+		}
+		if ansi.Strip(conn.Nickname) == nickname {
+			ci = conn
+			break
+		}
+	}
+	return ci
 }

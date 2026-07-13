@@ -4,6 +4,7 @@ import (
 	"aloh-tui/internal/sshclient"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/uuid"
 	alohnetwork "github.com/kiryuhakipyatok/aloh-networking"
 )
 
@@ -14,8 +15,8 @@ func WaitForSSHEventMessageCmd(sub chan sshclient.Event) tea.Cmd {
 }
 
 type NetworkEventMsg struct {
-	Nickname string
-	Event    alohnetwork.Event
+	Id    uuid.UUID
+	Event alohnetwork.Event
 }
 
 func WaitForNetworkEventMessageCmd(sub chan NetworkEventMsg) tea.Cmd {

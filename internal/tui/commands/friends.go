@@ -9,41 +9,58 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/uuid"
 )
 
 type FriendsMsg struct {
 	Typee    uint
+	Id       uuid.UUID
 	Nickname string
 	Err      error
 }
 
-func NewFriendReqCmd(user *users.User, nickname string) tea.Cmd {
+func NewFriendReqCmd(user *users.User, id uuid.UUID, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		msg := FriendsMsg{
 			Typee:    sshclient.NEW_FRIEND_REQ,
+			Id:       id,
 			Nickname: nickname,
 		}
-		if user.IsFriend(nickname) {
+		if user.IsFriend(id) {
 			msg.Err = errs.ErrAlreadyExists()
 			return msg
 		}
 
-		user.NewFriendReq(nickname)
+		frReq := users.FriendReq{
+			FriendPersonal: users.FriendPersonal{
+				ID:       id,
+				Nickname: nickname,
+			},
+		}
+
+		user.NewFriendReq(frReq)
 		return msg
 	}
 }
 
-func NewFriendCmd(user *users.User, nickname string) tea.Cmd {
+func NewFriendCmd(user *users.User, id uuid.UUID, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		msg := FriendsMsg{
 			Typee:    sshclient.ACCEPT_FRIEND,
+			Id:       id,
 			Nickname: nickname,
 		}
-		if user.IsFriend(nickname) {
+		if user.IsFriend(id) {
 			msg.Err = errs.ErrAlreadyExists()
 			return msg
 		}
-		user.NewFriend(nickname)
+		fr := users.Friend{
+			FriendPersonal: users.FriendPersonal{
+				ID:       id,
+				Nickname: nickname,
+			},
+		}
+		user.NewFriend(fr)
 		return msg
 	}
 }
@@ -58,10 +75,10 @@ func SendFriendRequestCmd(user *users.User, nickname string) tea.Cmd {
 			msg.Err = errs.ErrNotFound()
 			return msg
 		}
-		if user.IsFriend(nickname) {
-			msg.Err = errs.ErrAlreadyExists()
-			return msg
-		}
+		// if user.IsFriend(id) {
+		// 	msg.Err = errs.ErrAlreadyExists()
+		// 	return msg
+		// }
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		if err := user.SSHClient.NewFriendReq(ctx, []byte(nickname)); err != nil {
@@ -72,13 +89,14 @@ func SendFriendRequestCmd(user *users.User, nickname string) tea.Cmd {
 	}
 }
 
-func AcceptFriendRequestCmd(user *users.User, nickname string) tea.Cmd {
+func AcceptFriendRequestCmd(user *users.User, id uuid.UUID, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		msg := FriendsMsg{
 			Typee:    sshclient.ACCEPT_FRIEND,
+			Id:       id,
 			Nickname: nickname,
 		}
-		if user.IsFriend(nickname) {
+		if user.IsFriend(id) {
 			msg.Err = errs.ErrAlreadyExists()
 			return msg
 		}
@@ -88,16 +106,17 @@ func AcceptFriendRequestCmd(user *users.User, nickname string) tea.Cmd {
 			msg.Err = err
 			return msg
 		}
-		user.NewFriend(nickname)
-		user.DeleteFriendReq(nickname)
+		//user.NewFriend(fr)
+		//user.DeleteFriendReq(fr.ID)
 		return msg
 	}
 }
 
-func DenyFriendRequestCmd(user *users.User, nickname string) tea.Cmd {
+func DenyFriendRequestCmd(user *users.User, id uuid.UUID, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		msg := FriendsMsg{
 			Typee:    sshclient.DENY_FRIEND,
+			Id:       id,
 			Nickname: nickname,
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -106,18 +125,18 @@ func DenyFriendRequestCmd(user *users.User, nickname string) tea.Cmd {
 			msg.Err = err
 			return msg
 		}
-		user.DeleteFriendReq(nickname)
+		user.DeleteFriendReq(id)
 		return msg
 	}
 }
 
-func DeleteFromFriendsCmd(user *users.User, nickname string, isInitiator bool) tea.Cmd {
+func DeleteFromFriendsCmd(user *users.User, id uuid.UUID, nickname string, isInitiator bool) tea.Cmd {
 	return func() tea.Msg {
 		msg := FriendsMsg{
 			Typee:    sshclient.DELETE_FRIEND,
 			Nickname: nickname,
 		}
-		if !user.IsFriend(nickname) {
+		if !user.IsFriend(id) {
 			msg.Err = errs.ErrNotFriend()
 			return msg
 		}
@@ -129,7 +148,7 @@ func DeleteFromFriendsCmd(user *users.User, nickname string, isInitiator bool) t
 				return msg
 			}
 		}
-		if err := user.DeleteFriend(nickname); err != nil {
+		if err := user.DeleteFriend(id, nickname); err != nil {
 			msg.Err = err
 		}
 		return msg

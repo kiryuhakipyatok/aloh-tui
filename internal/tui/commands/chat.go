@@ -1,13 +1,15 @@
 package commands
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/uuid"
+)
 
 type RawChatMessage struct {
-	Time     string
-	Nickname string
-	Data     []byte
+	Time string
+	Id   uuid.UUID
+	Data []byte
 }
-
 
 type ChatMessage struct {
 	Time     string

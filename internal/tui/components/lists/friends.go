@@ -8,10 +8,13 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/google/uuid"
 )
 
 type FriendItem struct {
+	Id          uuid.UUID
 	Name        string
+	Tagline     string
 	Connections []string
 	BFTag       string
 	IsOnline    bool
@@ -41,7 +44,7 @@ func (fi FriendItem) DynamicDescription(isSelected bool) string {
 	if isSelected {
 		ent = ", ENTER to connect"
 	}
-	desc := "alone" + ent
+	desc := fi.Tagline + " | alone" + ent
 	if len(fi.Connections) > 0 {
 		conns := strings.Join(fi.Connections, " · ")
 		desc = fmt.Sprintf("with: %s%s", conns, ent)
@@ -55,13 +58,16 @@ func SetupFriendsList(user *users.User, ls ListSetup) FriendsList {
 	friends := user.Data.Personal.Friends
 	friendsItems := make([]list.Item, 0, len(friends))
 
-	for _, name := range friends {
+	for _, f := range friends {
 		var rel string
+		name := f.Nickname
 		if bfNick == name {
 			rel = bfTag
 		}
 
 		friendsItems = append(friendsItems, FriendItem{
+			Id:          f.ID,
+			Tagline:     f.Tagline,
 			Name:        name,
 			Connections: nil,
 			BFTag:       rel,
@@ -96,8 +102,8 @@ func SetupFriendsList(user *users.User, ls ListSetup) FriendsList {
 	}
 }
 
-func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[string][]string) tea.Cmd {
-	friends := user.Data.Personal.Friends
+func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[uuid.UUID][]string) tea.Cmd {
+	friends := user.GetFriends()
 	bfTag := user.Data.Setup.Appereance.BestFriendTag
 	bfNick := user.Data.Statistics.BestFriend.Nickname
 	banTag := user.Data.Setup.Appereance.BanTag
@@ -112,20 +118,24 @@ func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[string][
 	offlineItems := make([]list.Item, 0, frLen-curOLen)
 	onlineItems := make([]list.Item, 0, curOLen)
 
-	for _, name := range friends {
+	for _, f := range friends {
+		id := f.ID
+		if _, ok := curOnline[id]; ok {
 
-		if _, ok := curOnline[name]; ok {
-
-			for i, c := range curOnline[name] {
+			for i, c := range curOnline[id] {
 				if bfNick == c {
-					curOnline[name][i] = bfTag + " " + c
+					curOnline[id][i] = bfTag + " " + c
 				} else if user.IsBlocked(c) {
-					curOnline[name][i] = banTag + " " + c
+					curOnline[id][i] = banTag + " " + c
 				}
 			}
 
 		}
-
+		f, ok := friends[id]
+		if !ok {
+			continue
+		}
+		name := f.Nickname
 		var rel string
 		if bfNick == name {
 			rel = bfTag
@@ -136,11 +146,14 @@ func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[string][
 			conns    []string
 		)
 
-		if _, ok := curOnline[name]; ok {
+		if _, ok := curOnline[id]; ok {
 			isOnline = true
-			conns = curOnline[name]
+			conns = curOnline[id]
 		}
+
 		fi := FriendItem{
+			Id:          id,
+			Tagline:     f.Tagline,
 			Name:        name,
 			Connections: conns,
 			BFTag:       rel,

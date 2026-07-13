@@ -1,15 +1,20 @@
 package users
 
-import "slices"
+import (
+	"aloh-tui/pkg/errs"
+	"slices"
 
-func (u *User) GetUsersSetup(nickname string) *UsersSetup {
+	"github.com/google/uuid"
+)
+
+func (u *User) GetUsersSetup(nickname string) (UsersSetup, error) {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
-	if ok {
-		return us
+	if !ok {
+		return us, errs.ErrNotFound()
 	}
-	return nil
+	return us, nil
 }
 
 func (u *User) GetFriendsReqs() []FriendReq {
@@ -18,7 +23,7 @@ func (u *User) GetFriendsReqs() []FriendReq {
 	return u.Data.Personal.FriendsReqs
 }
 
-func (u *User) GetFriends() []string {
+func (u *User) GetFriends() map[uuid.UUID]*Friend {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	return u.Data.Personal.Friends
@@ -144,6 +149,18 @@ func (u *User) GetAudio() Audio {
 	return u.Data.Setup.Audio
 }
 
+func (u *User) GetDenoises() Denoises {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Audio.Denoises
+}
+
+func (u *User) GetMutes() Mutes {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Setup.Audio.Mutes
+}
+
 func (u *User) GetNotifications() Notifications {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
@@ -162,14 +179,43 @@ func (u *User) GetAppereance() Appereance {
 	return u.Data.Setup.Appereance
 }
 
-func (u *User) IsFriend(nickname string) bool {
+func (u *User) IsFriend(id uuid.UUID) bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	return slices.Contains(u.Data.Personal.Friends, nickname)
+	return u.conatinsFriends(id)
 }
 
 func (u *User) IsBlocked(nickname string) bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	return slices.Contains(u.Data.Personal.BlockedUsers, nickname)
+}
+
+func (u *User) GetFriendNickname(id uuid.UUID) string {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	f, ok := u.Data.Personal.Friends[id]
+	if !ok {
+		return ""
+	}
+	return f.Nickname
+}
+
+func (u *User) GetFriendId(nickname string) uuid.UUID {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	var id uuid.UUID
+	for _, f := range u.Data.Personal.Friends {
+		n := f.Nickname
+		if n == nickname {
+			id = f.ID
+			break
+		}
+	}
+	return id
+}
+
+func (u *User) conatinsFriends(id uuid.UUID) bool {
+	_, ok := u.Data.Personal.Friends[id]
+	return ok
 }

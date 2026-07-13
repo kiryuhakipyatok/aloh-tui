@@ -4,14 +4,17 @@ import (
 	"aloh-tui/internal/entities/users"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/google/uuid"
 )
 
 type FriendReqItem struct {
+	Id       uuid.UUID
 	Nickname string
 	ReqTime  string
 }
@@ -75,19 +78,18 @@ func SetupFriendsReqsList(user *users.User, ls ListSetup) FriendsReqsList {
 
 func (l *FriendsReqsList) UpdateFriendsReqList(user *users.User) tea.Cmd {
 	fReqs := user.GetFriendsReqs()
-	names := make([]string, 0, len(fReqs))
+
+	slices.SortFunc(fReqs, func(f1 users.FriendReq, f2 users.FriendReq) int {
+		return strings.Compare(strings.ToLower(f1.Nickname), strings.ToLower(f2.Nickname))
+	})
+
+	newItems := make([]list.Item, 0, len(fReqs))
+
 	for _, f := range fReqs {
-		names = append(names, f.Nickname)
-	}
-
-	slices.Sort(names)
-
-	newItems := make([]list.Item, 0, len(names))
-
-	for _, name := range names {
 		t := time.Now().Format("2006-01-02")
 		newItems = append(newItems, FriendReqItem{
-			Nickname: name,
+			Id:       f.ID,
+			Nickname: f.Nickname,
 			ReqTime:  t,
 		})
 	}

@@ -15,6 +15,7 @@ import (
 	"unsafe"
 
 	"github.com/gen2brain/malgo"
+	"github.com/google/uuid"
 	"github.com/kechako/go-speexdsp"
 	rnnoise "github.com/kiryuhakipyatok/rnnoise/cmd"
 	"gopkg.in/hraban/opus.v2"
@@ -22,7 +23,7 @@ import (
 
 type AudioEngine interface {
 	PlayNotification()
-	PlayUserVoice(nickname string, userVoiceByte []byte)
+	PlayUserVoice(id uuid.UUID, userVoiceByte []byte)
 	Stop()
 	SetNetworking(netw networking.Networking) error
 	SetConnected()
@@ -35,11 +36,11 @@ type AudioEngine interface {
 	UpdateHeadphones() error
 	MuteUnmuteMicro() bool
 	MuteUnmute() bool
-	SetVolume(nickname string, vc float32)
-	MuteUnmuteUser(nickname string) (bool, error)
-	SetMuteState(nickname string, mute bool)
-	FetchUsersMutes() map[string]struct{}
-	FetchSpeakingUsers() map[string]float64
+	SetVolume(id uuid.UUID, vc float32)
+	MuteUnmuteUser(id uuid.UUID) (bool, error)
+	SetMuteState(id uuid.UUID, mute bool)
+	FetchUsersMutes() map[uuid.UUID]struct{}
+	FetchSpeakingUsers() map[uuid.UUID]float64
 	GetCurrentMicrophone() DeviceInfo
 	GetCurrentHeadphones() DeviceInfo
 	UserIsSpeaking() bool
@@ -47,9 +48,9 @@ type AudioEngine interface {
 	OnOffSoftDenoice() bool
 	OnOffAEC() bool
 	OnOffFilter() bool
-	OnOffUsersHardDenoise(nickname string) error
-	OnOffUsersSoftDenoise(nickname string) error
-	RemoveFromUsersAudio(nickname string) error
+	OnOffUsersHardDenoise(id uuid.UUID, state bool) error
+	OnOffUsersSoftDenoise(id uuid.UUID, state bool) error
+	RemoveFromUsersAudio(id uuid.UUID) error
 }
 
 type usersAudio struct {
@@ -93,7 +94,7 @@ type audioEngine struct {
 	stopSendVocie chan struct{}
 
 	notificationBytes []byte
-	usersAudio        map[string]*usersAudio
+	usersAudio        map[uuid.UUID]*usersAudio
 
 	voiceHolder atomic.Int32
 	threshold   float64
@@ -169,6 +170,8 @@ type AudioSetup struct {
 	Microphone  string
 	Headphones  string
 	HardDenoice bool
+	FullMuted   bool
+	MicMuted    bool
 	SoftDenoice bool
 	Aec         bool
 	Filtered    bool
@@ -237,7 +240,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 			notification: notificationSound,
 		},
 		stopSendVocie: make(chan struct{}, 1),
-		usersAudio:    make(map[string]*usersAudio, 10),
+		usersAudio:    make(map[uuid.UUID]*usersAudio, 10),
 
 		bytesBuffersPool: sync.Pool{
 			New: func() any {
@@ -281,6 +284,8 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 	ae.hardDenoiced.Store(as.HardDenoice)
 	ae.aec.Store(as.Aec)
 	ae.filtered.Store(as.Filtered)
+	ae.muted.Store(as.FullMuted)
+	ae.mutedMicro.Store(as.MicMuted)
 
 	ctx, err := malgo.InitContext(backends.AudioBackends, malgo.ContextConfig{}, nil)
 	if err != nil {
@@ -943,10 +948,10 @@ func (ae *audioEngine) PlayNotification() {
 	ae.notificationPos = 0
 }
 
-func (ae *audioEngine) MuteUnmuteUser(nickname string) (bool, error) {
+func (ae *audioEngine) MuteUnmuteUser(id uuid.UUID) (bool, error) {
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
-	ua, ok := ae.usersAudio[nickname]
+	ua, ok := ae.usersAudio[id]
 	if !ok {
 		return false, errs.ErrNotFound()
 	}
@@ -955,9 +960,9 @@ func (ae *audioEngine) MuteUnmuteUser(nickname string) (bool, error) {
 	return !s, nil
 }
 
-func (ae *audioEngine) SetMuteState(nickname string, mute bool) {
+func (ae *audioEngine) SetMuteState(id uuid.UUID, mute bool) {
 	ae.mu.Lock()
-	ua, ok := ae.usersAudio[nickname]
+	ua, ok := ae.usersAudio[id]
 	if ok {
 		ua.muted.Store(mute)
 		ae.mu.Unlock()
@@ -982,19 +987,19 @@ func (ae *audioEngine) SetMuteState(nickname string, mute bool) {
 
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
-	if existingUa, ok := ae.usersAudio[nickname]; ok {
+	if existingUa, ok := ae.usersAudio[id]; ok {
 		existingUa.muted.Store(mute)
 	} else {
-		ae.usersAudio[nickname] = newUa
+		ae.usersAudio[id] = newUa
 	}
 }
 
-func (ae *audioEngine) PlayUserVoice(nickname string, userVoiceByte []byte) {
+func (ae *audioEngine) PlayUserVoice(id uuid.UUID, userVoiceByte []byte) {
 	if ae.muted.Load() || ae.switching.Load() {
 		return
 	}
 	ae.mu.Lock()
-	ua, ok := ae.usersAudio[nickname]
+	ua, ok := ae.usersAudio[id]
 	if !ok {
 		opusDecoder, err := opus.NewDecoder(48000, 1)
 		if err != nil {
@@ -1013,7 +1018,7 @@ func (ae *audioEngine) PlayUserVoice(nickname string, userVoiceByte []byte) {
 			samples:           make([]int16, frameLen),
 		}
 
-		ae.usersAudio[nickname] = ua
+		ae.usersAudio[id] = ua
 	}
 	if ua.muted.Load() {
 		ae.mu.Unlock()
@@ -1044,9 +1049,9 @@ func (ae *audioEngine) UserIsSpeaking() bool {
 	return ae.userIsSpeaking.Load()
 }
 
-func (ae *audioEngine) SetVolume(nickname string, vc float32) {
+func (ae *audioEngine) SetVolume(id uuid.UUID, vc float32) {
 	ae.mu.Lock()
-	ua, ok := ae.usersAudio[nickname]
+	ua, ok := ae.usersAudio[id]
 	if ok {
 		ua.volumeCoefficient = vc
 		ae.mu.Unlock()
@@ -1071,58 +1076,58 @@ func (ae *audioEngine) SetVolume(nickname string, vc float32) {
 
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
-	if existingUa, ok := ae.usersAudio[nickname]; ok {
+	if existingUa, ok := ae.usersAudio[id]; ok {
 		existingUa.volumeCoefficient = vc
 	} else {
-		ae.usersAudio[nickname] = newUa
+		ae.usersAudio[id] = newUa
 	}
 }
 
-func (ae *audioEngine) OnOffUsersHardDenoise(nickname string) error {
+func (ae *audioEngine) OnOffUsersHardDenoise(id uuid.UUID, state bool) error {
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
-	ua, ok := ae.usersAudio[nickname]
+	ua, ok := ae.usersAudio[id]
 	if !ok {
 		return errs.ErrNotFound()
 	}
-	s := ua.hardDenoised.Load()
-	if !s == true && ua.personalHardDenoise == nil {
+	//s := ua.hardDenoised.Load()
+	if state && ua.personalHardDenoise == nil {
 		ua.personalHardDenoise = rnnoise.NewRNNoise()
-	} else if !s == false && ua.personalHardDenoise != nil {
+	} else if !state && ua.personalHardDenoise != nil {
 		if err := ua.personalHardDenoise.Close(); err != nil {
 			return err
 		}
 		ua.personalHardDenoise = nil
 	}
-	ua.hardDenoised.Store(!s)
+	ua.hardDenoised.Store(state)
 	return nil
 }
 
-func (ae *audioEngine) OnOffUsersSoftDenoise(nickname string) error {
+func (ae *audioEngine) OnOffUsersSoftDenoise(id uuid.UUID, state bool) error {
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
-	ua, ok := ae.usersAudio[nickname]
+	ua, ok := ae.usersAudio[id]
 	if !ok {
 		return errs.ErrNotFound()
 	}
-	s := ua.softDenoised.Load()
-	if !s == true && ua.personalPreprocessor == nil {
+	//s := ua.softDenoised.Load()
+	if state && ua.personalPreprocessor == nil {
 		ua.personalPreprocessor = speexdsp.NewPreprocessor(48000, 960)
 		ua.personalPreprocessor.EnableDenoise(true)
 		ua.personalPreprocessor.SetEchoCanceller(nil)
-	} else if !s == false && ua.personalPreprocessor != nil {
+	} else if !state && ua.personalPreprocessor != nil {
 		if err := ua.personalPreprocessor.Close(); err != nil {
 			return err
 		}
 		ua.personalPreprocessor = nil
 	}
-	ua.softDenoised.Store(!s)
+	ua.softDenoised.Store(state)
 
 	return nil
 }
 
-func (ae *audioEngine) RemoveFromUsersAudio(nickname string) error {
-	ua, ok := ae.usersAudio[nickname]
+func (ae *audioEngine) RemoveFromUsersAudio(id uuid.UUID) error {
+	ua, ok := ae.usersAudio[id]
 	if !ok {
 		return errs.ErrNotFound()
 	}
@@ -1136,7 +1141,7 @@ func (ae *audioEngine) RemoveFromUsersAudio(nickname string) error {
 			return err
 		}
 	}
-	delete(ae.usersAudio, nickname)
+	delete(ae.usersAudio, id)
 	return nil
 }
 
@@ -1150,10 +1155,10 @@ func (ae *audioEngine) SetNetworking(netw networking.Networking) error {
 	return nil
 }
 
-func (ae *audioEngine) FetchSpeakingUsers() map[string]float64 {
+func (ae *audioEngine) FetchSpeakingUsers() map[uuid.UUID]float64 {
 	ae.mu.RLock()
 	defer ae.mu.RUnlock()
-	speakers := make(map[string]float64, len(ae.usersAudio))
+	speakers := make(map[uuid.UUID]float64, len(ae.usersAudio))
 	for n, ua := range ae.usersAudio {
 		if ua.isSpeaking.Load() {
 			speakers[n] = ua.rms
@@ -1162,10 +1167,10 @@ func (ae *audioEngine) FetchSpeakingUsers() map[string]float64 {
 	return speakers
 }
 
-func (ae *audioEngine) FetchUsersMutes() map[string]struct{} {
+func (ae *audioEngine) FetchUsersMutes() map[uuid.UUID]struct{} {
 	ae.mu.RLock()
 	defer ae.mu.RUnlock()
-	muters := make(map[string]struct{}, len(ae.usersAudio))
+	muters := make(map[uuid.UUID]struct{}, len(ae.usersAudio))
 	for n, ua := range ae.usersAudio {
 		if ua.muted.Load() {
 			muters[n] = struct{}{}

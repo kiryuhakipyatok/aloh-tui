@@ -2,6 +2,8 @@ package commands
 
 import (
 	"aloh-tui/internal/entities/users"
+	"context"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -72,10 +74,16 @@ func ChangeBanTagCmd(user *users.User, newBanTag string) tea.Cmd {
 	}
 }
 
-func ChangeTagLineCmd(user *users.User, newTagline string) tea.Cmd {
+func ChangeTaglineCmd(user *users.User, newTagline string) tea.Cmd {
 	return func() tea.Msg {
 		msg := AppereanceMsg{
 			Typee: TAGLINE,
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		if err := user.SSHClient.SetTagline(ctx, []byte(newTagline)); err != nil {
+			msg.Err = err
+			return msg
 		}
 		if err := user.ChangeTagline(newTagline); err != nil {
 			msg.Err = err

@@ -57,6 +57,8 @@ func SetupSwitcherList(user *users.User, switchersType uint, ls ListSetup) Switc
 
 	var switchers []list.Item
 
+	denoises := user.GetDenoises()
+
 	switch switchersType {
 	case AUDIO:
 		switchers = []list.Item{
@@ -64,13 +66,13 @@ func SetupSwitcherList(user *users.User, switchersType uint, ls ListSetup) Switc
 				Id:      HARD_DENOISE,
 				Name:    "hard denoise",
 				Desc:    "reduce noise hard",
-				Enabled: user.Data.Setup.Audio.HardDenoise,
+				Enabled: denoises.HardDenoise,
 			},
 			SwitcherItem{
 				Id:      SOFT_DENOISE,
 				Name:    "soft denoise",
 				Desc:    "reduce noise soft",
-				Enabled: user.Data.Setup.Audio.SoftDenoise,
+				Enabled: denoises.SoftDenoise,
 			},
 			SwitcherItem{
 				Id:      AEC,

@@ -4,6 +4,7 @@ import (
 	"aloh-tui/internal/entities/users"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/uuid"
 )
 
 type StatiscticsMsg struct {
@@ -40,10 +41,10 @@ func CountMaxTimeInConnectionCmd(user *users.User, stop chan struct{}) tea.Cmd {
 	}
 }
 
-func IncreaseAmountOfConnectionsByUser(user *users.User, nickname string) tea.Cmd {
+func IncreaseAmountOfConnectionsByUser(user *users.User, id uuid.UUID, nickname string) tea.Cmd {
 	return func() tea.Msg {
 		msg := StatiscticsMsg{}
-		if err := user.IncreaseAmountOfConnectionsByUser(nickname); err != nil {
+		if err := user.IncreaseAmountOfConnectionsByUser(id, nickname); err != nil {
 			msg.Err = err
 		}
 		return msg

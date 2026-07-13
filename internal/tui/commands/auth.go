@@ -13,6 +13,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/uuid"
 )
 
 type AuthMsg struct {
@@ -42,10 +43,11 @@ func AuthCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logge
 		}
 
 		var pd struct {
+			Id           uuid.UUID         `json:"id"`
 			Nickname     string            `json:"nickname"`
 			RegisterTime string            `json:"registerTime"`
 			FriendsReqs  []users.FriendReq `json:"friendsReqs"`
-			Friends      []string          `json:"friends"`
+			Friends      []users.Friend    `json:"friends"`
 			BlockedUsers []string          `json:"blocked-users"`
 		}
 
@@ -53,15 +55,19 @@ func AuthCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logge
 			msg.Err = err
 			return msg
 		}
-
+		user.Data.Personal.ID = pd.Id
 		user.Data.Personal.Nickname = pd.Nickname
 		user.Data.Personal.RegisterTime = pd.RegisterTime
 		user.Data.Personal.FriendsReqs = pd.FriendsReqs
-		user.Data.Personal.Friends = pd.Friends
+		fr := make(map[uuid.UUID]*users.Friend)
+		for _, f := range pd.Friends {
+			fr[f.ID] = &f
+		}
+		user.Data.Personal.Friends = fr
 		user.Data.Personal.BlockedUsers = pd.BlockedUsers
 		user.SSHClient = client
 
-		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
+		netwroking, err := networking.NewNetworking(user.Data.Personal.ID, user.Paths.LogFilePath)
 		if err != nil {
 			msg.Err = err
 			return msg
@@ -70,8 +76,8 @@ func AuthCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logge
 		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
 			Microphone:  user.Data.Devices.Microphone,
 			Aec:         user.Data.Setup.Audio.AEC,
-			HardDenoice: user.Data.Setup.Audio.HardDenoise,
-			SoftDenoice: user.Data.Setup.Audio.SoftDenoise,
+			HardDenoice: user.Data.Setup.Audio.Denoises.HardDenoise,
+			SoftDenoice: user.Data.Setup.Audio.Denoises.SoftDenoise,
 			Filtered:    user.Data.Setup.Audio.Filter,
 		})
 		if err != nil {
@@ -118,9 +124,9 @@ func RegisterCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *l
 			msg.Err = err
 			return msg
 		}
-		user.Data.Setup.Audio.SoftDenoise = true
+		user.Data.Setup.Audio.Denoises.SoftDenoise = true
 		user.SSHClient = client
-		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
+		netwroking, err := networking.NewNetworking(user.Data.Personal.ID, user.Paths.LogFilePath)
 		if err != nil {
 			msg.Err = err
 			return msg
@@ -129,7 +135,7 @@ func RegisterCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *l
 		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
 			Microphone:  user.Data.Devices.Microphone,
 			Aec:         user.Data.Setup.Audio.AEC,
-			HardDenoice: user.Data.Setup.Audio.HardDenoise,
+			HardDenoice: user.Data.Setup.Audio.Denoises.HardDenoise,
 			SoftDenoice: true,
 			Filtered:    user.Data.Setup.Audio.Filter,
 		})
@@ -178,9 +184,10 @@ func LoginCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logg
 
 		var pd struct {
 			Nickname     string            `json:"nickname"`
+			Tagline      string            `json:"tagline"`
 			RegisterTime string            `json:"registerTime"`
 			FriendsReqs  []users.FriendReq `json:"friendsReqs"`
-			Friends      []string          `json:"friends"`
+			Friends      []users.Friend    `json:"friends"`
 			BlockedUsers []string          `json:"blocked-users"`
 		}
 
@@ -189,16 +196,21 @@ func LoginCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logg
 			return msg
 		}
 
+		fr := make(map[uuid.UUID]*users.Friend)
+		for _, f := range pd.Friends {
+			fr[f.ID] = &f
+		}
+
 		user.Data.Personal.Nickname = pd.Nickname
 		user.Data.Personal.RegisterTime = pd.RegisterTime
 		user.Data.Personal.FriendsReqs = pd.FriendsReqs
-		user.Data.Personal.Friends = pd.Friends
+		user.Data.Personal.Friends = fr
 		user.Data.Personal.BlockedUsers = pd.BlockedUsers
 		user.SSHClient = client
 
-		user.Data.Setup.Audio.SoftDenoise = true
+		user.Data.Setup.Audio.Denoises.SoftDenoise = true
 
-		netwroking, err := networking.NewNetworking(user.Data.Personal.Nickname, user.Paths.LogFilePath)
+		netwroking, err := networking.NewNetworking(user.Data.Personal.ID, user.Paths.LogFilePath)
 		if err != nil {
 			msg.Err = err
 			return msg
@@ -207,7 +219,7 @@ func LoginCmd(user *users.User, eventsChan chan sshclient.Event, appLogger *logg
 		audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
 			Microphone:  user.Data.Devices.Microphone,
 			Aec:         user.Data.Setup.Audio.AEC,
-			HardDenoice: user.Data.Setup.Audio.HardDenoise,
+			HardDenoice: user.Data.Setup.Audio.Denoises.HardDenoise,
 			SoftDenoice: true,
 			Filtered:    user.Data.Setup.Audio.Filter,
 		})

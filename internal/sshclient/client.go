@@ -36,6 +36,7 @@ type SSHClient interface {
 	BlockUser(ctx context.Context, friendNickname []byte) error
 	UnblockUser(ctx context.Context, friendNickname []byte) error
 	UpdateCurrentConnects(ctx context.Context, conns []byte) error
+	SetTagline(ctx context.Context, tagline []byte) error
 	Close()
 }
 
@@ -188,12 +189,12 @@ func (sc *sshClient) proccessEventsChan() {
 	}
 }
 
-func (sc *sshClient) NewFriendReq(ctx context.Context, friendNickname []byte) error {
+func (sc *sshClient) NewFriendReq(ctx context.Context, friendId []byte) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		status, payload, err := sc.client.SendRequest("new-friend", true, friendNickname)
+		status, payload, err := sc.client.SendRequest("new-friend", true, friendId)
 		if err != nil {
 			return err
 		}
@@ -204,12 +205,12 @@ func (sc *sshClient) NewFriendReq(ctx context.Context, friendNickname []byte) er
 	}
 }
 
-func (sc *sshClient) AcceptFriendReq(ctx context.Context, friendNickname []byte) error {
+func (sc *sshClient) AcceptFriendReq(ctx context.Context, friendId []byte) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		status, payload, err := sc.client.SendRequest("accept-friend", true, friendNickname)
+		status, payload, err := sc.client.SendRequest("accept-friend", true, friendId)
 		if err != nil {
 			return err
 		}
@@ -220,12 +221,12 @@ func (sc *sshClient) AcceptFriendReq(ctx context.Context, friendNickname []byte)
 	}
 }
 
-func (sc *sshClient) DenyFriendReq(ctx context.Context, friendNickname []byte) error {
+func (sc *sshClient) DenyFriendReq(ctx context.Context, friendId []byte) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		status, payload, err := sc.client.SendRequest("deny-friend", true, friendNickname)
+		status, payload, err := sc.client.SendRequest("deny-friend", true, friendId)
 		if err != nil {
 			return err
 		}
@@ -236,12 +237,12 @@ func (sc *sshClient) DenyFriendReq(ctx context.Context, friendNickname []byte) e
 	}
 }
 
-func (sc *sshClient) DeleteFromFriends(ctx context.Context, friendNickname []byte) error {
+func (sc *sshClient) DeleteFromFriends(ctx context.Context, friendId []byte) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		status, payload, err := sc.client.SendRequest("delete-friend", true, friendNickname)
+		status, payload, err := sc.client.SendRequest("delete-friend", true, friendId)
 		if err != nil {
 			return err
 		}
@@ -289,6 +290,22 @@ func (sc *sshClient) UpdateCurrentConnects(ctx context.Context, conns []byte) er
 		return ctx.Err()
 	default:
 		status, payload, err := sc.client.SendRequest("conns-update", true, conns)
+		if err != nil {
+			return err
+		}
+		if !status {
+			return castErr(payload)
+		}
+		return nil
+	}
+}
+
+func (sc *sshClient) SetTagline(ctx context.Context, tagline []byte) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		status, payload, err := sc.client.SendRequest("set-tagline", true, tagline)
 		if err != nil {
 			return err
 		}

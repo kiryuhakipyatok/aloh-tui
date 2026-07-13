@@ -29,8 +29,10 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 		Data: Data{
 			Setup: Setup{
 				Audio: Audio{
-					UsersSetup:  make(map[string]*UsersSetup, 5),
-					SoftDenoise: true,
+					Denoises: Denoises{
+						SoftDenoise: true,
+					},
+					UsersSetup: make(map[string]UsersSetup, 5),
 				},
 				Notifications: Notifications{
 					AudioNotifications:   true,
@@ -58,7 +60,7 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 				BestFriend: noBF(),
 			},
 			Personal: Personal{
-				Friends:     make([]string, 0, 5),
+				Friends:     make(map[uuid.UUID]*Friend, 5),
 				FriendsReqs: make([]FriendReq, 0, 5),
 			},
 		},
@@ -73,17 +75,17 @@ type Data struct {
 }
 
 type Personal struct {
-	ID           uuid.UUID   `json:"id"`
-	Nickname     string      `json:"nickname"`
-	RegisterTime string      `json:"registerTime"`
-	FriendsReqs  []FriendReq `json:"-"`
-	Friends      []string    `json:"-"`
-	BlockedUsers []string    `json:"-"`
+	ID           uuid.UUID             `json:"id"`
+	Nickname     string                `json:"nickname"`
+	RegisterTime string                `json:"registerTime"`
+	FriendsReqs  []FriendReq           `json:"-"`
+	Friends      map[uuid.UUID]*Friend `json:"-"`
+	BlockedUsers []string              `json:"-"`
 }
 
 type FriendReq struct {
-	Nickname string    `json:"nickname"`
-	ReqTime  time.Time `json:"reqTime"`
+	FriendPersonal `json:"friend-personal"`
+	ReqTime        time.Time `json:"reqTime"`
 }
 
 type Paths struct {
@@ -138,16 +140,29 @@ type Notifications struct {
 }
 
 type Audio struct {
-	HardDenoise bool                   `json:"hard-denoise"`
-	SoftDenoise bool                   `json:"soft-denoise"`
-	AEC         bool                   `json:"aec"`
-	Filter      bool                   `json:"filter"`
-	UsersSetup  map[string]*UsersSetup `json:"users-setup"`
+	AEC      bool     `json:"aec"`
+	Denoises Denoises `json:"denoises"`
+	Mutes    Mutes    `json:"mutes"`
+	Filter   bool     `json:"filter"`
+
+	UsersSetup map[string]UsersSetup `json:"users-setup"`
+}
+
+type Denoises struct {
+	HardDenoise bool `json:"hard-denoise"`
+	SoftDenoise bool `json:"soft-denoise"`
+}
+
+type Mutes struct {
+	FullMute bool `json:"full-mute"`
+	MicMute  bool `json:"mic-mute"`
 }
 
 type UsersSetup struct {
 	VolumeCoefficient   float32 `json:"volume-coeficent"`
 	Muted               bool    `json:"muted"`
+	HardDenoise         bool    `json:"hardDenoise"`
+	SoftDenoise         bool    `json:"softDenoise"`
 	AmountOfConnections uint    `json:"amount-of-connections"`
 }
 
