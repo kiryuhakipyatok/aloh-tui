@@ -72,8 +72,8 @@ RUN mkdir -p /out/libs && \
     go build -tags netgo,osusergo \
     -ldflags="-s -w -X 'main.version=${VERSION}' -X 'main.env=${APP_ENV}'" \
     -o /out/aloh ./cmd/app && \
-    cp -P ${PREFIX}/lib/libogg.so* ${PREFIX}/lib/libopus.so* ${PREFIX}/lib/libopusfile.so* ${PREFIX}/lib/librnnoise.so* ${PREFIX}/lib/libspeexdsp.so* /out/libs/
-
+    cp -P ${PREFIX}/lib/*.so* /out/libs/ && \
+    tar cfvz /out/aloh.zip -C /out aloh libs/
 
 FROM base AS build-windows
 ENV GOOS=windows
@@ -121,9 +121,8 @@ ENV CGO_LDFLAGS="-L${PREFIX}/lib -Wl,--start-group -lopusfile -lopus -logg -lspe
 RUN mkdir -p /out && \
     go build -tags netgo,osusergo \
     -ldflags="-s -w -extldflags '-static' -X 'main.version=${VERSION}' -X 'main.env=${APP_ENV}'" \
-    -o /out/aloh.exe ./cmd/app
+    -o /out/aloh.exe ./cmd/app &&  tar cfvz /out/aloh.zip /out/aloh.exe
 
 FROM scratch AS export
-COPY --from=build-linux /out/aloh /linux/
-COPY --from=build-linux /out/libs/ /linux/libs/
-COPY --from=build-windows /out/aloh.exe /windows/
+COPY --from=build-linux /out/aloh.zip /linux/
+COPY --from=build-windows /out/aloh.zip /windows/
