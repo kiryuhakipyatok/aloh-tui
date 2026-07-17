@@ -5,6 +5,7 @@ import (
 	"aloh-tui/internal/tui/components/styles"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,7 +14,7 @@ import (
 )
 
 type ConnectionItem struct {
-	Nickname            string
+	Identity            users.Identity
 	VolumeCoefficient   float32
 	Muted               bool
 	PersonalHardDenoise bool
@@ -22,7 +23,7 @@ type ConnectionItem struct {
 }
 
 func (ci ConnectionItem) Title() string {
-	name := ci.Nickname
+	name := ci.Identity.Nickname
 	if ci.Relation != "" {
 		name = ci.Relation + " " + name
 	}
@@ -32,7 +33,7 @@ func (ci ConnectionItem) Description() string {
 	return ci.DynamicDescription(false)
 }
 func (ci ConnectionItem) FilterValue() string {
-	return ci.Nickname
+	return ci.Identity.Nickname
 }
 
 func (ci ConnectionItem) DynamicDescription(isSelected bool) string {
@@ -84,7 +85,7 @@ func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float
 		if !ok {
 			continue
 		}
-		if ansi.Strip(conn.Nickname) == nickname {
+		if ansi.Strip(conn.Identity.Nickname) == nickname {
 			conn.VolumeCoefficient = volume
 			conn.Muted = muted
 			conn.PersonalHardDenoise = phd
@@ -96,34 +97,32 @@ func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float
 	return tea.Batch(cmds...)
 }
 
-func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []string,
+func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []users.Identity,
 	colors map[string]styles.UserColors) tea.Cmd {
-	names := make([]string, 0, len(connections))
+	slices.SortFunc(connections, func(c1, c2 users.Identity) int {
+		return strings.Compare(c1.Nickname, c2.Nickname)
+	})
 
-	for _, name := range connections {
-		if !user.IsBlocked(name) {
-			names = append(names, name)
-		}
-	}
-
-	slices.Sort(names)
-
-	newItems := make([]list.Item, 0, len(names))
-	for _, name := range names {
-		var vc float32 = 1
-		var muted bool
+	newItems := make([]list.Item, 0, len(connections))
+	for _, conn := range connections {
+		var (
+			vc    float32 = 1
+			muted bool
+			name  = conn.Nickname
+		)
 		us, ok := user.Data.Setup.Audio.UsersSetup[name]
 		if ok {
 			vc = us.VolumeCoefficient
 			muted = us.Muted
 		}
 		var rel string
-		if user.Data.Statistics.BestFriend.Nickname == name {
+		if user.Data.Statistics.BestFriend.Identity.Nickname == name {
 			rel = user.Data.Setup.Appereance.BestFriendTag
 		}
 		coloredName := lipgloss.NewStyle().Foreground(colors[name].MainColor).Render(name)
+		conn.Nickname = coloredName
 		newItems = append(newItems, ConnectionItem{
-			Nickname:          coloredName,
+			Identity:          conn,
 			VolumeCoefficient: vc,
 			Muted:             muted,
 			Relation:          rel,
@@ -142,7 +141,7 @@ func (l *ConnectionsList) GetConnectionItem(nickname string) ConnectionItem {
 		if !ok {
 			continue
 		}
-		if ansi.Strip(conn.Nickname) == nickname {
+		if ansi.Strip(conn.Identity.Nickname) == nickname {
 			ci = conn
 			break
 		}

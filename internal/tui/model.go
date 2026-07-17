@@ -2,20 +2,13 @@ package tui
 
 import (
 	"aloh-tui/internal/entities/users"
-	"aloh-tui/internal/media/audio"
-	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
 
 	"aloh-tui/internal/tui/commands"
-	"aloh-tui/internal/tui/components/lists"
 	"aloh-tui/internal/tui/components/states"
 	"aloh-tui/internal/tui/components/styles"
-	"aloh-tui/internal/tui/components/titles"
 	"aloh-tui/internal/tui/components/windows"
-	"aloh-tui/internal/utils"
-	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -26,121 +19,28 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
-	alohnetwork "github.com/kiryuhakipyatok/aloh-networking"
 	bz "github.com/lrstanley/bubblezone"
 )
 
-type userState struct {
-	fullMute     bool
-	micMute      bool
-	hardDenoised bool
-	softDenoised bool
-}
-
 type Model struct {
-	width  int
-	height int
-
-	defTabs []string
-	regTabs []string
-
-	sideState uint
-
-	activeTab int
-
-	logoAnim    []string
-	notConnAnim []string
-	aloneAnim   []string
-
-	curTime time.Time
-
-	state   uint
-	prState uint
-
-	spinner spinner.Model
-
-	curWindow uint
-
-	rightHeaderData []string
-
-	regTextInputs    []textinput.Model
-	chatTextInput    textinput.Model
-	logingInput      []textinput.Model
-	friendsInputs    []textinput.Model
-	appereanceInputs []textinput.Model
-
-	sshEventsChan  chan sshclient.Event
-	netwEventsChan chan commands.NetworkEventMsg
-
-	defaultThemeColor string
-
-	imageBuffer []byte
-
-	speaking bool
-
-	chatOffset int
-	chatWidth  int
-	chatHeight int
-
-	ticked bool
-
-	userColor string
-
-	cursor int
+	sizes
+	tabs
+	anims
+	modelLists
+	modelStates
+	inputs
+	chat
+	colors
+	chans
+	curs
+	boolStates
+	datas
+	other
 
 	user *users.User
-
-	//muteState string
-
-	messages []commands.ChatMessage
-
-	zone *bz.Manager
-
-	usersColors map[string]styles.UserColors
-	connections []string
-	online      map[uuid.UUID][]string
-	usersStates map[uuid.UUID]*userState
-
-	connectionsList lists.ConnectionsList
-
-	friendsList lists.FriendsList
-
-	settingsList      lists.SettingsList
-	notificationsList lists.SwitcherList
-	audioList         lists.SwitcherList
-	microphonesList   lists.DeviceList
-	headphonesList    lists.DeviceList
-	apearenceList     lists.SwitcherList
-	friendsReqsList   lists.FriendsReqsList
-
-	tabsNotifications map[string]struct{}
-
-	connected bool
-
-	msgChan    chan commands.ChatMessage
-	rawMsgChan chan commands.RawChatMessage
-
-	peerConnectionsChan    chan commands.PeerConnectedMsg
-	peerDisconnectionsChan chan commands.PeerDisconnectedMsg
-
-	log *logger.Logger
-
-	animFrame  int
-	pulseFrame int
-
-	headerActiveStyle lipgloss.Style
-	themeColor        lipgloss.Color
-	subThemeColor     lipgloss.Color
-
-	defaultBFTag           string
-	defaultNotificationTag string
-	defaultBanTag          string
-
-	stopCountMinutesChan chan struct{}
-
-	err error
+	log  *logger.Logger
+	err  error
 }
 
 func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logger) (*Model, error) {
@@ -152,69 +52,74 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 	sp.Spinner = spinner.Dot
 
 	m := &Model{
-		state:   states.START_STATE,
-		prState: states.START_STATE,
+		modelStates: modelStates{
+			state:   states.START_STATE,
+			prState: states.START_STATE,
+		},
 
-		curWindow: windows.START_WINDOW,
+		curs: curs{
+			curWindow: windows.START_WINDOW,
+			curTime:   time.Now(),
+		},
 
-		defTabs: []string{"friends", "chat", "voice", "video", "profile", "settings"},
-		regTabs: []string{"registration", "login"},
+		tabs: tabs{
+			defTabs:           []string{freindsTab, chatTab, voiceTab, videoTab, profileTab, settingsTab},
+			regTabs:           []string{regTab, logTab},
+			tabsNotifications: make(map[string]struct{}, 6),
+		},
 
-		regTextInputs:    make([]textinput.Model, 3),
-		logingInput:      make([]textinput.Model, 2),
-		logoAnim:         make([]string, 0, 4),
-		notConnAnim:      make([]string, 0, 4),
-		appereanceInputs: make([]textinput.Model, 5),
-		friendsInputs:    make([]textinput.Model, 5),
-		messages:         make([]commands.ChatMessage, 0, 20),
+		anims: anims{
+			logoAnim:    make([]string, 0, 4),
+			notConnAnim: make([]string, 0, 4),
+		},
 
-		sshEventsChan:  make(chan sshclient.Event, 50),
-		netwEventsChan: make(chan commands.NetworkEventMsg, 50),
+		chans: chans{
+			msgChan:    make(chan commands.ChatMessage, 100),
+			rawMsgChan: make(chan commands.RawChatMessage, 100),
 
-		defaultThemeColor:      "#A6E22E",
-		defaultBFTag:           "👑",
-		defaultNotificationTag: "🔔",
-		defaultBanTag:          "🚫",
+			peerConnectionsChan:    make(chan commands.PeerConnectedMsg, 100),
+			peerDisconnectionsChan: make(chan commands.PeerDisconnectedMsg, 100),
 
-		rightHeaderData: make([]string, 3),
+			stopCountMinutesChan: make(chan struct{}, 1),
 
-		spinner: sp,
+			sshEventsChan:  make(chan sshclient.Event, 50),
+			netwEventsChan: make(chan commands.NetworkEventMsg, 50),
+		},
 
-		online: make(map[uuid.UUID][]string, 5),
+		inputs: inputs{
+			regTextInputs: make([]textinput.Model, 3),
+			logingInput:   make([]textinput.Model, 2),
 
-		stopCountMinutesChan: make(chan struct{}, 1),
+			appereanceInputs: make([]textinput.Model, 5),
+			friendsInputs:    make([]textinput.Model, 5),
+		},
 
-		usersColors: make(map[string]styles.UserColors, 5),
-		usersStates: make(map[uuid.UUID]*userState, 5),
+		chat: chat{
+			messages: make([]commands.ChatMessage, 0, 20),
+		},
 
-		zone: bz.New(),
+		datas: datas{
+			usersStates:       make(map[uuid.UUID]*userState, 5),
+			online:            make(map[uuid.UUID][]users.Identity, 5),
+			connections:       make([]users.Identity, 0, 3),
+			connecctionsNicks: make([]string, 0, 3),
+		},
 
-		connections: make([]string, 0, 3),
+		other: other{
+			rightHeaderData: make([]string, 3),
+			spinner:         sp,
+			zone:            bz.New(),
+		},
 
-		userColor: randomcolor.GetRandomColorInHex(),
-
-		curTime: time.Now(),
+		colors: colors{
+			usersColors: make(map[string]styles.UserColors, 5),
+			userColor:   randomcolor.GetRandomColorInHex(),
+		},
 
 		log: appLogger,
-
-		tabsNotifications: make(map[string]struct{}, 6),
-
-		msgChan:    make(chan commands.ChatMessage, 100),
-		rawMsgChan: make(chan commands.RawChatMessage, 100),
-
-		peerConnectionsChan:    make(chan commands.PeerConnectedMsg, 100),
-		peerDisconnectionsChan: make(chan commands.PeerDisconnectedMsg, 100),
 	}
 
-	m.logoAnim = []string{titles.BIG_LOGO1, titles.BIG_LOGO2, titles.BIG_LOGO3, titles.BIG_LOGO2}
-	m.notConnAnim = []string{titles.NOT_CONN1, titles.NOT_CONN2, titles.NOT_CONN3, titles.NOT_CONN2}
-	m.aloneAnim = []string{titles.ALONE1, titles.ALONE2, titles.ALONE3, titles.ALONE2}
-
 	user := users.NewUser(logFilePath, keysPath, dataFilePath)
-	user.Data.Setup.Appereance.BestFriendTag = m.defaultBFTag
-	user.Data.Setup.Appereance.NotificaionTag = m.defaultNotificationTag
-	user.Data.Setup.Appereance.BanTag = m.defaultBanTag
-	user.Data.Setup.Appereance.ThemeColor = m.defaultThemeColor
 
 	userDataBytes, err := os.ReadFile(user.Paths.DataFilePath)
 	if err != nil {
@@ -232,236 +137,15 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		}
 	}
 
-	m.themeColor = lipgloss.Color(user.Data.Setup.Appereance.ThemeColor)
-	m.subThemeColor = lipgloss.Color(utils.DarkenHex(user.Data.Setup.Appereance.ThemeColor, 0.7))
-	m.headerActiveStyle = lipgloss.NewStyle().Foreground(m.themeColor).Bold(true)
-
-	if user.Data.Personal.Nickname != "" && user.Data.Personal.RegisterTime != "" {
-
-		logNickname := logger.Attr("nickname", user.Data.Personal.Nickname)
-
-		log.Info("authorize user with existing user data", logNickname)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		defer cancel()
-		client, personalData, err := sshclient.AuthSSHClient(ctx, appLogger, sshclient.SSHClientSetup{
-			Nickname:   user.Data.Personal.Nickname,
-			KeysPath:   user.Paths.KeysPath,
-			Typee:      sshclient.DEFAULT,
-			EventsChan: m.sshEventsChan,
-			Password:   nil,
-		})
-		if err != nil {
-			log.Error("err when sshclient", logger.Err(err))
-			if !errors.Is(err, errs.ErrAuth()) {
-				log.Error("err sshclient", logger.Err(err))
-				m.err = err
-				m.state = states.ERR_STATE
-				user.Data.Personal.Nickname = ""
-				user.Data.Personal.RegisterTime = ""
-			}
-		} else {
-			var pd struct {
-				ID           uuid.UUID         `json:"id"`
-				Nickname     string            `json:"nickname"`
-				Tagline      string            `json:"tagline"`
-				RegisterTime time.Time         `json:"registerTime"`
-				FriendsReqs  []users.FriendReq `json:"friendsReqs"`
-				Friends      []users.Friend    `json:"friends"`
-				BlockedUsers []string          `json:"blocked-users"`
-			}
-
-			if err := json.Unmarshal(personalData, &pd); err != nil {
-				log.Error("failed to unmarshal user personal data", logger.Err(err), logNickname)
-				return nil, err
-			}
-
-			fr := make(map[uuid.UUID]*users.Friend)
-			for _, f := range pd.Friends {
-				fr[f.ID] = &f
-			}
-
-			user.Data.Personal.ID = pd.ID
-			user.Data.Personal.Nickname = pd.Nickname
-			user.Data.Personal.RegisterTime = pd.RegisterTime.Format("2006-01-02")
-			user.Data.Personal.FriendsReqs = pd.FriendsReqs
-			user.Data.Personal.Friends = fr
-			user.Data.Personal.BlockedUsers = pd.BlockedUsers
-			if err := user.UpdateUserJSON(); err != nil {
-				log.Error("failed to update user json", logger.Err(err))
-				return nil, err
-			}
-			user.SSHClient = client
-			if len(user.Data.Personal.FriendsReqs) > 0 {
-				m.tabsNotifications["profile"] = struct{}{}
-			}
-
-			log.Info("user authorized successfully, networking setting...", logNickname)
-
-			networking, err := networking.NewNetworking(user.Data.Personal.ID, user.Paths.LogFilePath)
-			if err != nil {
-				log.Error("failed to create networking", logger.Err(err), logNickname)
-				return nil, err
-			}
-			audioEngine, err := audio.NewAudioEngine(appLogger, audio.AudioSetup{
-				Microphone:  user.Data.Devices.Microphone,
-				Aec:         user.Data.Setup.Audio.AEC,
-				HardDenoice: user.Data.Setup.Audio.Denoises.HardDenoise,
-				SoftDenoice: user.Data.Setup.Audio.Denoises.SoftDenoise,
-				Filtered:    user.Data.Setup.Audio.Filter,
-			})
-			if err != nil {
-				log.Error("failed to create audio engine", logger.Err(err))
-				return nil, err
-			}
-
-			if err := audioEngine.SetNetworking(networking); err != nil {
-				log.Error("failed to set newtorking to audio engine", logger.Err(err), logNickname)
-				return nil, err
-			}
-
-			log.Info("setting netwoking callbacks...", logNickname)
-
-			networking.ChatCallback(func(id uuid.UUID, data []byte) {
-				t := time.Now().Format("15:04:05")
-				m.rawMsgChan <- commands.RawChatMessage{Time: t, Id: id, Data: data}
-			})
-			networking.VoiceCallback(func(id uuid.UUID, data []byte) {
-				audioEngine.PlayUserVoice(id, data)
-			})
-			networking.PeerConnectedCallback(func(id uuid.UUID) {
-				t := time.Now().Format("15:04:05")
-				m.peerConnectionsChan <- commands.PeerConnectedMsg{Id: id, Time: t}
-			})
-			networking.PeerDisconnectedCallback(func(id uuid.UUID) {
-				t := time.Now().Format("15:04:05")
-				m.peerDisconnectionsChan <- commands.PeerDisconnectedMsg{Id: id, Time: t}
-			})
-
-			networking.EventCallback(func(id uuid.UUID, e alohnetwork.Event) {
-				m.netwEventsChan <- commands.NetworkEventMsg{Id: id, Event: e}
-			})
-			user.SSHClient = client
-			user.Engines.AudioEngine = audioEngine
-			user.Networking = networking
-
-		}
-	}
-
 	m.user = user
 
-	if m.user.GetShowDateState() {
-		curDate := m.curTime.Format("2006-01-02")
-		m.rightHeaderData[0] = curDate
+	if m.user.Data.Identity.ID != uuid.Nil {
+		m.prState = m.state
+		m.state = states.LOAD_STATE
 	}
 
-	if m.user.GetShowTimeState() {
-		curTime := m.curTime.Format("15:04:05")
-		m.rightHeaderData[1] = curTime
-	}
-
-	if m.user.GetShowZoneState() {
-		curZone := m.curTime.Format("-07:00")
-		m.rightHeaderData[2] = curZone
-	}
-
-	ls := lists.ListSetup{
-		ThemeColor:       m.themeColor,
-		SubColor:         m.subThemeColor,
-		NormalDescColor:  styles.CGray,
-		NormalTitleColor: styles.CText,
-	}
-
-	if m.user.Engines.AudioEngine != nil {
-		m.microphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.MICROPHONE, ls)
-		m.headphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.HEADPHONES, ls)
-	}
-
-	m.connectionsList = lists.SetupConnestionsList(ls)
-	m.friendsList = lists.SetupFriendsList(m.user, ls)
-	m.friendsReqsList = lists.SetupFriendsReqsList(m.user, ls)
-	m.apearenceList = lists.SetupSwitcherList(m.user, lists.APEREANCE, lists.ListSetup{
-		ThemeColor:       m.themeColor,
-		SubColor:         m.subThemeColor,
-		NormalDescColor:  styles.CGray,
-		NormalTitleColor: lipgloss.AdaptiveColor{Light: styles.Black, Dark: styles.White},
-	})
-	m.notificationsList = lists.SetupSwitcherList(m.user, lists.NOTIFICATIONS, ls)
-	m.audioList = lists.SetupSwitcherList(m.user, lists.AUDIO, ls)
-	m.settingsList = lists.SetupSettingsList(ls)
-
-	for i := range m.regTextInputs {
-		ti := textinput.New()
-		ti.PlaceholderStyle = styles.CGrayStyle
-		ti.CharLimit = 24
-		switch i {
-		case 0:
-			ti.Placeholder = "unique nickname"
-		case 1:
-			ti.Placeholder = "secret"
-			ti.EchoMode = textinput.EchoPassword
-		case 2:
-			ti.Placeholder = "repeat secret"
-			ti.EchoMode = textinput.EchoPassword
-		}
-		m.regTextInputs[i] = ti
-	}
-
-	for i := range m.logingInput {
-		ti := textinput.New()
-		ti.PlaceholderStyle = styles.CGrayStyle
-		ti.CharLimit = 24
-		switch i {
-		case 0:
-			ti.Placeholder = "nickname"
-		case 1:
-			ti.Placeholder = "secret"
-			ti.EchoMode = textinput.EchoPassword
-		}
-		m.logingInput[i] = ti
-	}
-
-	for i := range m.friendsInputs {
-		ti := textinput.New()
-		ti.PlaceholderStyle = styles.CGrayStyle
-		ti.CharLimit = 24
-		switch i {
-		case 0:
-			ti.Placeholder = "connect to friend"
-		case 1:
-			ti.Placeholder = "send friend request"
-		case 2:
-			ti.Placeholder = "delete from friends"
-		case 3:
-			ti.Placeholder = "block user"
-		case 4:
-			ti.Placeholder = "unblock user"
-		}
-		m.friendsInputs[i] = ti
-	}
-
-	chatInput := textinput.New()
-	chatInput.Placeholder = "type a message..."
-	m.chatTextInput = chatInput
-
-	for i := range m.appereanceInputs {
-		ti := textinput.New()
-		ti.PlaceholderStyle = styles.CGrayStyle
-		ti.CharLimit = 7
-		switch i {
-		case 0:
-			ti.Placeholder = "new color in hex, d to default"
-		case 1:
-			ti.Placeholder = "new best friend tag, d to default"
-		case 2:
-			ti.Placeholder = "new notification tag, d to default"
-		case 3:
-			ti.Placeholder = "new ban tag, d to default"
-		case 4:
-			ti.CharLimit = 28
-			ti.Placeholder = "new tagline"
-		}
-		m.appereanceInputs[i] = ti
-	}
+	m.setupModel()
+	//m.setup()
 
 	log.Info("model created successfully")
 
@@ -470,18 +154,12 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
-	cmds = append(cmds, commands.AnimTickCmd(), commands.PulseTickCmd())
-	if m.user.Networking != nil && m.user.Engines.AudioEngine != nil {
-		cmds = append(cmds,
-			commands.WaitForChatMessageCmd(m.msgChan),
-			commands.WaitForSSHEventMessageCmd(m.sshEventsChan),
-			commands.WaitForNetworkEventMessageCmd(m.netwEventsChan),
-			commands.WaitForRawChatMessageCmd(m.rawMsgChan),
-			commands.WaitForPeerConnectionCmd(m.peerConnectionsChan),
-			commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan), tea.EnableMouseCellMotion)
-		if m.user.GetShowTimeState() {
-			cmds = append(cmds, commands.TimeTickCmd())
-		}
+	cmds = append(cmds, commands.AnimTickCmd(), commands.PulseTickCmd(), tea.EnableMouseCellMotion)
+	if m.user.Data.Identity.ID != uuid.Nil {
+		cmds = append(cmds, commands.AuthCmd(m.user, m.chans.sshEventsChan, m.log), m.spinner.Tick)
+	}
+	if m.user.GetShowTimeState() {
+		cmds = append(cmds, commands.TimeTickCmd())
 	}
 	return tea.Batch(cmds...)
 }

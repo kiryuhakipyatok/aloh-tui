@@ -12,16 +12,16 @@ import (
 )
 
 type FriendItem struct {
-	Id          uuid.UUID
-	Name        string
-	Tagline     string
-	Connections []string
-	BFTag       string
-	IsOnline    bool
+	Identity         users.Identity
+	Tagline          string
+	Connections      []users.Identity
+	ConnectionsNicks []string
+	BFTag            string
+	IsOnline         bool
 }
 
 func (fi FriendItem) Title() string {
-	name := fi.Name
+	name := fi.Identity.Nickname
 	if fi.BFTag != "" {
 		name = fi.BFTag + " " + name
 	}
@@ -33,45 +33,51 @@ func (fi FriendItem) Description() string {
 }
 
 func (fi FriendItem) FilterValue() string {
-	return fi.Name
+	return fi.Identity.Nickname
 }
 
 func (fi FriendItem) DynamicDescription(isSelected bool) string {
 	if !fi.IsOnline {
-		return "offline"
+		ofStr := "offline"
+		if fi.Tagline != "" {
+			ofStr = strings.TrimSpace(fi.Tagline + " | " + ofStr)
+		}
+		return ofStr
 	}
 	ent := ""
 	if isSelected {
 		ent = ", ENTER to connect"
 	}
-	desc := fi.Tagline + " | alone" + ent
-	if len(fi.Connections) > 0 {
-		conns := strings.Join(fi.Connections, " · ")
-		desc = fmt.Sprintf("with: %s%s", conns, ent)
+	onStr := "alone" + ent
+	if fi.Tagline != "" {
+		onStr = strings.TrimSpace(fi.Tagline + " | " + onStr)
 	}
-	return desc
+	if len(fi.ConnectionsNicks) > 0 {
+		conns := strings.Join(fi.ConnectionsNicks, " · ")
+		onStr = strings.TrimSpace(fi.Tagline + fmt.Sprintf(" | with: %s%s", conns, ent))
+	}
+	return onStr
 }
 
 func SetupFriendsList(user *users.User, ls ListSetup) FriendsList {
 	bfTag := user.Data.Setup.Appereance.BestFriendTag
-	bfNick := user.Data.Statistics.BestFriend.Nickname
+	bfIden := user.Data.Statistics.BestFriend.Identity
 	friends := user.Data.Personal.Friends
 	friendsItems := make([]list.Item, 0, len(friends))
 
 	for _, f := range friends {
 		var rel string
-		name := f.Nickname
-		if bfNick == name {
+		if bfIden == f.Identity {
 			rel = bfTag
 		}
 
 		friendsItems = append(friendsItems, FriendItem{
-			Id:          f.ID,
-			Tagline:     f.Tagline,
-			Name:        name,
-			Connections: nil,
-			BFTag:       rel,
-			IsOnline:    false,
+			Identity:         f.Identity,
+			Tagline:          f.Tagline,
+			Connections:      nil,
+			ConnectionsNicks: nil,
+			BFTag:            rel,
+			IsOnline:         false,
 		})
 	}
 
@@ -102,10 +108,10 @@ func SetupFriendsList(user *users.User, ls ListSetup) FriendsList {
 	}
 }
 
-func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[uuid.UUID][]string) tea.Cmd {
+func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[uuid.UUID][]users.Identity) tea.Cmd {
 	friends := user.GetFriends()
 	bfTag := user.Data.Setup.Appereance.BestFriendTag
-	bfNick := user.Data.Statistics.BestFriend.Nickname
+	bfIden := user.Data.Statistics.BestFriend.Identity
 	banTag := user.Data.Setup.Appereance.BanTag
 
 	//slices.Sort(friends)
@@ -120,44 +126,41 @@ func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[uuid.UUI
 
 	for _, f := range friends {
 		id := f.ID
-		if _, ok := curOnline[id]; ok {
-
-			for i, c := range curOnline[id] {
-				if bfNick == c {
-					curOnline[id][i] = bfTag + " " + c
-				} else if user.IsBlocked(c) {
-					curOnline[id][i] = banTag + " " + c
-				}
-			}
-
-		}
-		f, ok := friends[id]
-		if !ok {
-			continue
-		}
-		name := f.Nickname
-		var rel string
-		if bfNick == name {
-			rel = bfTag
-		}
-
 		var (
-			isOnline bool
-			conns    []string
+			nicknames []string
+			isOnline  bool
+			conns     []users.Identity
 		)
-
-		if _, ok := curOnline[id]; ok {
+		if cons, ok := curOnline[id]; ok {
+			nicks := make([]string, 0, len(cons))
+			for i, c := range cons {
+				n := c.Nickname
+				if bfIden.ID == c.ID {
+					n = bfTag + " " + n
+					curOnline[id][i].Nickname = n
+				} else if user.IsBlocked(c) {
+					n = banTag + " " + n
+					curOnline[id][i].Nickname = n
+				}
+				nicks = append(nicks, c.Nickname)
+			}
+			nicknames = nicks
 			isOnline = true
 			conns = curOnline[id]
 		}
 
+		var rel string
+		if bfIden == f.Identity {
+			rel = bfTag
+		}
+
 		fi := FriendItem{
-			Id:          id,
-			Tagline:     f.Tagline,
-			Name:        name,
-			Connections: conns,
-			BFTag:       rel,
-			IsOnline:    isOnline,
+			Identity:         f.Identity,
+			Tagline:          f.Tagline,
+			Connections:      conns,
+			ConnectionsNicks: nicknames,
+			BFTag:            rel,
+			IsOnline:         isOnline,
 		}
 
 		if fi.IsOnline {

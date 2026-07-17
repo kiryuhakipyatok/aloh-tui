@@ -1,46 +1,71 @@
 package sshclient
 
 import (
+	"aloh-tui/pkg/logger"
+	"bufio"
 	"encoding/json"
 
 	"github.com/google/uuid"
+	alohssh "github.com/kiryuhakipyatok/aloh-ssh"
 )
 
 const (
-	NEW_FRIEND_REQ = iota
-	ACCEPT_FRIEND
-	DENY_FRIEND
-	DELETE_FRIEND
-	BLOCK_USER
-	UNBLOCK_USER
-	FRIEND_ONLINE
-	FRIEND_OFFLINE
-	FRIEND_CONNECTIONS
-	UPDATE_HARD_DENOISE
-	UPDATE_SOFT_DENOISE
-	UPDATE_TAGLINE
+	NEW_FRIEND_REQ      = alohssh.NEW_FRIEND_REQ
+	ACCEPT_FRIEND       = alohssh.ACCEPT_FRIEND
+	DENY_FRIEND         = alohssh.DENY_FRIEND
+	DELETE_FRIEND       = alohssh.DELETE_FRIEND
+	BLOCK_USER          = alohssh.BLOCK_USER
+	UNBLOCK_USER        = alohssh.UNBLOCK_USER
+	FRIEND_ONLINE       = alohssh.FRIEND_ONLINE
+	FRIEND_OFFLINE      = alohssh.FRIEND_OFFLINE
+	FRIEND_CONNECTIONS  = alohssh.FRIEND_CONNECTIONS
+	UPDATE_HARD_DENOISE = alohssh.UPDATE_HARD_DENOISE
+	UPDATE_SOFT_DENOISE = alohssh.UPDATE_SOFT_DENOISE
+	UPDATE_TAGLINE      = alohssh.UPDATE_TAGLINE
 
 	SEND_FRIEND_REQ
 )
 
-type Event struct {
-	Type uint            `json:"type"`
-	Data json.RawMessage `json:"data"`
-}
+type (
+	Event                = alohssh.Event
+	FriendConnsData      = alohssh.FriendConnsData
+	UsersHardDenoiseData = alohssh.UsersHardDenoiseData
+	UsersSoftDenoiseData = alohssh.UsersSoftDenoiseData
+	TaglineData          = alohssh.TaglineData
+	Identity             = alohssh.Identity
+)
 
-type FriendConnsData struct {
-	Id       uuid.UUID `json:"id"`
-	Connects []string  `json:"connects"`
-}
+func (sc *sshClient) proccessEventsChan() {
+	op := "sshClient.proccessEvents"
+	log := sc.log.AddOp(op)
+	scanner := bufio.NewScanner(sc.eventSSHChannel)
+	for scanner.Scan() {
+		rawBytes := scanner.Bytes()
 
-type FriendPersonal struct {
-	ID       uuid.UUID `json:"id"`
-	Nickname string    `json:"nickname"`
-}
+		if len(rawBytes) == 0 {
+			continue
+		}
 
-type TaglineData struct {
-	Id      uuid.UUID `json:"id"`
-	Tagline string    `json:"tagline"`
+		e, err := proccessEvent(rawBytes)
+		if err != nil {
+			log.Error("failed to proccess event", logger.Err(err))
+			continue
+		}
+		eventLog := logger.Attr("event", e)
+		select {
+		case sc.eventsChan <- e:
+			log.Info("new event in events chan", eventLog)
+		default:
+			log.Error("events chan is full, event skipped", eventLog)
+		}
+
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Error("failed to read data stream", logger.Err(err))
+	} else {
+		log.Info("event processing canceled successfully")
+	}
 }
 
 func proccessEvent(event []byte) (Event, error) {
@@ -59,12 +84,13 @@ func CastToFriendConnsData(data []byte) (FriendConnsData, error) {
 	return fcd, nil
 }
 
-func CastToFriendPersonalData(data []byte) (FriendPersonal, error) {
-	var fp FriendPersonal
-	if err := json.Unmarshal(data, &fp); err != nil {
-		return fp, err
+func CastToIdentityData(data []byte) (Identity, error) {
+	var iden Identity
+	if err := json.Unmarshal(data, &iden); err != nil {
+		return iden, err
 	}
-	return fp, nil
+
+	return iden, nil
 }
 
 func CastToNicknameData(data []byte) (string, error) {
@@ -89,4 +115,12 @@ func CastToTaglineData(data []byte) (TaglineData, error) {
 		return tg, err
 	}
 	return tg, nil
+}
+
+func MarshData(d any) ([]byte, error) {
+	data, err := json.Marshal(d)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }

@@ -1,7 +1,11 @@
 package audio
 
 import (
+	"aloh-tui/pkg/errs"
 	"math"
+	"unsafe"
+
+	"github.com/gen2brain/malgo"
 )
 
 func (ae *audioEngine) filter(samples []int16) {
@@ -77,6 +81,19 @@ func (ae *audioEngine) stereoToMono(s []int16, m []int16) {
 		}
 	}
 
+}
+
+func (ae *audioEngine) resolveDeviceByName(name string, typee malgo.DeviceType) (unsafe.Pointer, error) {
+	devices, err := ae.malgoCtx.Devices(typee)
+	if err != nil {
+		return nil, err
+	}
+	for i := range devices {
+		if devices[i].Name() == name {
+			return devices[i].ID.Pointer(), nil
+		}
+	}
+	return nil, errs.ErrNotFound()
 }
 
 func getRms(buffer []int16) float64 {

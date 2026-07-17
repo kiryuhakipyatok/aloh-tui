@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
+	"github.com/google/uuid"
 )
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
@@ -22,12 +22,13 @@ func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
 }
 
 func (m Model) isLoggedIn() bool {
-	return m.user != nil && m.user.Networking != nil && m.user.Data.Personal.Nickname != ""
+	return m.user != nil && m.user.Networking != nil && m.user.Data.Identity.ID != uuid.Nil
 }
 
 func (m Model) View() string {
-	if m.width == 0 || m.height == 0 {
-		return "loading..."
+	if m.width == 0 || m.height == 0 || (!m.isLoggedIn() && m.state == states.LOAD_STATE) {
+		return lipgloss.NewStyle().Foreground(m.themeColor).
+			Render(fmt.Sprintf("%s%s", m.spinner.View(), "loading..."))
 	}
 
 	padW, padH := 2, 0
@@ -58,7 +59,8 @@ func (m Model) View() string {
 	footer := lipgloss.JoinHorizontal(lipgloss.Bottom, leftFooterPart, rightFooterPart)
 	footerH := lipgloss.Height(footer)
 
-	rightHeaderPart := styles.CDimStyle.Padding(1, 1, 0, 0).Render(strings.Join(m.rightHeaderData, " "))
+	rightHeaderPart := styles.CDimStyle.Padding(1, 1, 0, 0).
+		Render(strings.TrimSpace(strings.Join(m.rightHeaderData, " ")))
 	rightHeaderW := lipgloss.Width(rightHeaderPart)
 
 	leftHeaderPart := lipgloss.NewStyle().Width(usableW-rightHeaderW).Foreground(m.themeColor).Padding(1, 0, 0, 1).Render(titles.A)
@@ -162,14 +164,14 @@ func (m Model) View() string {
 	case states.HELP_STATE:
 		uiContent = m.renderHelpView(windowInnerW, windowInnerH)
 	default:
-		if !m.isLoggedIn() {
+		if !m.isLoggedIn() && m.state != states.LOAD_STATE {
 			switch m.activeTab {
 			case 0:
 				uiContent = m.renderRegistrationTab(windowInnerW, windowInnerH)
 			case 1:
 				uiContent = m.renderLoginTab(windowInnerW, windowInnerH)
 			}
-		} else {
+		} else if m.isLoggedIn() {
 			switch m.activeTab {
 			case 0:
 				uiContent = m.renderFriendsTab(windowInnerW, windowInnerH)
@@ -210,18 +212,17 @@ func (m Model) renderVoiceTab(w, h int) string {
 
 	for _, c := range m.connections {
 		state := ""
-		userColors := m.usersColors[c]
+		userColors := m.usersColors[c.Nickname]
 		mainStyle := lipgloss.NewStyle().Foreground(userColors.MainColor)
 		subStyle := lipgloss.NewStyle().Foreground(userColors.SubColor)
 		bar := lipgloss.NewStyle().Foreground(userColors.SubColor).Render(fmt.Sprintf("voice power %.1f: ", 0.0))
-		id := m.user.GetFriendId(c)
-		if _, ok := mutedUsers[id]; ok {
+		if _, ok := mutedUsers[c.ID]; ok {
 			state = " 🔇"
-		} else if rms, ok := speakingUsers[id]; ok {
+		} else if rms, ok := speakingUsers[c.ID]; ok {
 			state = " 🔊"
 			bar = mainStyle.Render(fmt.Sprintf("voice power %.1f:", rms)) +
 				subStyle.Render(strings.Repeat("▐", int(rms)/100))
-		} else if us, ok := m.usersStates[id]; ok {
+		} else if us, ok := m.usersStates[c.ID]; ok {
 			if us.fullMute {
 				state = " 🙊🙉"
 			} else if us.micMute {
@@ -357,7 +358,8 @@ func (m Model) renderFriendsTab(w, h int) string {
 	} else if m.connected {
 		alr := lipgloss.NewStyle().Foreground(m.themeColor).Render("you're ")
 		curMins := styles.CTextStyle.Render(fmt.Sprintf("%d min", m.user.GetMinutesInCurrentConenction()))
-		withWho := lipgloss.NewStyle().Foreground(m.themeColor).Render(fmt.Sprintf(" in connection with: %s", strings.Join(m.connections, " · ")))
+		withWho := lipgloss.NewStyle().Foreground(m.themeColor).
+			Render(fmt.Sprintf(" in connection with: %s", strings.Join(m.connecctionsNicks, " · ")))
 		rightTopContent = lipgloss.JoinVertical(lipgloss.Left,
 			styles.PaddingLeftCDimStyle.Render("enter nickname to:"),
 			"",
@@ -600,13 +602,13 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 
 	nick := lipgloss.JoinVertical(lipgloss.Left,
 		styles.PaddingLeftCDimStyle.Width(leftLTopBoxWidth).Render("nickname:"),
-		styles.PaddingLeftCTextStyle.Render(m.user.Data.Personal.Nickname))
+		styles.PaddingLeftCTextStyle.Render(m.user.Data.Identity.Nickname))
 	reg := lipgloss.JoinVertical(lipgloss.Left,
 		styles.PaddingLeftCDimStyle.Width(leftLTopBoxWidth).Render("registered:"),
 		styles.PaddingLeftCTextStyle.Render(m.user.Data.Personal.RegisterTime))
 	bfView := lipgloss.JoinVertical(lipgloss.Left,
 		styles.PaddingLeftCDimStyle.Width(leftLTopBoxWidth).Render("best friend:"),
-		styles.PaddingLeftCTextStyle.Render(fmt.Sprintf("%s\n(%d conns)", bf.Nickname, bf.AmountOfConnections)))
+		styles.PaddingLeftCTextStyle.Render(fmt.Sprintf("%s\n(%d conns)", bf.Identity.Nickname, bf.AmountOfConnections)))
 	personalInfo := lipgloss.JoinVertical(lipgloss.Left, nick, "", reg, "", bfView)
 
 	leftLTopBox := lipgloss.JoinVertical(lipgloss.Left, lblTopLeft, "", personalInfo)
@@ -736,10 +738,10 @@ func (m Model) renderLoginTab(w, h int) string {
 }
 
 func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
-	coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Personal.Nickname)
+	coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Identity.Nickname)
 	usersAudioState := coloredUserNickname
 
-	if m.user.Engines.AudioEngine.UserIsSpeaking() {
+	if m.user.Engines.AudioEngine.CheckUserIsSpeaking() {
 		usersAudioState = coloredUserNickname + " 🔊"
 	}
 
@@ -751,9 +753,6 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 		usersAudioState += " 🙊"
 	}
 
-	// if m.muteState != "" {
-	// 	usersAudioState += m.muteState
-	// }
 	topSect := usersAudioState
 
 	chatW := w - 4
@@ -786,7 +785,7 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 		for _, c := range m.connections {
 
 			var state, rel string
-			id := m.user.GetFriendId(c)
+			id := c.ID
 			if _, ok := mutedUsers[id]; ok {
 				state = " 🔇"
 			} else if _, ok := speakingUsers[id]; ok {
@@ -801,13 +800,13 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 
 			bfTag := m.user.GetBFTag()
 			bf := m.user.GetBestFriend()
-			if c == bf.Nickname {
+			if c == bf.Identity {
 				rel = bfTag + " "
 			}
 
-			usersColor := m.usersColors[c]
+			usersColor := m.usersColors[c.Nickname]
 
-			coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c)
+			coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
 
 			cons = append(cons, rel+coloredNick+state)
 		}
@@ -1000,29 +999,4 @@ func (m Model) renderHelpView(w, h int) string {
 
 	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, styles.CDimStyle.Render(vertLine(h)))
 	return m.zone.Mark("profileW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
-}
-
-func vertLine(h int) string {
-	if h <= 0 {
-		return ""
-	}
-	return strings.Repeat("│\n", h-1) + "│"
-}
-func horizLine(w int) string {
-	if w <= 0 {
-		return ""
-	}
-	return strings.Repeat("—", w-1) + "—"
-}
-
-func safeTruncate(s string, maxW int) string {
-	if maxW <= 0 {
-		return ""
-	}
-	cleanStr := ansi.Strip(s)
-	runes := []rune(cleanStr)
-	if len(runes) > maxW {
-		return styles.CErrStyle.Render(string(runes[:maxW-2]) + "..")
-	}
-	return s
 }

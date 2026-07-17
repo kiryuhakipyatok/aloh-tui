@@ -10,23 +10,21 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/google/uuid"
 )
 
 type FriendReqItem struct {
-	Id       uuid.UUID
-	Nickname string
+	Identity users.Identity
 	ReqTime  string
 }
 
 func (fi FriendReqItem) Title() string {
-	return fi.Nickname
+	return fi.Identity.Nickname
 }
 func (fi FriendReqItem) Description() string {
 	return fi.DynamicDescription(false)
 }
 func (fi FriendReqItem) FilterValue() string {
-	return fi.Nickname
+	return fi.Identity.Nickname
 }
 
 func (fi FriendReqItem) DynamicDescription(isSelected bool) string {
@@ -43,7 +41,7 @@ func SetupFriendsReqsList(user *users.User, ls ListSetup) FriendsReqsList {
 
 	for _, f := range fReqs {
 		friendsReq = append(friendsReq, FriendReqItem{
-			Nickname: f.Nickname,
+			Identity: f.Identity,
 			ReqTime:  f.ReqTime.Local().Format("2006-01-02"),
 		})
 	}
@@ -80,7 +78,7 @@ func (l *FriendsReqsList) UpdateFriendsReqList(user *users.User) tea.Cmd {
 	fReqs := user.GetFriendsReqs()
 
 	slices.SortFunc(fReqs, func(f1 users.FriendReq, f2 users.FriendReq) int {
-		return strings.Compare(strings.ToLower(f1.Nickname), strings.ToLower(f2.Nickname))
+		return strings.Compare(strings.ToLower(f1.Identity.Nickname), strings.ToLower(f2.Identity.Nickname))
 	})
 
 	newItems := make([]list.Item, 0, len(fReqs))
@@ -88,8 +86,7 @@ func (l *FriendsReqsList) UpdateFriendsReqList(user *users.User) tea.Cmd {
 	for _, f := range fReqs {
 		t := time.Now().Format("2006-01-02")
 		newItems = append(newItems, FriendReqItem{
-			Id:       f.ID,
-			Nickname: f.Nickname,
+			Identity: f.Identity,
 			ReqTime:  t,
 		})
 	}

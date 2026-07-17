@@ -1,16 +1,21 @@
 package tui
 
 import (
+	"aloh-tui/internal/entities/users"
 	"aloh-tui/internal/tui/components/lists"
 	"aloh-tui/internal/tui/components/states"
+	"aloh-tui/internal/tui/components/styles"
 	"aloh-tui/internal/tui/components/titles"
+	"aloh-tui/pkg/errs"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/google/uuid"
 )
 
@@ -131,10 +136,23 @@ func isEqualOnline(newOnline, oldOnline map[string][]string) bool {
 	})
 }
 
-func isInConnections(conns []string, nickname string) bool {
-	return slices.ContainsFunc(conns, func(c string) bool {
-		return nickname == c
+func isInConnections(conns []users.Identity, iden users.Identity) bool {
+	return slices.ContainsFunc(conns, func(connIden users.Identity) bool {
+		return iden == connIden
 	})
+}
+
+func getIdentityInConnections(conns []users.Identity, id uuid.UUID) (users.Identity, error) {
+	var iden users.Identity
+	for _, c := range conns {
+		if c.ID == id {
+			iden = c
+		}
+	}
+	if iden.ID == uuid.Nil {
+		return iden, errs.ErrNotFound()
+	}
+	return iden, nil
 }
 
 func (m *Model) unfocusLists() {
@@ -170,8 +188,8 @@ func (m Model) selectSetting() (Model, tea.Cmd) {
 	return m, nil
 }
 
-func cloneMap(original map[uuid.UUID][]string) map[uuid.UUID][]string {
-	cp := make(map[uuid.UUID][]string, len(original))
+func cloneMap(original map[uuid.UUID][]users.Identity) map[uuid.UUID][]users.Identity {
+	cp := make(map[uuid.UUID][]users.Identity, len(original))
 	for k, v := range original {
 		cp[k] = v
 	}
@@ -189,4 +207,79 @@ func (m Model) Err(err error) (Model, tea.Cmd) {
 	m.err = err
 	m.state = states.ERR_STATE
 	return m, nil
+}
+
+func vertLine(h int) string {
+	if h <= 0 {
+		return ""
+	}
+	return strings.Repeat("│\n", h-1) + "│"
+}
+func horizLine(w int) string {
+	if w <= 0 {
+		return ""
+	}
+	return strings.Repeat("—", w-1) + "—"
+}
+
+func safeTruncate(s string, maxW int) string {
+	if maxW <= 0 {
+		return ""
+	}
+	cleanStr := ansi.Strip(s)
+	runes := []rune(cleanStr)
+	if len(runes) > maxW {
+		return styles.CErrStyle.Render(string(runes[:maxW-2]) + "..")
+	}
+	return s
+}
+
+func getOnlineIdentity(user *users.User, online map[uuid.UUID][]users.Identity, id uuid.UUID) (users.Identity, error) {
+	var (
+		iden users.Identity
+		err  error
+		wg   sync.WaitGroup
+	)
+
+	stop := make(chan struct{}, 1)
+
+	for o, conns := range online {
+		if o == id {
+			iden, err = user.GetFriendIdentityById(id)
+			if err != nil {
+				return iden, err
+			}
+			break
+		}
+		wg.Go(func() {
+			for _, c := range conns {
+				select {
+				case <-stop:
+					return
+				default:
+					if c.ID == id {
+						iden = c
+						stop <- struct{}{}
+						return
+					}
+				}
+			}
+		})
+	}
+
+	wg.Wait()
+
+	if iden.ID == uuid.Nil {
+		return iden, errs.ErrNotFound()
+	}
+
+	return iden, nil
+
+}
+
+func isBot(id uuid.UUID) bool {
+	b1, _ := uuid.Parse("ed6f7b67-be1c-4dbb-80e3-f42a2ed7da77")
+	b2, _ := uuid.Parse("34a0fff1-5b66-4122-a0d2-d7e8981539b0")
+	b3, _ := uuid.Parse("22dafd75-c7c6-49e1-8e74-e6ef4c6863a5")
+	return id == b1 || id == b2 || id == b3
 }

@@ -1,24 +1,24 @@
 package commands
 
 import (
+	"aloh-tui/internal/entities/users"
 	"aloh-tui/internal/networking"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/google/uuid"
 )
 
 type SoloDisconn struct {
-	Nickname string
+	Identity users.Identity
 	Err      error
 }
 
-func DisconnFromOne(netw networking.Networking, nickname string, id uuid.UUID) tea.Cmd {
+func DisconnFromOne(netw networking.Networking, iden users.Identity) tea.Cmd {
 	return func() tea.Msg {
 		msg := SoloDisconn{
-			Nickname: nickname,
+			Identity: iden,
 		}
 		if netw != nil {
-			if err := netw.DisconnectFromUser(id); err != nil {
+			if err := netw.DisconnectFromUser(iden.ID); err != nil {
 				msg.Err = err
 			}
 		}

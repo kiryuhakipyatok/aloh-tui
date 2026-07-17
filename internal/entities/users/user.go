@@ -10,13 +10,20 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	DEF_TM     = "#A6E22E"
+	DEF_BFTAG  = "👑"
+	DEF_NOTTAG = "🔔"
+	DEF_BANTAG = "🚫"
+)
+
 type User struct {
-	Data       Data
-	Paths      Paths
-	Networking networking.Networking
-	Engines    Engines
-	SSHClient  sshclient.SSHClient
-	mu         sync.RWMutex
+	Data       Data                  `json:"data"`
+	Paths      Paths                 `json:"paths"`
+	Networking networking.Networking `json:"-"`
+	Engines    Engines               `json:"-"`
+	SSHClient  sshclient.SSHClient   `json:"-"`
+	mu         sync.RWMutex          `json:"-"`
 }
 
 func NewUser(logFilePath, keysPath, dataFilePath string) *User {
@@ -39,11 +46,6 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 					DesktopNotifications: true,
 					AppNotifications:     true,
 				},
-				Appereance: Appereance{
-					ShowTime: true,
-					ShowDate: true,
-					ShowZone: true,
-				},
 				Binds: Binds{
 					FriendsTab:  "ALT+F",
 					ChatTab:     "ALT+C",
@@ -55,12 +57,18 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 					FullMute:    "ALT+B",
 					UserMute:    "ALT+Z",
 				},
+				Appereance: Appereance{
+					BestFriendTag:  DEF_BFTAG,
+					ThemeColor:     DEF_TM,
+					NotificaionTag: DEF_NOTTAG,
+					BanTag:         DEF_BANTAG,
+				},
 			},
 			Statistics: Statistics{
 				BestFriend: noBF(),
 			},
 			Personal: Personal{
-				Friends:     make(map[uuid.UUID]*Friend, 5),
+				Friends:     make(map[uuid.UUID]Friend, 5),
 				FriendsReqs: make([]FriendReq, 0, 5),
 			},
 		},
@@ -68,24 +76,25 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 }
 
 type Data struct {
-	Personal   Personal   `json:"personalData"`
+	Identity   Identity   `json:"identity"`
+	Personal   Personal   `json:"personal"`
 	Devices    Devices    `json:"devices"`
 	Setup      Setup      `json:"setup"`
 	Statistics Statistics `json:"statistics"`
 }
 
+type Identity = sshclient.Identity
+
 type Personal struct {
-	ID           uuid.UUID             `json:"id"`
-	Nickname     string                `json:"nickname"`
-	RegisterTime string                `json:"registerTime"`
-	FriendsReqs  []FriendReq           `json:"-"`
-	Friends      map[uuid.UUID]*Friend `json:"-"`
-	BlockedUsers []string              `json:"-"`
+	RegisterTime string               `json:"registerTime"`
+	FriendsReqs  []FriendReq          `json:"-"`
+	Friends      map[uuid.UUID]Friend `json:"-"`
+	BlockedUsers []Identity           `json:"-"`
 }
 
 type FriendReq struct {
-	FriendPersonal `json:"friend-personal"`
-	ReqTime        time.Time `json:"reqTime"`
+	Identity Identity  `json:"identity"`
+	ReqTime  time.Time `json:"reqTime"`
 }
 
 type Paths struct {
@@ -176,12 +185,14 @@ type Statistics struct {
 }
 
 type BestFriend struct {
-	Nickname            string `json:"nickname"`
-	AmountOfConnections uint   `json:"amount-of-connections"`
+	Identity            Identity `json:"identity"`
+	AmountOfConnections uint     `json:"amount-of-connections"`
 }
 
 func noBF() BestFriend {
 	return BestFriend{
-		Nickname: "nobody",
+		Identity: Identity{
+			Nickname: "nobody",
+		},
 	}
 }

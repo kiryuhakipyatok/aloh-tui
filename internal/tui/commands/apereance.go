@@ -81,7 +81,7 @@ func ChangeTaglineCmd(user *users.User, newTagline string) tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
-		if err := user.SSHClient.SetTagline(ctx, []byte(newTagline)); err != nil {
+		if err := user.SSHClient.SetTagline(ctx, newTagline); err != nil {
 			msg.Err = err
 			return msg
 		}

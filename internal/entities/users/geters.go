@@ -23,7 +23,7 @@ func (u *User) GetFriendsReqs() []FriendReq {
 	return u.Data.Personal.FriendsReqs
 }
 
-func (u *User) GetFriends() map[uuid.UUID]*Friend {
+func (u *User) GetFriends() map[uuid.UUID]Friend {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	return u.Data.Personal.Friends
@@ -179,43 +179,67 @@ func (u *User) GetAppereance() Appereance {
 	return u.Data.Setup.Appereance
 }
 
-func (u *User) IsFriend(id uuid.UUID) bool {
+func (u *User) IsFriend(iden Identity) bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	return u.conatinsFriends(id)
+	return u.conatinsFriends(iden)
 }
 
-func (u *User) IsBlocked(nickname string) bool {
+func (u *User) IsBlocked(iden Identity) bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	return slices.Contains(u.Data.Personal.BlockedUsers, nickname)
+	return slices.ContainsFunc(u.Data.Personal.BlockedUsers, func(bIden Identity) bool {
+		return iden.Nickname == bIden.Nickname || iden.ID == bIden.ID
+	})
 }
 
-func (u *User) GetFriendNickname(id uuid.UUID) string {
+func (u *User) GetFriendIdentityById(id uuid.UUID) (Identity, error) {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	f, ok := u.Data.Personal.Friends[id]
-	if !ok {
-		return ""
+	iden := Identity{
+		ID: id,
 	}
-	return f.Nickname
-}
-
-func (u *User) GetFriendId(nickname string) uuid.UUID {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	var id uuid.UUID
 	for _, f := range u.Data.Personal.Friends {
-		n := f.Nickname
-		if n == nickname {
-			id = f.ID
+		i := f.Identity.ID
+		if i == id {
+			iden.Nickname = f.Identity.Nickname
 			break
 		}
 	}
-	return id
+	if iden.ID == uuid.Nil {
+		return iden, errs.ErrNotFound()
+	}
+	return iden, nil
 }
 
-func (u *User) conatinsFriends(id uuid.UUID) bool {
-	_, ok := u.Data.Personal.Friends[id]
-	return ok
+func (u *User) GetFriendIdentityByNick(nickname string) (Identity, error) {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	iden := Identity{
+		Nickname: nickname,
+	}
+	for _, f := range u.Data.Personal.Friends {
+		n := f.Nickname
+		if n == nickname {
+			iden.ID = f.Identity.ID
+			break
+		}
+	}
+	if iden.ID == uuid.Nil {
+		return iden, errs.ErrNotFound()
+	}
+	return iden, nil
+}
+
+func (u *User) conatinsFriends(iden Identity) bool {
+	if _, ok := u.Data.Personal.Friends[iden.ID]; ok {
+		return true
+	}
+	for _, v := range u.Data.Personal.Friends {
+		if v.Nickname == iden.Nickname {
+			return true
+		}
+	}
+
+	return false
 }
