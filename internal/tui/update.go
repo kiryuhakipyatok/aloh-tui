@@ -873,7 +873,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.RawChatMessage:
 		data := msg.Data
-		textMsg := string(msg.Data)
+		var textMsg string
 		textForDesktopNotification := textMsg
 		dataLen := len(data)
 		if dataLen > 3 && slices.Equal(data[:3], []byte{'i', 'm', 'g'}) {
@@ -908,6 +908,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			textForDesktopNotification = fmt.Sprintf("image with len: %d", dataLen)
 			textMsg = fmt.Sprintf("\n%s", textMsg)
+		}else{
+			textMsg = string(msg.Data)
 		}
 
 		iden, err := getIdentityInConnections(m.connections, msg.Id)
@@ -976,10 +978,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			iden users.Identity
 			err  error
 		)
-		m.log.Info("online", m.online)
+	
 		iden, err = m.user.GetFriendIdentityById(id)
 		if err != nil {
-			m.log.Info("connected not friend")
+	
 			iden, err = m.getOnlineIdentity(cloneMap(m.online), id)
 			if err != nil {
 				m.err = err
@@ -992,9 +994,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				commands.WaitForPeerConnectionCmd(m.peerConnectionsChan))
 			return m, tea.Batch(cmds...)
 		}
-		m.log.Info("connected iden", iden)
-
-		var color lipgloss.Color
+	
 		nickname := iden.Nickname
 		uc, ok := m.usersColors[id]
 		if !ok {
@@ -1002,9 +1002,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.usersColors[id] = uc
 		}
 
-		m.log.Info("connected nick", nickname)
-
-		coloredNickname := lipgloss.NewStyle().Foreground(color).Render(nickname)
+		coloredNickname := lipgloss.NewStyle().Foreground(uc.MainColor).Render(nickname)
 
 		m.connections = append(m.connections, iden)
 		m.connecctionsNicks = append(m.connecctionsNicks, nickname)
@@ -1022,7 +1020,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		m.log.Info("user setup", us)
 
 		m.usersStates[id] = &userState{}
 
@@ -1058,7 +1055,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			iden users.Identity
 			err  error
 		)
-		m.log.Info("peer disconnected", id)
+
 
 		iden, err = m.user.GetFriendIdentityById(id)
 		if err != nil {
@@ -1108,7 +1105,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.usersStates, id)
 		//	id := iden.ID
 		coloredNickname := lipgloss.NewStyle().Foreground(m.usersColors[id].MainColor).Render(nickname)
-		m.log.Info("id", id)
+
 		if err := m.user.Engines.AudioEngine.RemoveFromUsersAudio(id); err != nil {
 			m.err = err
 			m.state = states.ERR_STATE

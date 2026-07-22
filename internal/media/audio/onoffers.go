@@ -21,10 +21,11 @@ func (ae *audioEngine) OnOffUsersHardDenoise(id uuid.UUID, state bool) error {
 	var err error
 	ua, ok := ae.usersAudio[id]
 	if !ok {
-		ua, err = ae.newUserAudio(id)
+		ua, err = ae.newUserAudio()
 		if err != nil {
 			return err
 		}
+		ae.usersAudio[id] = ua
 	}
 	if state && ua.personalHardDenoise == nil {
 		ua.personalHardDenoise = rnnoise.NewRNNoise()
@@ -44,10 +45,11 @@ func (ae *audioEngine) OnOffUsersSoftDenoise(id uuid.UUID, state bool) error {
 	var err error
 	ua, ok := ae.usersAudio[id]
 	if !ok {
-		ua, err = ae.newUserAudio(id)
+		ua, err = ae.newUserAudio()
 		if err != nil {
 			return err
 		}
+		ae.usersAudio[id] = ua
 	}
 	//s := ua.softDenoised.Load()
 	if state && ua.personalPreprocessor == nil {

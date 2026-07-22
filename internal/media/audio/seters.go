@@ -143,10 +143,13 @@ func (ae *audioEngine) SetMuteState(id uuid.UUID, mute bool) {
 	if existingUa, ok := ae.usersAudio[id]; ok {
 		existingUa.muted.Store(mute)
 	} else {
-		if _, err := ae.newUserAudio(id); err != nil {
-			ae.log.Error(0, "failed to create user audio", logger.Err(err))
+		var err error
+		ua, err = ae.newUserAudio()
+		if err != nil {
 			return
 		}
+
+		ae.usersAudio[id] = ua
 	}
 	ae.log.Info(0, "usersAudo after set mute state", ae.usersAudio)
 }
@@ -164,15 +167,17 @@ func (ae *audioEngine) SetVolume(id uuid.UUID, vc float32) {
 	if existingUa, ok := ae.usersAudio[id]; ok {
 		existingUa.volumeCoefficient = vc
 	} else {
-		if _, err := ae.newUserAudio(id); err != nil {
-			ae.log.Error(0, "failed to create user audio", logger.Err(err))
+		var err error
+		ua, err = ae.newUserAudio()
+		if err != nil {
 			return
 		}
+		ae.usersAudio[id] = ua
 	}
 	ae.log.Info(0, "usersAudo after set volume", ae.usersAudio)
 }
 
-func (ae *audioEngine) newUserAudio(id uuid.UUID) (*usersAudio, error) {
+func (ae *audioEngine) newUserAudio() (*usersAudio, error) {
 	opusDecoder, err := opus.NewDecoder(sampleRate, 1)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to create new opus decoder", logger.Err(err))
@@ -186,9 +191,6 @@ func (ae *audioEngine) newUserAudio(id uuid.UUID) (*usersAudio, error) {
 		volumeCoefficient: 1,
 		decodedBuffer:     make([]byte, 5760),
 		samples:           make([]int16, frameLen),
-	}
-	if _, ok := ae.usersAudio[id]; !ok {
-		ae.usersAudio[id] = newUa
 	}
 	return newUa, nil
 }

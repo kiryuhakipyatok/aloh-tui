@@ -27,11 +27,11 @@ func (ae *audioEngine) PlayUserVoice(id uuid.UUID, userVoiceByte []byte) {
 	ae.mu.Lock()
 	ua, ok := ae.usersAudio[id]
 	if !ok {
-		ua, err = ae.newUserAudio(id)
+		ua, err = ae.newUserAudio()
 		if err != nil {
-			ae.log.Error(ae.errLogCount, "failed to create user audio", logger.Err(err))
 			return
 		}
+		ae.usersAudio[id] = ua
 	}
 	if ua.muted.Load() {
 		ae.mu.Unlock()

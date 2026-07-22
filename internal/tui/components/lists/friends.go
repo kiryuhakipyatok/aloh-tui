@@ -50,7 +50,11 @@ func (fi FriendItem) DynamicDescription(isSelected bool) string {
 	}
 	if len(fi.ConnectionsNicks) > 0 {
 		conns := strings.Join(fi.ConnectionsNicks, " · ")
-		onStr = strings.TrimSpace(fi.Tagline + fmt.Sprintf(" | with: %s%s", conns, ent))
+		if fi.Tagline != "" {
+			onStr = strings.TrimSpace(fi.Tagline + fmt.Sprintf(" | with: %s%s", conns, ent))
+		} else {
+			onStr = fmt.Sprintf("with: %s%s", conns, ent)
+		}
 	}
 	return onStr
 }
