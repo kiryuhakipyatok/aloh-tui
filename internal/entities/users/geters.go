@@ -1,13 +1,14 @@
 package users
 
 import (
+	"aloh-tui/internal/entities/setups"
 	"aloh-tui/pkg/errs"
 	"slices"
 
 	"github.com/google/uuid"
 )
 
-func (u *User) GetUsersSetup(nickname string) (UsersSetup, error) {
+func (u *User) GetUsersSetup(nickname string) (setups.UsersSetup, error) {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
@@ -134,7 +135,7 @@ func (u *User) GetBFTag() string {
 func (u *User) GetTagline() string {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	return u.Data.Setup.Appereance.Tagline
+	return u.Data.Account.Tagline
 }
 
 func (u *User) GetBinds() Binds {
@@ -179,6 +180,12 @@ func (u *User) GetAppereance() Appereance {
 	return u.Data.Setup.Appereance
 }
 
+func (u *User) GetAccount() Account {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Account
+}
+
 func (u *User) IsFriend(iden Identity) bool {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
@@ -196,13 +203,11 @@ func (u *User) IsBlocked(iden Identity) bool {
 func (u *User) GetFriendIdentityById(id uuid.UUID) (Identity, error) {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	iden := Identity{
-		ID: id,
-	}
+	iden := Identity{}
 	for _, f := range u.Data.Personal.Friends {
 		i := f.Identity.ID
 		if i == id {
-			iden.Nickname = f.Identity.Nickname
+			iden = f.Identity
 			break
 		}
 	}
@@ -215,13 +220,11 @@ func (u *User) GetFriendIdentityById(id uuid.UUID) (Identity, error) {
 func (u *User) GetFriendIdentityByNick(nickname string) (Identity, error) {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	iden := Identity{
-		Nickname: nickname,
-	}
+	iden := Identity{}
 	for _, f := range u.Data.Personal.Friends {
 		n := f.Nickname
 		if n == nickname {
-			iden.ID = f.Identity.ID
+			iden = f.Identity
 			break
 		}
 	}
@@ -229,6 +232,12 @@ func (u *User) GetFriendIdentityByNick(nickname string) (Identity, error) {
 		return iden, errs.ErrNotFound()
 	}
 	return iden, nil
+}
+
+func (u *User) GetUserIdentity() Identity {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.Data.Identity
 }
 
 func (u *User) conatinsFriends(iden Identity) bool {

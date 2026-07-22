@@ -1,8 +1,6 @@
 package audio
 
 import (
-	"aloh-tui/pkg/errs"
-
 	"github.com/google/uuid"
 	"github.com/kechako/go-speexdsp"
 	rnnoise "github.com/kiryuhakipyatok/rnnoise/cmd"
@@ -20,11 +18,14 @@ type OnOffers interface {
 func (ae *audioEngine) OnOffUsersHardDenoise(id uuid.UUID, state bool) error {
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
+	var err error
 	ua, ok := ae.usersAudio[id]
 	if !ok {
-		return errs.ErrNotFound()
+		ua, err = ae.newUserAudio(id)
+		if err != nil {
+			return err
+		}
 	}
-	//s := ua.hardDenoised.Load()
 	if state && ua.personalHardDenoise == nil {
 		ua.personalHardDenoise = rnnoise.NewRNNoise()
 	} else if !state && ua.personalHardDenoise != nil {
@@ -40,13 +41,17 @@ func (ae *audioEngine) OnOffUsersHardDenoise(id uuid.UUID, state bool) error {
 func (ae *audioEngine) OnOffUsersSoftDenoise(id uuid.UUID, state bool) error {
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
+	var err error
 	ua, ok := ae.usersAudio[id]
 	if !ok {
-		return errs.ErrNotFound()
+		ua, err = ae.newUserAudio(id)
+		if err != nil {
+			return err
+		}
 	}
 	//s := ua.softDenoised.Load()
 	if state && ua.personalPreprocessor == nil {
-		ua.personalPreprocessor = speexdsp.NewPreprocessor(48000, 960)
+		ua.personalPreprocessor = speexdsp.NewPreprocessor(sampleRate, frameLen)
 		ua.personalPreprocessor.EnableDenoise(true)
 		ua.personalPreprocessor.SetEchoCanceller(nil)
 	} else if !state && ua.personalPreprocessor != nil {

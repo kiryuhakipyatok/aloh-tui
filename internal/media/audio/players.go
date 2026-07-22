@@ -5,7 +5,6 @@ import (
 	"aloh-tui/pkg/logger"
 
 	"github.com/google/uuid"
-	"gopkg.in/hraban/opus.v2"
 )
 
 type Players interface {
@@ -24,27 +23,15 @@ func (ae *audioEngine) PlayUserVoice(id uuid.UUID, userVoiceByte []byte) {
 	if ae.muted.Load() || ae.switching.Load() {
 		return
 	}
+	var err error
 	ae.mu.Lock()
 	ua, ok := ae.usersAudio[id]
 	if !ok {
-		opusDecoder, err := opus.NewDecoder(48000, 1)
+		ua, err = ae.newUserAudio(id)
 		if err != nil {
-			ae.log.Error(ae.errLogCount, "failed to create new opus decoder", logger.Err(err))
-			ae.mu.Unlock()
+			ae.log.Error(ae.errLogCount, "failed to create user audio", logger.Err(err))
 			return
 		}
-
-		ua = &usersAudio{
-			data:              make([]byte, 0, 48000),
-			float32Buffer:     make([]float32, frameLen),
-			denoicedBuffer:    make([]float32, frameLen),
-			decoder:           opusDecoder,
-			volumeCoefficient: 1,
-			decodedBuffer:     make([]byte, 5760),
-			samples:           make([]int16, frameLen),
-		}
-
-		ae.usersAudio[id] = ua
 	}
 	if ua.muted.Load() {
 		ae.mu.Unlock()

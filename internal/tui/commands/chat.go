@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"aloh-tui/internal/entities/users"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 )
@@ -13,7 +15,7 @@ type RawChatMessage struct {
 
 type ChatMessage struct {
 	Time     string
-	Nickname string
+	Identity users.Identity
 	Text     string
 }
 

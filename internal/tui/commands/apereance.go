@@ -2,14 +2,12 @@ package commands
 
 import (
 	"aloh-tui/internal/entities/users"
-	"context"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 const (
-	COLOR = iota
+	THEME_COLOR = iota
 	BFTAG
 	N_TAG
 	B_TAG
@@ -17,7 +15,6 @@ const (
 	S_DATE
 	S_WEATHER
 	S_ZONE
-	TAGLINE
 )
 
 type AppereanceMsg struct {
@@ -29,7 +26,7 @@ type AppereanceMsg struct {
 func ChangeThemeColorCmd(user *users.User, newThemeColor string) tea.Cmd {
 	return func() tea.Msg {
 		msg := AppereanceMsg{
-			Typee: COLOR,
+			Typee: THEME_COLOR,
 		}
 		if err := user.ChangeThemeColor(newThemeColor); err != nil {
 			msg.Err = err
@@ -68,24 +65,6 @@ func ChangeBanTagCmd(user *users.User, newBanTag string) tea.Cmd {
 			Typee: B_TAG,
 		}
 		if err := user.ChangeBanTag(newBanTag); err != nil {
-			msg.Err = err
-		}
-		return msg
-	}
-}
-
-func ChangeTaglineCmd(user *users.User, newTagline string) tea.Cmd {
-	return func() tea.Msg {
-		msg := AppereanceMsg{
-			Typee: TAGLINE,
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		defer cancel()
-		if err := user.SSHClient.SetTagline(ctx, newTagline); err != nil {
-			msg.Err = err
-			return msg
-		}
-		if err := user.ChangeTagline(newTagline); err != nil {
 			msg.Err = err
 		}
 		return msg

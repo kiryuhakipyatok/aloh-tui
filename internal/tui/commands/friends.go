@@ -224,3 +224,47 @@ func UpdateCurrentConnectsCmd(user *users.User, conns []users.Identity) tea.Cmd 
 		return msg
 	}
 }
+
+func UpdateFriendsTaglineCmd(user *users.User, iden users.Identity, newTagline string) tea.Cmd {
+	return func() tea.Msg {
+		msg := FriendsMsg{
+			Typee:    sshclient.UPDATE_TAGLINE,
+			Identity: iden,
+		}
+
+		if err := user.UpdateFriendTagline(iden.ID, newTagline); err != nil {
+			msg.Err = err
+		}
+		return msg
+	}
+}
+
+func UpdateFriendsColorCmd(user *users.User, iden users.Identity, newColor string) tea.Cmd {
+	return func() tea.Msg {
+		msg := FriendsMsg{
+			Typee:    sshclient.UPDATE_COLOR,
+			Identity: iden,
+		}
+
+		if err := user.UpdateFriendColor(iden, newColor); err != nil {
+			msg.Err = err
+		}
+
+		return msg
+	}
+}
+
+func UpdateForeignNicknameCmd(user *users.User, iden users.Identity, newNickname string) tea.Cmd {
+	return func() tea.Msg {
+		msg := FriendsMsg{
+			Typee: sshclient.UPDATE_NICKNAME,
+		}
+
+		if err := user.UpdateForeignNickname(iden, newNickname); err != nil {
+			msg.Err = err
+		}
+		iden.Nickname = newNickname
+		msg.Identity = iden
+		return msg
+	}
+}

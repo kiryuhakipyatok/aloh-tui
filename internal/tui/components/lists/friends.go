@@ -14,18 +14,14 @@ import (
 type FriendItem struct {
 	Identity         users.Identity
 	Tagline          string
+	Relation         string
 	Connections      []users.Identity
 	ConnectionsNicks []string
-	BFTag            string
 	IsOnline         bool
 }
 
 func (fi FriendItem) Title() string {
-	name := fi.Identity.Nickname
-	if fi.BFTag != "" {
-		name = fi.BFTag + " " + name
-	}
-	return name
+	return fi.Relation + " " + fi.Identity.Nickname
 }
 
 func (fi FriendItem) Description() string {
@@ -76,7 +72,7 @@ func SetupFriendsList(user *users.User, ls ListSetup) FriendsList {
 			Tagline:          f.Tagline,
 			Connections:      nil,
 			ConnectionsNicks: nil,
-			BFTag:            rel,
+			Relation:         rel,
 			IsOnline:         false,
 		})
 	}
@@ -133,16 +129,14 @@ func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[uuid.UUI
 		)
 		if cons, ok := curOnline[id]; ok {
 			nicks := make([]string, 0, len(cons))
-			for i, c := range cons {
+			for _, c := range cons {
 				n := c.Nickname
 				if bfIden.ID == c.ID {
-					n = bfTag + " " + n
-					curOnline[id][i].Nickname = n
+					n = bfTag + " " + c.Nickname
 				} else if user.IsBlocked(c) {
-					n = banTag + " " + n
-					curOnline[id][i].Nickname = n
+					n = banTag + " " + c.Nickname
 				}
-				nicks = append(nicks, c.Nickname)
+				nicks = append(nicks, n)
 			}
 			nicknames = nicks
 			isOnline = true
@@ -159,7 +153,7 @@ func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[uuid.UUI
 			Tagline:          f.Tagline,
 			Connections:      conns,
 			ConnectionsNicks: nicknames,
-			BFTag:            rel,
+			Relation:         rel,
 			IsOnline:         isOnline,
 		}
 

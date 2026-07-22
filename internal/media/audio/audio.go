@@ -66,7 +66,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 
 	notificationSound := notifications.NotificationSoundBytes()
 
-	opusEncoder, err := opus.NewEncoder(freq, 1, opus.Application(opus.AppVoIP))
+	opusEncoder, err := opus.NewEncoder(sampleRate, 1, opus.Application(opus.AppVoIP))
 	if err != nil {
 		log.Error("failed to create new opus encoder", logger.Err(err))
 		return nil, err
@@ -88,9 +88,9 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 
 	rnnoise := rnnoise.NewRNNoise()
 
-	echoCanceller := speexdsp.NewEchoCanceller(mono, mono, freq, frameLen, 4800)
+	echoCanceller := speexdsp.NewEchoCanceller(mono, mono, sampleRate, frameLen, 4800)
 
-	preprocessor := speexdsp.NewPreprocessor(freq, frameLen)
+	preprocessor := speexdsp.NewPreprocessor(sampleRate, frameLen)
 
 	if as.Aec {
 		preprocessor.SetEchoCanceller(echoCanceller)
@@ -98,8 +98,8 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 
 	preprocessor.EnableDenoise(as.SoftDenoice)
 
-	lowShelfFilter := filter.NewLowShelfFilter(freq, 200, -4)
-	highShelfFilter := filter.NewHighShelfFilter(freq, 4500, 4)
+	lowShelfFilter := filter.NewLowShelfFilter(sampleRate, 200, -4)
+	highShelfFilter := filter.NewHighShelfFilter(sampleRate, 4500, 4)
 
 	ae := &audioEngine{
 		usersAudio: make(map[uuid.UUID]*usersAudio, 10),
@@ -342,13 +342,13 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 	captureSampleRate := int(ae.captureDevice.SampleRate())
 	playbackSampleRate := int(ae.playbackDevice.SampleRate())
 
-	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, freq, 7)
+	captureResampler, err := speexdsp.NewResampler(1, captureSampleRate, sampleRate, 7)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
 		return nil, err
 	}
 
-	playbackResampler, err := speexdsp.NewResampler(1, freq, playbackSampleRate, 7)
+	playbackResampler, err := speexdsp.NewResampler(1, sampleRate, playbackSampleRate, 7)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to create new playback resampler", logger.Err(err))
 		return nil, err
@@ -432,6 +432,12 @@ func (ae *audioEngine) start() error {
 func (ae *audioEngine) Stop() {
 	ae.lifecycleMu.Lock()
 	defer ae.lifecycleMu.Unlock()
+
+	ae.stopSendVoiceChan <- struct{}{}
+
+	close(ae.stopSendVoiceChan)
+	close(ae.micDataChan)
+
 	if ae.playbackDevice != nil {
 		if err := ae.playbackDevice.Stop(); err != nil {
 			ae.log.Error(0, "failed to stop playback device", logger.Err(err))
@@ -453,16 +459,18 @@ func (ae *audioEngine) Stop() {
 		ae.malgoCtx = nil
 	}
 
-	if ae.echoCanceller != nil {
-		if err := ae.echoCanceller.Close(); err != nil {
-			ae.log.Error(0, "failed to close echo canceller", logger.Err(err))
-		}
-	}
-
 	if ae.preprocessor != nil {
 		if err := ae.preprocessor.Close(); err != nil {
 			ae.log.Error(0, "failed to close preprocessor", logger.Err(err))
 		}
+		ae.preprocessor = nil
+	}
+
+	if ae.echoCanceller != nil {
+		if err := ae.echoCanceller.Close(); err != nil {
+			ae.log.Error(0, "failed to close echo canceller", logger.Err(err))
+		}
+		ae.echoCanceller = nil
 	}
 
 	if ae.captureResampler != nil {
@@ -476,10 +484,6 @@ func (ae *audioEngine) Stop() {
 			ae.log.Error(0, "failed to close playback resampler", logger.Err(err))
 		}
 	}
-
-	ae.stopSendVoiceChan <- struct{}{}
-	close(ae.stopSendVoiceChan)
-	close(ae.micDataChan)
 
 	ae.log.Info(0, "audio engine stopped")
 }

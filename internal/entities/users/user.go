@@ -1,6 +1,7 @@
 package users
 
 import (
+	"aloh-tui/internal/entities/setups"
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
@@ -39,7 +40,7 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 					Denoises: Denoises{
 						SoftDenoise: true,
 					},
-					UsersSetup: make(map[string]UsersSetup, 5),
+					UsersSetup: make(map[string]setups.UsersSetup, 5),
 				},
 				Notifications: Notifications{
 					AudioNotifications:   true,
@@ -80,6 +81,7 @@ type Data struct {
 	Personal   Personal   `json:"personal"`
 	Devices    Devices    `json:"devices"`
 	Setup      Setup      `json:"setup"`
+	Account    Account    `json:"account"`
 	Statistics Statistics `json:"statistics"`
 }
 
@@ -139,7 +141,11 @@ type Appereance struct {
 	ShowTime       bool   `json:"show-time"`
 	ShowDate       bool   `json:"show-date"`
 	ShowZone       bool   `json:"show-zone"`
-	Tagline        string `json:"tagline"`
+}
+
+type Account struct {
+	Tagline string `json:"tagline"`
+	Color   string `json:"color"`
 }
 
 type Notifications struct {
@@ -154,7 +160,7 @@ type Audio struct {
 	Mutes    Mutes    `json:"mutes"`
 	Filter   bool     `json:"filter"`
 
-	UsersSetup map[string]UsersSetup `json:"users-setup"`
+	UsersSetup map[string]setups.UsersSetup `json:"users-setup"`
 }
 
 type Denoises struct {
@@ -165,14 +171,6 @@ type Denoises struct {
 type Mutes struct {
 	FullMute bool `json:"full-mute"`
 	MicMute  bool `json:"mic-mute"`
-}
-
-type UsersSetup struct {
-	VolumeCoefficient   float32 `json:"volume-coeficent"`
-	Muted               bool    `json:"muted"`
-	HardDenoise         bool    `json:"hardDenoise"`
-	SoftDenoise         bool    `json:"softDenoise"`
-	AmountOfConnections uint    `json:"amount-of-connections"`
 }
 
 type Statistics struct {

@@ -22,6 +22,8 @@ const (
 	UPDATE_HARD_DENOISE = alohssh.UPDATE_HARD_DENOISE
 	UPDATE_SOFT_DENOISE = alohssh.UPDATE_SOFT_DENOISE
 	UPDATE_TAGLINE      = alohssh.UPDATE_TAGLINE
+	UPDATE_NICKNAME     = alohssh.UPDATE_NICKNAME
+	UPDATE_COLOR        = alohssh.UPDATE_COLOR
 
 	SEND_FRIEND_REQ
 )
@@ -33,6 +35,8 @@ type (
 	UsersSoftDenoiseData = alohssh.UsersSoftDenoiseData
 	TaglineData          = alohssh.TaglineData
 	Identity             = alohssh.Identity
+	NicknameData         = alohssh.NicknameData
+	ColorData            = alohssh.ColorData
 )
 
 func (sc *sshClient) proccessEventsChan() {
@@ -115,6 +119,22 @@ func CastToTaglineData(data []byte) (TaglineData, error) {
 		return tg, err
 	}
 	return tg, nil
+}
+
+func CastToColorData(data []byte) (ColorData, error) {
+	var cd ColorData
+	if err := json.Unmarshal(data, &cd); err != nil {
+		return cd, err
+	}
+	return cd, nil
+}
+
+func CastToNickanameData(data []byte) (NicknameData, error) {
+	var nd NicknameData
+	if err := json.Unmarshal(data, &nd); err != nil {
+		return nd, err
+	}
+	return nd, nil
 }
 
 func MarshData(d any) ([]byte, error) {

@@ -15,7 +15,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/AvraamMavridis/randomcolor"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -90,8 +89,11 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			regTextInputs: make([]textinput.Model, 3),
 			logingInput:   make([]textinput.Model, 2),
 
-			appereanceInputs: make([]textinput.Model, 5),
+			appereanceInputs: make([]textinput.Model, 4),
 			friendsInputs:    make([]textinput.Model, 5),
+
+			passwordInputs: make([]textinput.Model, 3),
+			nicknameInputs: make([]textinput.Model, 2),
 		},
 
 		chat: chat{
@@ -112,8 +114,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		},
 
 		colors: colors{
-			usersColors: make(map[string]styles.UserColors, 5),
-			userColor:   randomcolor.GetRandomColorInHex(),
+			usersColors: make(map[uuid.UUID]styles.UserColors, 5),
 		},
 
 		log: appLogger,
@@ -165,13 +166,14 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m *Model) Clean() {
-	if m.user.Engines.AudioEngine != nil {
-		m.user.Engines.AudioEngine.SetDisconnected()
-		m.user.Engines.AudioEngine.Stop()
-	}
 
 	if m.user.Networking != nil {
 		m.user.Networking.Close()
+	}
+
+	if m.user.Engines.AudioEngine != nil {
+		m.user.Engines.AudioEngine.SetDisconnected()
+		m.user.Engines.AudioEngine.Stop()
 	}
 
 	if m.user.SSHClient != nil {

@@ -26,6 +26,25 @@ func SetUserVolumeCmd(user *users.User, iden users.Identity, volumeCoeficent flo
 	}
 }
 
+func SetupUsersVolumeCmd(user *users.User, iden users.Identity) tea.Cmd {
+	return func() tea.Msg {
+		var vc float32 = 1
+		msg := UsersVolumeMsg{}
+		if user.Engines.AudioEngine != nil {
+			us, err := user.GetUsersSetup(iden.Nickname)
+			if err != nil {
+				msg.Err = err
+				return msg
+			}
+
+			vc = us.VolumeCoefficient
+
+			user.Engines.AudioEngine.SetVolume(iden.ID, vc)
+		}
+		return msg
+	}
+}
+
 func SetupUserVolumeCmd(user *users.User, iden users.Identity) tea.Cmd {
 	return func() tea.Msg {
 		var vc float32 = 1

@@ -9,6 +9,7 @@ import (
 	"aloh-tui/internal/utils"
 	"time"
 
+	"github.com/AvraamMavridis/randomcolor"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
@@ -89,6 +90,35 @@ func (m *Model) setupInputs() {
 		m.logingInput[i] = ti
 	}
 
+	for i := range m.nicknameInputs {
+		ti := textinput.New()
+		ti.PlaceholderStyle = styles.CGrayStyle
+		switch i {
+		case 0:
+			ti.CharLimit = 24
+			ti.Placeholder = "nickname"
+		case 1:
+			ti.Placeholder = "password"
+			ti.EchoMode = textinput.EchoPassword
+		}
+		m.nicknameInputs[i] = ti
+	}
+
+	for i := range m.passwordInputs {
+		ti := textinput.New()
+		ti.PlaceholderStyle = styles.CGrayStyle
+		ti.EchoMode = textinput.EchoPassword
+		switch i {
+		case 0:
+			ti.Placeholder = "old password"
+		case 1:
+			ti.Placeholder = "new password"
+		case 2:
+			ti.Placeholder = "repeat new password"
+		}
+		m.passwordInputs[i] = ti
+	}
+
 	for i := range m.friendsInputs {
 		ti := textinput.New()
 		ti.PlaceholderStyle = styles.CGrayStyle
@@ -112,6 +142,15 @@ func (m *Model) setupInputs() {
 	chatInput.Placeholder = "type a message..."
 	m.chatTextInput = chatInput
 
+	colorInput := textinput.New()
+	colorInput.Placeholder = "new color in hex, r to tandom"
+	m.colorInput = colorInput
+
+	taglineInput := textinput.New()
+	taglineInput.Placeholder = "new tagline"
+	taglineInput.CharLimit = 28
+	m.taglineInput = taglineInput
+
 	for i := range m.appereanceInputs {
 		ti := textinput.New()
 		ti.PlaceholderStyle = styles.CGrayStyle
@@ -125,13 +164,29 @@ func (m *Model) setupInputs() {
 			ti.Placeholder = "new notification tag, d to default"
 		case 3:
 			ti.Placeholder = "new ban tag, d to default"
-		case 4:
-			ti.CharLimit = 28
-			ti.Placeholder = "new tagline"
+			// case 4:
+			// 	ti.CharLimit = 28
+			// 	ti.Placeholder = "new tagline"
+			// case 5:
+			// 	ti.CharLimit = 24
+			// 	ti.Placeholder = "new nickname"
 		}
 		m.appereanceInputs[i] = ti
 	}
 
+	// for i := range m.accountInputs {
+	// 	ti := textinput.New()
+	// 	ti.PlaceholderStyle = styles.CGrayStyle
+	// 	switch i {
+	// 	case 0:
+	// 		ti.CharLimit = 24
+	// 		ti.Placeholder = "new nickname"
+	// 	case 2:
+	// 		ti.CharLimit = 28
+	// 		ti.Placeholder = "new tagline"
+	// 	}
+	// 	m.appereanceInputs[i] = ti
+	// }
 }
 
 func (m *Model) setupUsersLists() {
@@ -162,6 +217,31 @@ func (m *Model) setupUsersLists() {
 	m.notificationsList = lists.SetupSwitcherList(m.user, lists.NOTIFICATIONS, ls)
 
 	m.audioList = lists.SetupSwitcherList(m.user, lists.AUDIO, ls)
+	m.accountList = lists.SetupAccountList(m.user, ls)
+}
+
+func (m *Model) setupFriendsColors() {
+	friends := m.user.GetFriends()
+	for _, f := range friends {
+		m.usersColors[f.ID] = newUC(f.Color)
+	}
+}
+
+func newUC(color string) styles.UserColors {
+	var uc styles.UserColors
+	if color != "" {
+		uc = styles.UserColors{
+			MainColor: lipgloss.Color(color),
+			SubColor:  lipgloss.Color(utils.DarkenHex(color, 0.7)),
+		}
+	} else {
+		hex := randomcolor.GetRandomColorInHex()
+		uc = styles.UserColors{
+			MainColor: lipgloss.Color(hex),
+			SubColor:  lipgloss.Color(utils.DarkenHex(hex, 0.7)),
+		}
+	}
+	return uc
 }
 
 func (m *Model) setupModelsLists() {
@@ -200,7 +280,18 @@ func (m *Model) setupAnims() {
 	m.aloneAnim = []string{titles.ALONE1, titles.ALONE2, titles.ALONE3, titles.ALONE2}
 }
 
+func setupUserColor(color string) lipgloss.Color {
+	var c string
+	if color == "" {
+		c = randomcolor.GetRandomColorInHex()
+	} else {
+		c = color
+	}
+	return lipgloss.Color(c)
+}
+
 func (m *Model) setupColors() {
+	m.userColor = setupUserColor(m.user.Data.Account.Color)
 	m.themeColor = lipgloss.Color(m.user.Data.Setup.Appereance.ThemeColor)
 	m.subThemeColor = lipgloss.Color(utils.DarkenHex(m.user.Data.Setup.Appereance.ThemeColor, 0.7))
 	m.headerActiveStyle = lipgloss.NewStyle().Foreground(m.themeColor).Bold(true)

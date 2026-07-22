@@ -1,6 +1,8 @@
 package users
 
 import (
+	"aloh-tui/internal/entities/setups"
+	"aloh-tui/pkg/errs"
 	"encoding/json"
 	"maps"
 	"os"
@@ -47,7 +49,14 @@ func (u *User) IncreaseAmountOfConnectionsByUser(iden Identity) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if !u.conatinsFriends(iden) {
-		u.Data.Statistics.BestFriend = noBF()
+		return nil
+	}
+
+	if u.Data.Statistics.BestFriend.Identity == iden {
+		u.Data.Statistics.BestFriend.AmountOfConnections++
+		if err := u.UpdateUserJSON(); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -218,7 +227,17 @@ func (u *User) ChangeBanTag(tag string) error {
 func (u *User) ChangeTagline(tagline string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Appereance.Tagline = tagline
+	u.Data.Account.Tagline = tagline
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) ChangeColor(color string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Account.Color = color
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -273,7 +292,9 @@ func (u *User) MuteUnmuteUser(nickname string, res bool) error {
 	defer u.mu.Unlock()
 	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
 	if !ok {
-		us = UsersSetup{}
+		us = setups.UsersSetup{
+			VolumeCoefficient: 1,
+		}
 	}
 	us.Muted = res
 	u.Data.Setup.Audio.UsersSetup[nickname] = us
@@ -288,7 +309,9 @@ func (u *User) OnOffUsersHardDenoise(nickname string, res bool) error {
 	defer u.mu.Unlock()
 	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
 	if !ok {
-		us = UsersSetup{}
+		us = setups.UsersSetup{
+			VolumeCoefficient: 1,
+		}
 	}
 	us.HardDenoise = res
 	u.Data.Setup.Audio.UsersSetup[nickname] = us
@@ -303,7 +326,9 @@ func (u *User) OnOffUsersSoftDenoise(nickname string, res bool) error {
 	defer u.mu.Unlock()
 	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
 	if !ok {
-		us = UsersSetup{}
+		us = setups.UsersSetup{
+			VolumeCoefficient: 1,
+		}
 	}
 	us.SoftDenoise = res
 	u.Data.Setup.Audio.UsersSetup[nickname] = us
@@ -344,7 +369,7 @@ func (u *User) SetUsersVolume(nickname string, vc float32) error {
 	defer u.mu.Unlock()
 	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
 	if !ok {
-		us = UsersSetup{
+		us = setups.UsersSetup{
 			VolumeCoefficient: 1,
 		}
 	}
@@ -436,7 +461,7 @@ func (u *User) UnblockUser(iden Identity) {
 func (u *User) NewUserSetup(nickname string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Audio.UsersSetup[nickname] = UsersSetup{
+	u.Data.Setup.Audio.UsersSetup[nickname] = setups.UsersSetup{
 		VolumeCoefficient: 1,
 	}
 
@@ -446,14 +471,77 @@ func (u *User) NewUserSetup(nickname string) error {
 	return nil
 }
 
-func (u *User) UpdateFriendTagline(id uuid.UUID, tagline string) bool {
+func (u *User) UpdateFriendTagline(id uuid.UUID, tagline string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	_, ok := u.Data.Personal.Friends[id]
-	if ok {
-		f := u.Data.Personal.Friends[id]
-		f.Tagline = tagline
-		u.Data.Personal.Friends[id] = f
+	if !ok {
+		return errs.ErrNotFriend()
 	}
-	return ok
+
+	f := u.Data.Personal.Friends[id]
+	f.Tagline = tagline
+	u.Data.Personal.Friends[id] = f
+
+	return nil
+}
+
+func (u *User) NewNickname(newNickname string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Identity.Nickname = newNickname
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) UpdateForeignNickname(iden Identity, newNickname string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	foreignId := iden.ID
+	foreignNickname := iden.Nickname
+	fr, ok := u.Data.Personal.Friends[foreignId]
+	if ok {
+		fr.Nickname = newNickname
+		u.Data.Personal.Friends[iden.ID] = fr
+		if u.Data.Statistics.BestFriend.Identity.ID == foreignId {
+			u.Data.Statistics.BestFriend.Identity.Nickname = newNickname
+		}
+	} else {
+		for i, b := range u.Data.Personal.BlockedUsers {
+			if b.ID == foreignId {
+				u.Data.Personal.BlockedUsers[i].Nickname = newNickname
+				break
+			}
+		}
+	}
+	for i, fr := range u.Data.Personal.FriendsReqs {
+		if fr.Identity.ID == foreignId {
+			u.Data.Personal.FriendsReqs[i].Identity.Nickname = newNickname
+			break
+		}
+	}
+	us, ok := u.Data.Setup.Audio.UsersSetup[foreignNickname]
+	if ok {
+		delete(u.Data.Setup.Audio.UsersSetup, iden.Nickname)
+		u.Data.Setup.Audio.UsersSetup[newNickname] = us
+	}
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) UpdateFriendColor(iden Identity, newColor string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	foreignId := iden.ID
+	fr, ok := u.Data.Personal.Friends[foreignId]
+	if !ok {
+		return errs.ErrNotFound()
+	}
+	fr.Color = newColor
+	u.Data.Personal.Friends[iden.ID] = fr
+	return nil
 }

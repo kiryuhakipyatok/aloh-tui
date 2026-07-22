@@ -41,6 +41,7 @@ func SetupAuth(as AuthSetup) error {
 		var pd struct {
 			Identity     users.Identity    `json:"identity"`
 			Tagline      string            `json:"tagline"`
+			Color        string            `json:"string"`
 			RegisterTime time.Time         `json:"registerTime"`
 			FriendsReqs  []users.FriendReq `json:"friendsReqs"`
 			Friends      []users.Friend    `json:"friends"`
@@ -60,6 +61,8 @@ func SetupAuth(as AuthSetup) error {
 		as.User.Data.Personal.RegisterTime = pd.RegisterTime.Format("2006-01-02")
 		as.User.Data.Personal.FriendsReqs = pd.FriendsReqs
 		as.User.Data.Personal.Friends = fr
+		as.User.Data.Account.Tagline = pd.Tagline
+		as.User.Data.Account.Color = pd.Color
 		as.User.Data.Personal.BlockedUsers = pd.BlockedUsers
 		as.User.SSHClient = client
 
@@ -73,11 +76,13 @@ func SetupAuth(as AuthSetup) error {
 			HardDenoice: as.User.Data.Setup.Audio.Denoises.HardDenoise,
 			SoftDenoice: as.User.Data.Setup.Audio.Denoises.SoftDenoise,
 			Filtered:    as.User.Data.Setup.Audio.Filter,
+			MicMuted:    as.User.Data.Setup.Audio.Mutes.MicMute,
+			FullMuted:   as.User.Data.Setup.Audio.Mutes.FullMute,
 		})
 		if err != nil {
 			return err
 		}
-
+		
 		if err := audioEngine.SetNetworking(networking); err != nil {
 			return err
 		}
@@ -89,8 +94,6 @@ func SetupAuth(as AuthSetup) error {
 		if err := as.User.UpdateUserJSON(); err != nil {
 			return err
 		}
-
-		as.Log.Info("users ps", pd)
 	}
 	return nil
 }

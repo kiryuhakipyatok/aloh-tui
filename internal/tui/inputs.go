@@ -2,6 +2,7 @@ package tui
 
 import (
 	"aloh-tui/internal/tui/components/states"
+	"sync"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -36,36 +37,91 @@ func (m *Model) focusInputs() {
 			m.appereanceInputs[m.cursor].Focus()
 			m.appereanceInputs[m.cursor].PromptStyle = ps
 		}
+	case states.NICKNAME_STATE:
+		m.nicknameInputs[m.cursor].Focus()
+		m.nicknameInputs[m.cursor].PromptStyle = ps
+	case states.TAGLINE_STATE:
+		m.taglineInput.Focus()
+		m.taglineInput.PromptStyle = ps
+	case states.COLOR_STATE:
+		m.colorInput.Focus()
+		m.colorInput.PromptStyle = ps
+	case states.PASSWORD_STATE:
+		m.passwordInputs[m.cursor].Focus()
+		m.passwordInputs[m.cursor].PromptStyle = ps
 	}
 }
 
 func (m *Model) unfocusInputs() {
-	for i := range m.regTextInputs {
-		m.regTextInputs[i].Blur()
-		m.regTextInputs[i].PromptStyle = lipgloss.NewStyle()
-		m.regTextInputs[i].TextStyle = lipgloss.NewStyle()
-	}
+	var wg sync.WaitGroup
 
-	for i := range m.friendsInputs {
-		m.friendsInputs[i].Blur()
-		m.friendsInputs[i].PromptStyle = lipgloss.NewStyle()
-		m.friendsInputs[i].TextStyle = lipgloss.NewStyle()
-	}
+	wg.Go(func() {
+		for i := range m.regTextInputs {
+			m.regTextInputs[i].Blur()
+			m.regTextInputs[i].PromptStyle = lipgloss.NewStyle()
+			m.regTextInputs[i].TextStyle = lipgloss.NewStyle()
+		}
+	})
 
-	for i := range m.logingInput {
-		m.logingInput[i].Blur()
-		m.logingInput[i].PromptStyle = lipgloss.NewStyle()
-		m.logingInput[i].TextStyle = lipgloss.NewStyle()
-	}
+	wg.Go(func() {
+		for i := range m.friendsInputs {
+			m.friendsInputs[i].Blur()
+			m.friendsInputs[i].PromptStyle = lipgloss.NewStyle()
+			m.friendsInputs[i].TextStyle = lipgloss.NewStyle()
+		}
 
-	m.chatTextInput.Blur()
-	m.chatTextInput.PromptStyle = lipgloss.NewStyle()
-	m.chatTextInput.TextStyle = lipgloss.NewStyle()
+	})
 
-	for i := range m.appereanceInputs {
-		m.appereanceInputs[i].Blur()
-		m.appereanceInputs[i].PromptStyle = lipgloss.NewStyle()
-		m.appereanceInputs[i].TextStyle = lipgloss.NewStyle()
-	}
+	wg.Go(func() {
+		for i := range m.logingInput {
+			m.logingInput[i].Blur()
+			m.logingInput[i].PromptStyle = lipgloss.NewStyle()
+			m.logingInput[i].TextStyle = lipgloss.NewStyle()
+		}
+	})
+
+	wg.Go(func() {
+		m.chatTextInput.Blur()
+		m.chatTextInput.PromptStyle = lipgloss.NewStyle()
+		m.chatTextInput.TextStyle = lipgloss.NewStyle()
+	})
+
+	wg.Go(func() {
+		for i := range m.appereanceInputs {
+			m.appereanceInputs[i].Blur()
+			m.appereanceInputs[i].PromptStyle = lipgloss.NewStyle()
+			m.appereanceInputs[i].TextStyle = lipgloss.NewStyle()
+		}
+	})
+
+	wg.Go(func() {
+		for i := range m.nicknameInputs {
+			m.nicknameInputs[i].Blur()
+			m.nicknameInputs[i].PromptStyle = lipgloss.NewStyle()
+			m.nicknameInputs[i].TextStyle = lipgloss.NewStyle()
+		}
+	})
+
+	wg.Go(func() {
+		for i := range m.passwordInputs {
+			m.passwordInputs[i].Blur()
+			m.passwordInputs[i].PromptStyle = lipgloss.NewStyle()
+			m.passwordInputs[i].TextStyle = lipgloss.NewStyle()
+		}
+	})
+
+	wg.Go(func() {
+		m.colorInput.Blur()
+		m.colorInput.PromptStyle = lipgloss.NewStyle()
+		m.colorInput.TextStyle = lipgloss.NewStyle()
+	})
+
+	wg.Go(func() {
+		m.taglineInput.Blur()
+		m.taglineInput.PromptStyle = lipgloss.NewStyle()
+		m.taglineInput.TextStyle = lipgloss.NewStyle()
+	})
+
+	wg.Wait()
 
 }

@@ -10,7 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
+	"github.com/google/uuid"
+	"github.com/kiryuhakipyatok/aloh-signalling/pkg/errs"
 )
 
 type ConnectionItem struct {
@@ -38,7 +39,7 @@ func (ci ConnectionItem) FilterValue() string {
 
 func (ci ConnectionItem) DynamicDescription(isSelected bool) string {
 	if isSelected {
-		return fmt.Sprintf("volume: %.1f, muted: %t, psd: %t, phd: %t",
+		return fmt.Sprintf("volume: %.1f, muted: %t, psd: %t, phd: %t, SELECTED",
 			ci.VolumeCoefficient, ci.Muted, ci.PersonalSoftDenoise, ci.PersonalHardDenoise)
 	}
 
@@ -77,7 +78,7 @@ func SetupConnestionsList(ls ListSetup) ConnectionsList {
 	}
 }
 
-func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float32, muted, phd, psd bool) tea.Cmd {
+func (l *ConnectionsList) UpdateConnectionItemList(iden users.Identity, volume float32, muted, phd, psd bool) tea.Cmd {
 	var cmds []tea.Cmd
 	items := l.LipList.Items()
 	for i, v := range items {
@@ -85,7 +86,7 @@ func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float
 		if !ok {
 			continue
 		}
-		if ansi.Strip(conn.Identity.Nickname) == nickname {
+		if conn.Identity == iden {
 			conn.VolumeCoefficient = volume
 			conn.Muted = muted
 			conn.PersonalHardDenoise = phd
@@ -98,7 +99,7 @@ func (l *ConnectionsList) UpdateConnectionItemList(nickname string, volume float
 }
 
 func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []users.Identity,
-	colors map[string]styles.UserColors) tea.Cmd {
+	colors map[uuid.UUID]styles.UserColors) tea.Cmd {
 	slices.SortFunc(connections, func(c1, c2 users.Identity) int {
 		return strings.Compare(c1.Nickname, c2.Nickname)
 	})
@@ -119,7 +120,7 @@ func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []
 		if user.Data.Statistics.BestFriend.Identity.Nickname == name {
 			rel = user.Data.Setup.Appereance.BestFriendTag
 		}
-		coloredName := lipgloss.NewStyle().Foreground(colors[name].MainColor).Render(name)
+		coloredName := lipgloss.NewStyle().Foreground(colors[conn.ID].MainColor).Render(name)
 		conn.Nickname = coloredName
 		newItems = append(newItems, ConnectionItem{
 			Identity:          conn,
@@ -132,7 +133,7 @@ func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []
 	return l.LipList.SetItems(newItems)
 }
 
-func (l *ConnectionsList) GetConnectionItem(nickname string) ConnectionItem {
+func (l *ConnectionsList) GetConnectionItem(iden users.Identity) (ConnectionItem, error) {
 	var ci ConnectionItem
 
 	items := l.LipList.Items()
@@ -141,10 +142,13 @@ func (l *ConnectionsList) GetConnectionItem(nickname string) ConnectionItem {
 		if !ok {
 			continue
 		}
-		if ansi.Strip(conn.Identity.Nickname) == nickname {
+		if conn.Identity == iden {
 			ci = conn
 			break
 		}
 	}
-	return ci
+	if ci.Identity.ID == uuid.Nil {
+		return ci, errs.ErrNotFoundBase
+	}
+	return ci, errs.ErrNotFoundBase
 }

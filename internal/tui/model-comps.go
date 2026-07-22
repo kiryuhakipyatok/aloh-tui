@@ -55,6 +55,10 @@ type inputs struct {
 	logingInput      []textinput.Model
 	friendsInputs    []textinput.Model
 	appereanceInputs []textinput.Model
+	nicknameInputs   []textinput.Model
+	taglineInput     textinput.Model
+	colorInput       textinput.Model
+	passwordInputs   []textinput.Model
 }
 
 type chat struct {
@@ -77,14 +81,16 @@ type modelLists struct {
 	headphonesList    lists.DeviceList
 	apearenceList     lists.SwitcherList
 	friendsReqsList   lists.FriendsReqsList
+
+	accountList lists.SettingsList
 }
 
 type colors struct {
 	themeColor    lipgloss.Color
 	subThemeColor lipgloss.Color
 
-	userColor   string
-	usersColors map[string]styles.UserColors
+	userColor   lipgloss.Color
+	usersColors map[uuid.UUID]styles.UserColors
 }
 
 type chans struct {

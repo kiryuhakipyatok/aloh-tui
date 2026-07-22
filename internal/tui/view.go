@@ -59,8 +59,10 @@ func (m Model) View() string {
 	footer := lipgloss.JoinHorizontal(lipgloss.Bottom, leftFooterPart, rightFooterPart)
 	footerH := lipgloss.Height(footer)
 
+	userIden := m.user.GetUserIdentity()
+
 	rightHeaderPart := styles.CDimStyle.Padding(1, 1, 0, 0).
-		Render(strings.TrimSpace(strings.Join(m.rightHeaderData, " ")))
+		Render(strings.TrimSpace(strings.Join(m.rightHeaderData, " ")) + " " + userIden.Nickname)
 	rightHeaderW := lipgloss.Width(rightHeaderPart)
 
 	leftHeaderPart := lipgloss.NewStyle().Width(usableW-rightHeaderW).Foreground(m.themeColor).Padding(1, 0, 0, 1).Render(titles.A)
@@ -212,7 +214,7 @@ func (m Model) renderVoiceTab(w, h int) string {
 
 	for _, c := range m.connections {
 		state := ""
-		userColors := m.usersColors[c.Nickname]
+		userColors := m.usersColors[c.ID]
 		mainStyle := lipgloss.NewStyle().Foreground(userColors.MainColor)
 		subStyle := lipgloss.NewStyle().Foreground(userColors.SubColor)
 		bar := lipgloss.NewStyle().Foreground(userColors.SubColor).Render(fmt.Sprintf("voice power %.1f: ", 0.0))
@@ -448,7 +450,12 @@ func (m Model) renderSettingsView(w, h int) string {
 		return safeTruncate(lipgloss.NewStyle().PaddingLeft(2).Render(k+d), maxW)
 	}
 
-	switch m.state {
+	effState := m.state
+	if effState == states.LOAD_STATE {
+		effState = m.prState
+	}
+
+	switch effState {
 	case states.SETTINGS_STATE:
 		lblRight = m.headerActiveStyle.Render("► your settings setup")
 
@@ -530,6 +537,106 @@ func (m Model) renderSettingsView(w, h int) string {
 
 		lblLeft = m.headerActiveStyle.Render("► quick jumps binds")
 		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render("quick jumps binds")
+
+	case states.ACCOUNT_STATE:
+		lblRight = m.headerActiveStyle.Render("► account settings")
+		m.accountList.LipList.SetSize(rightW-2, h-2)
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.accountList.LipList.View())
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+	case states.NICKNAME_STATE:
+		lblRight = m.headerActiveStyle.Render("► account settings")
+		if m.state == states.LOAD_STATE {
+			rightContent = safeTruncate(styles.PaddingLeftCDimStyle.Render(m.spinner.View()+"changing nickname..."), rightW)
+		} else {
+			iden := m.user.GetUserIdentity()
+			for i := range m.nicknameInputs {
+				m.nicknameInputs[i].Width = max(1, rightW-6)
+			}
+
+			nickSettings := lipgloss.JoinVertical(lipgloss.Left,
+				styles.PaddingLeftCDimStyle.Render("current nickname: "+lipgloss.NewStyle().
+					Foreground(m.themeColor).Render(iden.Nickname)),
+				"",
+				lipgloss.NewStyle().PaddingLeft(2).Render(m.nicknameInputs[0].View()),
+				"",
+				lipgloss.NewStyle().PaddingLeft(2).Render(m.nicknameInputs[1].View()),
+			)
+
+			rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(nickSettings)
+		}
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+	case states.COLOR_STATE:
+		lblRight = m.headerActiveStyle.Render("► account settings")
+		if m.state == states.LOAD_STATE {
+			rightContent = safeTruncate(styles.PaddingLeftCDimStyle.Render(m.spinner.View()+"changing color..."), rightW)
+		} else {
+			account := m.user.GetAccount()
+			m.colorInput.Width = max(1, rightW-6)
+			var ac string
+			if account.Color != "" {
+				ac = lipgloss.NewStyle().Foreground(lipgloss.Color(account.Color)).Render(account.Color)
+			} else {
+				ac = "random"
+			}
+			colorSettings := lipgloss.JoinVertical(lipgloss.Left,
+				styles.PaddingLeftCDimStyle.Render("current color: "+ac), "",
+				lipgloss.NewStyle().PaddingLeft(2).Render(m.colorInput.View()))
+
+			rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(colorSettings)
+		}
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+	case states.TAGLINE_STATE:
+		lblRight = m.headerActiveStyle.Render("► account settings")
+		if m.state == states.LOAD_STATE {
+			rightContent = safeTruncate(styles.PaddingLeftCDimStyle.Render(m.spinner.View()+"changing tagline..."), rightW)
+		} else {
+			account := m.user.GetAccount()
+
+			m.taglineInput.Width = max(1, rightW-6)
+
+			taglineSettings := lipgloss.JoinVertical(lipgloss.Left,
+				styles.PaddingLeftCDimStyle.Render("current tagline: "+lipgloss.NewStyle().
+					Foreground(m.themeColor).Render(account.Tagline)), "",
+				lipgloss.NewStyle().PaddingLeft(2).Render(m.taglineInput.View()),
+			)
+
+			rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(taglineSettings)
+		}
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+	case states.PASSWORD_STATE:
+		lblRight = m.headerActiveStyle.Render("► account settings")
+		if m.state == states.LOAD_STATE {
+			rightContent = safeTruncate(styles.PaddingLeftCDimStyle.Render(m.spinner.View()+"changing password..."), rightW)
+		} else {
+			for i := range m.passwordInputs {
+				m.passwordInputs[i].Width = max(1, rightW-6)
+			}
+
+			passwordSettings := lipgloss.JoinVertical(lipgloss.Left,
+				styles.PaddingLeftCDimStyle.Render("current password: ************"), "",
+				lipgloss.NewStyle().PaddingLeft(2).Render(m.passwordInputs[0].View()), "",
+				lipgloss.NewStyle().PaddingLeft(2).Render(m.passwordInputs[1].View()), "",
+				lipgloss.NewStyle().PaddingLeft(2).Render(m.passwordInputs[2].View()),
+			)
+
+			rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(passwordSettings)
+		}
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
 	}
 
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", leftContent)
@@ -628,7 +735,8 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 	var leftBotContent string
 
 	if m.state == states.LOAD_STATE && m.prState == states.PROFILE_STATE && m.sideState == states.LEFT_STATE {
-		leftBotContent = lipgloss.NewStyle().MaxHeight(leftBotH).PaddingLeft(2).Render(m.spinner.View() + "accepting friend request...")
+		leftBotContent = lipgloss.NewStyle().MaxHeight(leftBotH).PaddingLeft(2).
+			Render(m.spinner.View() + "accepting friend request...")
 	} else if len(m.friendsReqsList.DefList.LipList.Items()) <= 0 {
 		leftBotContent = lipgloss.NewStyle().MaxHeight(leftBotH).PaddingLeft(2).Render("zero friend request")
 	} else {
@@ -652,13 +760,12 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 	for i := range m.appereanceInputs {
 		m.appereanceInputs[i].Width = max(1, rightW-6)
 	}
-	colors := lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render("colors")
 	tags := lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render("tags")
 	datetimes := lipgloss.NewStyle().PaddingLeft(2).Foreground(cText).Render("datetimes")
 
 	apereance := m.user.GetAppereance()
 
-	rightTopBox := lipgloss.JoinVertical(lipgloss.Left, colors, "",
+	rightTopBox := lipgloss.JoinVertical(lipgloss.Left,
 		styles.PaddingLeftCDimStyle.Render("theme color: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.ThemeColor)),
 		lipgloss.NewStyle().PaddingLeft(2).Render(m.appereanceInputs[0].View()),
 		"", tags, "",
@@ -670,9 +777,12 @@ func (m Model) renderProfileView(w, h int, cText lipgloss.AdaptiveColor) string 
 		"",
 		styles.PaddingLeftCDimStyle.Render("ban tag: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.BanTag)),
 		lipgloss.NewStyle().PaddingLeft(2).Render(m.appereanceInputs[3].View()),
-		"",
-		styles.PaddingLeftCDimStyle.Render("tagline: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.Tagline)),
-		lipgloss.NewStyle().PaddingLeft(2).Render(m.appereanceInputs[4].View()),
+	//	"",
+	// styles.PaddingLeftCDimStyle.Render("tagline: "+lipgloss.NewStyle().Foreground(m.themeColor).Render(apereance.Tagline)),
+	// lipgloss.NewStyle().PaddingLeft(2).Render(m.appereanceInputs[4].View()),
+	// "",
+	// styles.PaddingLeftCDimStyle.Render("nickname: "+styles.CTextStyle.Render(iden.Nickname)),
+	// lipgloss.NewStyle().PaddingLeft(2).Render(m.appereanceInputs[5].View()),
 	)
 
 	rightTopH := lipgloss.Height(rightTopBox)
@@ -804,7 +914,7 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 				rel = bfTag + " "
 			}
 
-			usersColor := m.usersColors[c.Nickname]
+			usersColor := m.usersColors[c.ID]
 
 			coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
 
@@ -823,7 +933,6 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 		if historyMaxH > 0 {
 			msgStyle := lipgloss.NewStyle().Width(w - 2).MaxWidth(w - 2).PaddingLeft(2)
 			fgColorStyle := lipgloss.NewStyle().Foreground(c)
-			boldSubText := styles.CSubTextStyle.Bold(true)
 
 			var gatheredLines []string
 			linesNeeded := historyMaxH + m.chatOffset
@@ -832,12 +941,11 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 				msg := m.messages[i]
 				t := styles.CDimStyle.Render(msg.Time)
 				var coloredNick string
-				usersColor, ok := m.usersColors[msg.Nickname]
+				usersColor, ok := m.usersColors[msg.Identity.ID]
 				if ok {
-					coloredNick = lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(msg.Nickname)
+					coloredNick = lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(msg.Identity.Nickname)
 				} else {
-					coloredNick = boldSubText.Render(msg.Nickname)
-
+					coloredNick = msg.Identity.Nickname
 				}
 
 				var renderedMsg string

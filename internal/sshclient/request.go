@@ -165,3 +165,75 @@ func (sc *sshClient) SetTagline(ctx context.Context, tagline string) error {
 		return nil
 	}
 }
+
+func (sc *sshClient) NewNickname(ctx context.Context, nickname string, password []byte) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		var d struct {
+			NewNickname string `json:"new-nickname"`
+			Password    []byte `json:"password"`
+		}
+		d.NewNickname = nickname
+		d.Password = password
+		data, err := MarshData(d)
+		if err != nil {
+			return err
+		}
+		status, payload, err := sc.client.SendRequest("new-nickname", true, data)
+		if err != nil {
+			return err
+		}
+		if !status {
+			return castErr(payload)
+		}
+		return nil
+	}
+}
+
+func (sc *sshClient) NewPassword(ctx context.Context, oldPassword, newPassword []byte) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		var pp struct {
+			OldPassword []byte `json:"old-password"`
+			NewPassword []byte `json:"new-password"`
+		}
+		pp.OldPassword = oldPassword
+		pp.NewPassword = newPassword
+		data, err := MarshData(pp)
+		if err != nil {
+			return err
+		}
+		status, payload, err := sc.client.SendRequest("new-password", true, data)
+		if err != nil {
+			return err
+		}
+		if !status {
+			return castErr(payload)
+		}
+		return nil
+	}
+}
+
+func (sc *sshClient) SetColor(ctx context.Context, color string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		data, err := MarshData(color)
+		if err != nil {
+			return err
+		}
+		status, payload, err := sc.client.SendRequest("set-color", true, data)
+		if err != nil {
+			return err
+		}
+		if !status {
+			return castErr(payload)
+		}
+		return nil
+	}
+}

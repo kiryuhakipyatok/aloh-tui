@@ -68,10 +68,10 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 				ae.stereoToMono(ae.micNativeBuffer[:nativeSamples], ae.monoCaptureBuffer[:monoSamples])
 				usingMicBuffer = ae.monoCaptureBuffer[:monoSamples]
 			}
-			if ae.captureDevice.SampleRate() == freq {
+			if ae.captureDevice.SampleRate() == sampleRate {
 				ae.workMic = append(ae.workMic, usingMicBuffer...)
 			} else {
-				outLen := int(float64(nativeSamples)*(freq/float64(ae.captureDevice.SampleRate()))) + 100
+				outLen := int(float64(nativeSamples)*(sampleRate/float64(ae.captureDevice.SampleRate()))) + 100
 				if len(ae.resampledWorkMic) < outLen {
 					ae.resampledWorkMic = make([]int16, outLen)
 				}
@@ -303,10 +303,10 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 				}
 				ae.mu.Unlock()
 
-				if ae.playbackDevice.SampleRate() == freq {
+				if ae.playbackDevice.SampleRate() == sampleRate {
 					ae.playbackNativeBuffer = append(ae.playbackNativeBuffer, ae.workMix[:frameLen]...)
 				} else {
-					outLen := int(float64(frameLen)*(float64(ae.playbackDevice.SampleRate())/freq)) + 100
+					outLen := int(float64(frameLen)*(float64(ae.playbackDevice.SampleRate())/sampleRate)) + 100
 					if cap(ae.resampledWorkMix) < outLen {
 						ae.resampledWorkMix = make([]int16, outLen+300)
 					}

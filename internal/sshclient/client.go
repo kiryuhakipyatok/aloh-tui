@@ -30,6 +30,9 @@ type SSHClient interface {
 	UnblockUser(ctx context.Context, nickname string) ([]byte, error)
 	UpdateCurrentConnects(ctx context.Context, conns []Identity) error
 	SetTagline(ctx context.Context, tagline string) error
+	NewNickname(ctx context.Context, nickname string, password []byte) error
+	NewPassword(ctx context.Context, oldPassword, newPassword []byte) error
+	SetColor(ctx context.Context, color string) error
 	Close()
 }
 
@@ -105,7 +108,7 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 
 		switch setup.Typee {
 		case LOGIN:
-			status, _, err = client.SendRequest("key", true, keyBytes)
+			status, payload, err = client.SendRequest("key", true, keyBytes)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -113,7 +116,7 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 				return nil, nil, castErr(payload)
 			}
 		case REGISTER:
-			status, _, err = client.SendRequest("pswrd", true, setup.Password)
+			status, payload, err = client.SendRequest("set-password", true, setup.Password)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -130,7 +133,6 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 		if !status {
 			return nil, nil, castErr(payload)
 		}
-		l.Info("pd", string(payload))
 		//}
 		eventChannel, requests, err := client.OpenChannel("event-channel", nil)
 		if err != nil {

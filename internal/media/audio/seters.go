@@ -11,11 +11,66 @@ import (
 
 type Seters interface {
 	SetNetworking(netw networking.Networking) error
+
 	SetConnected()
 	SetDisconnected() error
+
+	//SetUsersAudio(usersSetups map[uuid.UUID]setups.UsersSetup) error
+
 	SetVolume(id uuid.UUID, vc float32)
 	SetMuteState(id uuid.UUID, mute bool)
 }
+
+// func (ae *audioEngine) SetUsersAudio(usersSetups map[uuid.UUID]setups.UsersSetup) error {
+// 	opusDecoder, err := opus.NewDecoder(sampleRate, 1)
+// 	if err != nil {
+// 		ae.log.Error(ae.errLogCount, "failed to create new opus decoder", logger.Err(err))
+// 		return err
+// 	}
+// 	newUa := &usersAudio{
+// 		data:              make([]byte, 0, sampleRate),
+// 		float32Buffer:     make([]float32, frameLen),
+// 		denoicedBuffer:    make([]float32, frameLen),
+// 		decoder:           opusDecoder,
+// 		volumeCoefficient: 1,
+// 		decodedBuffer:     make([]byte, 5760),
+// 		samples:           make([]int16, frameLen),
+// 	}
+// 	ae.mu.Lock()
+// 	defer ae.mu.Unlock()
+// 	for id, us := range usersSetups {
+// 		newUa.muted.Store(us.Muted)
+// 		newUa.volumeCoefficient = us.VolumeCoefficient
+
+// 		userHardDenoiseState := us.HardDenoise
+// 		if userHardDenoiseState {
+// 			newUa.personalHardDenoise = rnnoise.NewRNNoise()
+// 		} else if !userHardDenoiseState && newUa.personalHardDenoise != nil {
+// 			if err := newUa.personalHardDenoise.Close(); err != nil {
+// 				return err
+// 			}
+// 			newUa.personalHardDenoise = nil
+// 		}
+// 		newUa.hardDenoised.Store(userHardDenoiseState)
+
+// 		userSoftDenoiseState := us.SoftDenoise
+// 		if userSoftDenoiseState && newUa.personalPreprocessor == nil {
+// 			newUa.personalPreprocessor = speexdsp.NewPreprocessor(sampleRate, frameLen)
+// 			newUa.personalPreprocessor.EnableDenoise(true)
+// 			newUa.personalPreprocessor.SetEchoCanceller(nil)
+// 		} else if !userSoftDenoiseState && newUa.personalPreprocessor != nil {
+// 			if err := newUa.personalPreprocessor.Close(); err != nil {
+// 				return err
+// 			}
+// 			newUa.personalPreprocessor = nil
+// 		}
+// 		newUa.softDenoised.Store(userSoftDenoiseState)
+
+// 		ae.usersAudio[id] = newUa
+
+// 	}
+// 	return nil
+// }
 
 func (ae *audioEngine) SetNetworking(netw networking.Networking) error {
 	if netw == nil {
@@ -76,19 +131,55 @@ func (ae *audioEngine) SetMuteState(id uuid.UUID, mute bool) {
 	ae.mu.Lock()
 	ua, ok := ae.usersAudio[id]
 	if ok {
+		ae.log.Info(0, "using existing ua in set mute state", ua)
 		ua.muted.Store(mute)
 		ae.mu.Unlock()
 		return
 	}
 	ae.mu.Unlock()
 
-	opusDecoder, err := opus.NewDecoder(48000, 1)
-	if err != nil {
-		ae.log.Error(ae.errLogCount, "failed to create new opus decoder", logger.Err(err))
+	ae.mu.Lock()
+	defer ae.mu.Unlock()
+	if existingUa, ok := ae.usersAudio[id]; ok {
+		existingUa.muted.Store(mute)
+	} else {
+		if _, err := ae.newUserAudio(id); err != nil {
+			ae.log.Error(0, "failed to create user audio", logger.Err(err))
+			return
+		}
+	}
+	ae.log.Info(0, "usersAudo after set mute state", ae.usersAudio)
+}
+
+func (ae *audioEngine) SetVolume(id uuid.UUID, vc float32) {
+	ae.mu.Lock()
+	ua, ok := ae.usersAudio[id]
+	if ok {
+		ae.log.Info(0, "using existing ua in set volume", ua)
+		ua.volumeCoefficient = vc
+		ae.mu.Unlock()
 		return
 	}
+	ae.mu.Unlock()
+	if existingUa, ok := ae.usersAudio[id]; ok {
+		existingUa.volumeCoefficient = vc
+	} else {
+		if _, err := ae.newUserAudio(id); err != nil {
+			ae.log.Error(0, "failed to create user audio", logger.Err(err))
+			return
+		}
+	}
+	ae.log.Info(0, "usersAudo after set volume", ae.usersAudio)
+}
+
+func (ae *audioEngine) newUserAudio(id uuid.UUID) (*usersAudio, error) {
+	opusDecoder, err := opus.NewDecoder(sampleRate, 1)
+	if err != nil {
+		ae.log.Error(ae.errLogCount, "failed to create new opus decoder", logger.Err(err))
+		return nil, err
+	}
 	newUa := &usersAudio{
-		data:              make([]byte, 0, 48000),
+		data:              make([]byte, 0, sampleRate),
 		float32Buffer:     make([]float32, frameLen),
 		denoicedBuffer:    make([]float32, frameLen),
 		decoder:           opusDecoder,
@@ -96,46 +187,8 @@ func (ae *audioEngine) SetMuteState(id uuid.UUID, mute bool) {
 		decodedBuffer:     make([]byte, 5760),
 		samples:           make([]int16, frameLen),
 	}
-
-	ae.mu.Lock()
-	defer ae.mu.Unlock()
-	if existingUa, ok := ae.usersAudio[id]; ok {
-		existingUa.muted.Store(mute)
-	} else {
+	if _, ok := ae.usersAudio[id]; !ok {
 		ae.usersAudio[id] = newUa
 	}
-}
-
-func (ae *audioEngine) SetVolume(id uuid.UUID, vc float32) {
-	ae.mu.Lock()
-	ua, ok := ae.usersAudio[id]
-	if ok {
-		ua.volumeCoefficient = vc
-		ae.mu.Unlock()
-		return
-	}
-	ae.mu.Unlock()
-
-	opusDecoder, err := opus.NewDecoder(48000, 1)
-	if err != nil {
-		ae.log.Error(ae.errLogCount, "failed to create new opus decoder", logger.Err(err))
-		return
-	}
-	newUa := &usersAudio{
-		data:              make([]byte, 0, 48000),
-		float32Buffer:     make([]float32, frameLen),
-		denoicedBuffer:    make([]float32, frameLen),
-		decoder:           opusDecoder,
-		volumeCoefficient: vc,
-		decodedBuffer:     make([]byte, 5760),
-		samples:           make([]int16, frameLen),
-	}
-
-	ae.mu.Lock()
-	defer ae.mu.Unlock()
-	if existingUa, ok := ae.usersAudio[id]; ok {
-		existingUa.volumeCoefficient = vc
-	} else {
-		ae.usersAudio[id] = newUa
-	}
+	return newUa, nil
 }

@@ -1,7 +1,7 @@
 package audio
 
 const (
-	freq             = 48000
+	sampleRate       = 48000
 	frameSize        = 1920
 	frameLen         = 960
 	jitterSize       = 13440

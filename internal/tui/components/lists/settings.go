@@ -36,6 +36,11 @@ const (
 	BINDS_SETTINGS
 	AUDIO_SETTINGS
 	NOTIFICATIONS_SETTINGS
+	ACCOUNT_SETTINGS
+	NICKNAME_SETTINGS
+	COLOR_SETTINGS
+	TAGLINE_SETTINGS
+	PASSWORD_SETTINGS
 )
 
 func SetupSettingsList(ls ListSetup) SettingsList {
@@ -60,6 +65,11 @@ func SetupSettingsList(ls ListSetup) SettingsList {
 			Id:   NOTIFICATIONS_SETTINGS,
 			Name: "notifications",
 			Desc: "manage notifications",
+		},
+		SettingsItem{
+			Id:   ACCOUNT_SETTINGS,
+			Name: "account",
+			Desc: "manage your account",
 		},
 	}
 

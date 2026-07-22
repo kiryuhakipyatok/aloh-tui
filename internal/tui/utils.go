@@ -77,7 +77,7 @@ func (m Model) getChatSizes() (int, int, int) {
 
 		for _, msg := range m.messages {
 			t := lipgloss.NewStyle().Render(msg.Time)
-			n := lipgloss.NewStyle().Bold(true).Render(msg.Nickname + ":")
+			n := lipgloss.NewStyle().Bold(true).Render(msg.Identity.Nickname + ":")
 			txt := lipgloss.NewStyle().Render(msg.Text)
 			renderedMsg := msgStyle.Render(fmt.Sprintf("%s %s %s", t, n, txt))
 			allMsgsLines = append(allMsgsLines, strings.Split(renderedMsg, "\n")...)
@@ -136,9 +136,9 @@ func isEqualOnline(newOnline, oldOnline map[string][]string) bool {
 	})
 }
 
-func isInConnections(conns []users.Identity, iden users.Identity) bool {
+func isInConnections(conns []users.Identity, id uuid.UUID) bool {
 	return slices.ContainsFunc(conns, func(connIden users.Identity) bool {
-		return iden == connIden
+		return id == connIden.ID
 	})
 }
 
@@ -180,9 +180,34 @@ func (m Model) selectSetting() (Model, tea.Cmd) {
 			m.sideState = states.RIGHT_STATE
 		case lists.BINDS_SETTINGS:
 			m.state = states.BINDS_STATE
+		case lists.ACCOUNT_SETTINGS:
+			m.state = states.ACCOUNT_STATE
 		default:
 			return m, nil
 		}
+		return m.syncTabState()
+	}
+
+	return m, nil
+}
+
+func (m Model) selectAccountSetting() (Model, tea.Cmd) {
+	if i, ok := m.accountList.LipList.SelectedItem().(lists.AccountItem); ok {
+		m.prState = m.state
+		m.state = states.LOAD_STATE
+		switch i.Id {
+		case lists.NICKNAME_SETTINGS:
+			m.state = states.NICKNAME_STATE
+		case lists.PASSWORD_SETTINGS:
+			m.state = states.PASSWORD_STATE
+		case lists.TAGLINE_SETTINGS:
+			m.state = states.TAGLINE_STATE
+		case lists.COLOR_SETTINGS:
+			m.state = states.COLOR_STATE
+		default:
+			return m, nil
+		}
+		m.log.Info("states", m.prState, m.state)
 		return m.syncTabState()
 	}
 	return m, nil
@@ -234,29 +259,23 @@ func safeTruncate(s string, maxW int) string {
 	return s
 }
 
-func getOnlineIdentity(user *users.User, online map[uuid.UUID][]users.Identity, id uuid.UUID) (users.Identity, error) {
+func (m *Model) getOnlineIdentity(online map[uuid.UUID][]users.Identity, id uuid.UUID) (users.Identity, error) {
 	var (
 		iden users.Identity
-		err  error
 		wg   sync.WaitGroup
 	)
 
 	stop := make(chan struct{}, 1)
 
-	for o, conns := range online {
-		if o == id {
-			iden, err = user.GetFriendIdentityById(id)
-			if err != nil {
-				return iden, err
-			}
-			break
-		}
+	for _, conns := range online {
 		wg.Go(func() {
+			m.log.Info("conns", conns)
 			for _, c := range conns {
 				select {
 				case <-stop:
 					return
 				default:
+					m.log.Info("c", c)
 					if c.ID == id {
 						iden = c
 						stop <- struct{}{}
@@ -272,14 +291,16 @@ func getOnlineIdentity(user *users.User, online map[uuid.UUID][]users.Identity, 
 	if iden.ID == uuid.Nil {
 		return iden, errs.ErrNotFound()
 	}
-
+	m.log.Info("iden in get", iden)
 	return iden, nil
 
 }
 
-func isBot(id uuid.UUID) bool {
-	b1, _ := uuid.Parse("ed6f7b67-be1c-4dbb-80e3-f42a2ed7da77")
-	b2, _ := uuid.Parse("34a0fff1-5b66-4122-a0d2-d7e8981539b0")
-	b3, _ := uuid.Parse("22dafd75-c7c6-49e1-8e74-e6ef4c6863a5")
-	return id == b1 || id == b2 || id == b3
+func updateNicknameInConn(conns []users.Identity, id uuid.UUID, newNickname string) {
+	for i, c := range conns {
+		if c.ID == id {
+			conns[i].Nickname = newNickname
+			break
+		}
+	}
 }
