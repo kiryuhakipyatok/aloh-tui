@@ -3,12 +3,11 @@ package sshclient
 import (
 	"aloh-tui/pkg/errs"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 
 	"aloh-tui/pkg/logger"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/ssh"
 	cssh "golang.org/x/crypto/ssh"
 )
@@ -22,20 +21,18 @@ const (
 	DEFAULT
 )
 
-const (
-	SUCCESS = iota
-	NOT_FOUND
-	ALREADY_EXISTS
-	SERVER_ERROR
-)
-
 type SSHClient interface {
-	NewFriendReq(ctx context.Context, friendNickname string) error
-	AcceptFriendReq(ctx context.Context, friendNickname string) error
-	DenyFriendReq(ctx context.Context, friendNickname string) error
-	DeleteFromFriends(ctx context.Context, friendNickname string) error
-	BlockUser(ctx context.Context, friendNickname string) error
-	UnblockUser(ctx context.Context, friendNickname string) error
+	NewFriendReq(ctx context.Context, nickname string) error
+	AcceptFriendReq(ctx context.Context, iden Identity) error
+	DenyFriendReq(ctx context.Context, id uuid.UUID) error
+	DeleteFromFriends(ctx context.Context, id uuid.UUID) error
+	BlockUser(ctx context.Context, nickname string) ([]byte, error)
+	UnblockUser(ctx context.Context, nickname string) ([]byte, error)
+	UpdateCurrentConnects(ctx context.Context, conns []Identity) error
+	SetTagline(ctx context.Context, tagline string) error
+	NewNickname(ctx context.Context, nickname string, password []byte) error
+	NewPassword(ctx context.Context, oldPassword, newPassword []byte) error
+	SetColor(ctx context.Context, color string) error
 	Close()
 }
 
@@ -111,7 +108,7 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 
 		switch setup.Typee {
 		case LOGIN:
-			status, _, err = client.SendRequest("key", true, keyBytes)
+			status, payload, err = client.SendRequest("key", true, keyBytes)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -119,7 +116,7 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 				return nil, nil, castErr(payload)
 			}
 		case REGISTER:
-			status, _, err = client.SendRequest("pswrd", true, setup.Password)
+			status, payload, err = client.SendRequest("set-password", true, setup.Password)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -128,15 +125,15 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 			}
 		default:
 		}
-		if setup.Typee != REGISTER {
-			status, payload, err = client.SendRequest("personal-data", true, nil)
-			if err != nil {
-				return nil, nil, err
-			}
-			if !status {
-				return nil, nil, castErr(payload)
-			}
+		//if setup.Typee != REGISTER {
+		status, payload, err = client.SendRequest("personal-data", true, nil)
+		if err != nil {
+			return nil, nil, err
 		}
+		if !status {
+			return nil, nil, castErr(payload)
+		}
+		//}
 		eventChannel, requests, err := client.OpenChannel("event-channel", nil)
 		if err != nil {
 			return nil, nil, castErr(payload)
@@ -153,132 +150,6 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 		return &sshClient, payload, nil
 	}
 
-}
-
-func (sc *sshClient) proccessEventsChan() {
-	op := "sshClient.proccessEvents"
-	log := sc.log.AddOp(op)
-	data := make([]byte, 1024)
-	for {
-		n, err := sc.eventSSHChannel.Read(data)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				log.Info("events processing canceled")
-				break
-			}
-			log.Error("failed to read data", logger.Err(err))
-			continue
-		}
-		if len(data[:n]) > 0 {
-			e, err := proccessEvent(data[:n])
-			if err != nil {
-				log.Error("failed to proccess event", logger.Err(err))
-				continue
-			}
-			eventLog := logger.Attr("event", e)
-			select {
-			case sc.eventsChan <- e:
-				log.Info("new event in events chan", eventLog)
-			default:
-				log.Error("events chan is full, event skipped", eventLog)
-			}
-		}
-	}
-}
-
-func (sc *sshClient) NewFriendReq(ctx context.Context, friendNickname string) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		status, payload, err := sc.client.SendRequest("new-friend", true, []byte(friendNickname))
-		if err != nil {
-			return err
-		}
-		if !status {
-			return castErr(payload)
-		}
-		return nil
-	}
-}
-
-func (sc *sshClient) AcceptFriendReq(ctx context.Context, friendNickname string) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		status, payload, err := sc.client.SendRequest("accept-friend", true, []byte(friendNickname))
-		if err != nil {
-			return err
-		}
-		if !status {
-			return castErr(payload)
-		}
-		return nil
-	}
-}
-
-func (sc *sshClient) DenyFriendReq(ctx context.Context, friendNickname string) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		status, payload, err := sc.client.SendRequest("deny-friend", true, []byte(friendNickname))
-		if err != nil {
-			return err
-		}
-		if !status {
-			return castErr(payload)
-		}
-		return nil
-	}
-}
-
-func (sc *sshClient) DeleteFromFriends(ctx context.Context, friendNickname string) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		status, payload, err := sc.client.SendRequest("delete-friend", true, []byte(friendNickname))
-		if err != nil {
-			return err
-		}
-		if !status {
-			return castErr(payload)
-		}
-		return nil
-	}
-}
-
-func (sc *sshClient) BlockUser(ctx context.Context, friendNickname string) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		status, payload, err := sc.client.SendRequest("block-user", true, []byte(friendNickname))
-		if err != nil {
-			return err
-		}
-		if !status {
-			return castErr(payload)
-		}
-		return nil
-	}
-}
-func (sc *sshClient) UnblockUser(ctx context.Context, friendNickname string) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		status, payload, err := sc.client.SendRequest("unblock-user", true, []byte(friendNickname))
-		if err != nil {
-			return err
-		}
-		if !status {
-			return castErr(payload)
-		}
-		return nil
-	}
 }
 
 func (sc *sshClient) Close() {

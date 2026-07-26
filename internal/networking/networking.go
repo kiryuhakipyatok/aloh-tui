@@ -1,28 +1,32 @@
 package networking
 
 import (
+	"github.com/google/uuid"
 	alohnetwork "github.com/kiryuhakipyatok/aloh-networking"
 )
 
 type Networking interface {
-	FetchCurrentConnects(nickname string) ([]string, error)
-	FetchCurrentOnline() ([]string, error)
-	FetchOnlineFriends(friends []string) (map[string][]string, error)
+	FetchCurrentConnects(id uuid.UUID) ([]uuid.UUID, error)
+	FetchCurrentOnline() ([]uuid.UUID, error)
+	FetchOnlineFriends(friends []uuid.UUID) (map[uuid.UUID][]string, error)
 
-	ChatCallback(cb func(id string, data []byte))
-	VideoCallback(cb func(id string, data []byte))
-	VoiceCallback(cb func(id string, data []byte))
-	PeerConnectedCallback(cb func(id string))
-	PeerDisconnectedCallback(cb func(id string))
+	ChatCallback(cb func(id uuid.UUID, data []byte))
+	VideoCallback(cb func(id uuid.UUID, data []byte))
+	VoiceCallback(cb func(id uuid.UUID, data []byte))
+	PeerConnectedCallback(cb func(id uuid.UUID))
+	PeerDisconnectedCallback(cb func(id uuid.UUID))
+	EventCallback(cb func(id uuid.UUID, e alohnetwork.Event))
 
 	SendMessageInChat(msg []byte) error
 	SendVoiceData(data []byte) error
 	SendVideoData(data []byte) error
 
-	ConnectToAllUsers(nickname string) error
-	ConnectToUser(nickname string) error
+	NewEvent(e alohnetwork.Event) error
+
+	ConnectToAllUsers(id uuid.UUID) error
+	ConnectToUser(id uuid.UUID) error
 	DisconnectFromAllUsers() error
-	DisconnectFromUser(id string) error
+	DisconnectFromUser(id uuid.UUID) error
 
 	Close()
 }
@@ -31,14 +35,15 @@ type networking struct {
 	*alohnetwork.Netwoking
 }
 
-func NewNetworking(nickname, logPath string) (Networking, error) {
+func NewNetworking(id uuid.UUID, logPath string) (Networking, error) {
 	if len(embeddedConfig) == 0 {
 		panic("embedded config is empty")
 	}
 
 	cfg := setupConfig()
 	cfg.App.LogPath = logPath
-	netw, err := alohnetwork.NewNetworking(nickname, cfg)
+
+	netw, err := alohnetwork.NewNetworking(id, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -49,15 +54,15 @@ func (n *networking) Close() {
 	n.Delete()
 }
 
-func (n *networking) FetchCurrentConnects(nickname string) ([]string, error) {
-	connects, err := n.FetchSessions(nickname)
+func (n *networking) FetchCurrentConnects(id uuid.UUID) ([]uuid.UUID, error) {
+	connects, err := n.FetchSessions(id)
 	if err != nil {
 		return nil, err
 	}
 	return connects, nil
 }
 
-func (n *networking) FetchCurrentOnline() ([]string, error) {
+func (n *networking) FetchCurrentOnline() ([]uuid.UUID, error) {
 	online, err := n.FetchOnline()
 	if err != nil {
 		return nil, err
@@ -65,7 +70,7 @@ func (n *networking) FetchCurrentOnline() ([]string, error) {
 	return online, nil
 }
 
-func (n *networking) FetchOnlineFriends(friends []string) (map[string][]string, error) {
+func (n *networking) FetchOnlineFriends(friends []uuid.UUID) (map[uuid.UUID][]string, error) {
 	frs, err := n.FetchFriends(friends)
 	if err != nil {
 		return nil, err
@@ -73,24 +78,35 @@ func (n *networking) FetchOnlineFriends(friends []string) (map[string][]string, 
 	return frs, nil
 }
 
-func (n *networking) ChatCallback(cb func(id string, data []byte)) {
+func (n *networking) ChatCallback(cb func(id uuid.UUID, data []byte)) {
 	n.RegisterOnChat(cb)
 }
 
-func (n *networking) VideoCallback(cb func(id string, data []byte)) {
+func (n *networking) VideoCallback(cb func(id uuid.UUID, data []byte)) {
 	n.RegisterOnVideo(cb)
 }
 
-func (n *networking) VoiceCallback(cb func(id string, data []byte)) {
+func (n *networking) VoiceCallback(cb func(id uuid.UUID, data []byte)) {
 	n.RegisterOnVoice(cb)
 }
 
-func (n *networking) PeerConnectedCallback(cb func(id string)) {
+func (n *networking) PeerConnectedCallback(cb func(id uuid.UUID)) {
 	n.RegisterOnPeerConnected(cb)
 }
 
-func (n *networking) PeerDisconnectedCallback(cb func(id string)) {
+func (n *networking) PeerDisconnectedCallback(cb func(id uuid.UUID)) {
 	n.RegisterOnPeerDisconnected(cb)
+}
+
+func (n *networking) EventCallback(cb func(id uuid.UUID, e alohnetwork.Event)) {
+	n.RegisterOnEvent(cb)
+}
+
+func (n *networking) NewEvent(e alohnetwork.Event) error {
+	if err := n.SendEvent(e); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (n *networking) SendMessageInChat(msg []byte) error {
@@ -114,15 +130,16 @@ func (n *networking) SendVideoData(data []byte) error {
 	return nil
 }
 
-func (n *networking) ConnectToAllUsers(nickname string) error {
-	if err := n.Connect(nickname); err != nil {
+func (n *networking) ConnectToAllUsers(id uuid.UUID) error {
+	if err := n.Connect(id); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (n *networking) ConnectToUser(nickname string) error {
-	if err := n.ConnectById(nickname); err != nil {
+func (n *networking) ConnectToUser(id uuid.UUID) error {
+
+	if err := n.ConnectById(id); err != nil {
 		return err
 	}
 	return nil
@@ -135,7 +152,7 @@ func (n *networking) DisconnectFromAllUsers() error {
 	return nil
 }
 
-func (n *networking) DisconnectFromUser(id string) error {
+func (n *networking) DisconnectFromUser(id uuid.UUID) error {
 	if err := n.DisconnectById(id); err != nil {
 		return err
 	}

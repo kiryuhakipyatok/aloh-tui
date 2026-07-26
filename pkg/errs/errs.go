@@ -6,15 +6,18 @@ import (
 )
 
 var (
-	ErrAuthBase              = errors.New("failed to auth")
-	ErrRegisterBase          = errors.New("failed to register")
-	ErrLoginBase             = errors.New("failed to login")
-	ErrPasswordsNotEqualBase = errors.New("password are not equal")
-	ErrAlreadyExistsBase     = errors.New("already exists")
-	ErrNotFoundBase          = errors.New("not found")
-	ErrInternalServerBase    = errors.New("internal server error")
-	ErrNotFriendBase         = errors.New("not friend")
-	ErrNotBlockedBase        = errors.New("not blocked")
+	ErrAuthBase                   = errors.New("failed to auth")
+	ErrInvalidNicknameBase        = errors.New("invalid nickname")
+	ErrInvalidPasswordBase        = errors.New("weak password")
+	ErrRegisterBase               = errors.New("failed to register")
+	ErrLoginBase                  = errors.New("failed to login")
+	ErrPasswordsNotEqualBase      = errors.New("password are not equal")
+	ErrAlreadyExistsBase          = errors.New("already exists")
+	ErrNotFoundBase               = errors.New("not found")
+	ErrInternalServerBase         = errors.New("internal server error")
+	ErrNotFriendBase              = errors.New("not friend")
+	ErrNotBlockedBase             = errors.New("not blocked")
+	ErrOldAndNewPasswordEqualBase = errors.New("old and new passwords are equal")
 )
 
 type AppError struct {
@@ -59,4 +62,17 @@ func ErrNotFriend() AppError {
 
 func ErrNotBlocked() AppError {
 	return AppError{Err: ErrNotBlockedBase}
+}
+
+func ErrInvalidNickname() AppError {
+	return AppError{Err: ErrInvalidNicknameBase}
+}
+
+func ErrInvalidPassword(entropy float64) AppError {
+	err := fmt.Errorf("%w, entropy = %.2f, must be minimum 72", ErrInvalidPasswordBase, entropy)
+	return AppError{Err: err}
+}
+
+func ErrOldAndNewPasswordEqual() AppError {
+	return AppError{Err: ErrOldAndNewPasswordEqualBase}
 }

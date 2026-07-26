@@ -5,6 +5,13 @@ import (
 	"strings"
 )
 
+const (
+	SUCCESS = iota
+	NOT_FOUND
+	ALREADY_EXISTS
+	SERVER_ERROR
+)
+
 func authErr(errStr string) bool {
 	return strings.Contains(errStr, "unable to authenticate")
 }

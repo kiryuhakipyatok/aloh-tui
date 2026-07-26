@@ -1,10 +1,15 @@
 package users
 
 import (
+	"aloh-tui/internal/entities/setups"
+	"aloh-tui/pkg/errs"
 	"encoding/json"
+	"maps"
 	"os"
 	"slices"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func (u *User) UpdateUserJSON() error {
@@ -40,20 +45,30 @@ func (u *User) IncreaseAmountOfConnections() error {
 	return nil
 }
 
-func (u *User) IncreaseAmountOfConnectionsByUser(nickname string) error {
+func (u *User) IncreaseAmountOfConnectionsByUser(iden Identity) (bool, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if uc, ok := u.Data.Setup.Audio.UsersSetup[nickname]; ok && slices.Contains(u.Data.Personal.Friends, nickname) {
+	var newBf bool
+	if !u.conatinsFriends(iden) {
+		return newBf, nil
+	}
+
+	if uc, ok := u.Data.Setup.Audio.UsersSetup[iden.Nickname]; ok {
 		uc.AmountOfConnections++
-		if uc.AmountOfConnections > u.Data.Statistics.BestFriend.AmountOfConnections {
+		u.Data.Setup.Audio.UsersSetup[iden.Nickname] = uc
+		if iden == u.Data.Statistics.BestFriend.Identity {
+			u.Data.Statistics.BestFriend.AmountOfConnections++
+		} else if uc.AmountOfConnections > u.Data.Statistics.BestFriend.AmountOfConnections &&
+			uc.AmountOfConnections > 10 {
 			u.Data.Statistics.BestFriend.AmountOfConnections = uc.AmountOfConnections
-			u.Data.Statistics.BestFriend.Nickname = nickname
+			u.Data.Statistics.BestFriend.Identity = iden
+			newBf = true
 		}
 		if err := u.UpdateUserJSON(); err != nil {
-			return err
+			return newBf, err
 		}
 	}
-	return nil
+	return newBf, nil
 }
 
 func (u *User) CountMaxTimeInConnection(stop chan struct{}) error {
@@ -64,6 +79,7 @@ func (u *User) CountMaxTimeInConnection(stop chan struct{}) error {
 		}
 		u.Data.Statistics.MinutesInCurrentConnection = 0
 		if err := u.UpdateUserJSON(); err != nil {
+			u.mu.Unlock()
 			return err
 		}
 		u.mu.Unlock()
@@ -78,6 +94,7 @@ func (u *User) CountMaxTimeInConnection(stop chan struct{}) error {
 			u.Data.Statistics.MinutesInCurrentConnection++
 			u.Data.Statistics.AmountOfMinutesInConnections++
 			if err := u.UpdateUserJSON(); err != nil {
+				u.mu.Unlock()
 				return err
 			}
 			u.mu.Unlock()
@@ -125,20 +142,20 @@ func (u *User) OnOffAEC(aec bool) error {
 	return nil
 }
 
-func (u *User) OnOffHardDenoice(denoice bool) error {
+func (u *User) OnOffHardDenoice(denoise bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Audio.HardDenoise = denoice
+	u.Data.Setup.Audio.Denoises.HardDenoise = denoise
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (u *User) OnOffSoftDenoice(denoice bool) error {
+func (u *User) OnOffSoftDenoice(denoise bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Audio.SoftDenoise = denoice
+	u.Data.Setup.Audio.Denoises.SoftDenoise = denoise
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -149,6 +166,16 @@ func (u *User) ChangeMicrophone(mic string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.Data.Devices.Microphone = mic
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) ChangeHeadphones(h string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Devices.Headphones = h
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -195,6 +222,26 @@ func (u *User) ChangeBanTag(tag string) error {
 	return nil
 }
 
+func (u *User) ChangeTagline(tagline string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Account.Tagline = tagline
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) ChangeColor(color string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Account.Color = color
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (u *User) ChangeNotificationTag(tag string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -205,34 +252,37 @@ func (u *User) ChangeNotificationTag(tag string) error {
 	return nil
 }
 
-func (u *User) OnOffShowTime() error {
+func (u *User) OnOffShowTime() (bool, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Appereance.ShowTime = !u.Data.Setup.Appereance.ShowTime
+	res := !u.Data.Setup.Appereance.ShowTime
+	u.Data.Setup.Appereance.ShowTime = res
 	if err := u.UpdateUserJSON(); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return res, nil
 }
 
-func (u *User) OnOffShowDate() error {
+func (u *User) OnOffShowDate() (bool, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Appereance.ShowDate = !u.Data.Setup.Appereance.ShowDate
+	res := !u.Data.Setup.Appereance.ShowDate
+	u.Data.Setup.Appereance.ShowDate = res
 	if err := u.UpdateUserJSON(); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return res, nil
 }
 
-func (u *User) OnOffShowZone() error {
+func (u *User) OnOffShowZone() (bool, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Setup.Appereance.ShowZone = !u.Data.Setup.Appereance.ShowZone
+	res := !u.Data.Setup.Appereance.ShowZone
+	u.Data.Setup.Appereance.ShowZone = res
 	if err := u.UpdateUserJSON(); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return res, nil
 }
 
 func (u *User) MuteUnmuteUser(nickname string, res bool) error {
@@ -240,10 +290,72 @@ func (u *User) MuteUnmuteUser(nickname string, res bool) error {
 	defer u.mu.Unlock()
 	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
 	if !ok {
-		us = &UsersSetup{}
+		us = setups.UsersSetup{
+			VolumeCoefficient: 1,
+		}
 	}
 	us.Muted = res
 	u.Data.Setup.Audio.UsersSetup[nickname] = us
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) OnOffUsersHardDenoise(nickname string, res bool) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
+	if !ok {
+		us = setups.UsersSetup{
+			VolumeCoefficient: 1,
+		}
+	}
+	us.HardDenoise = res
+	u.Data.Setup.Audio.UsersSetup[nickname] = us
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) OnOffUsersSoftDenoise(nickname string, res bool) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
+	if !ok {
+		us = setups.UsersSetup{
+			VolumeCoefficient: 1,
+		}
+	}
+	us.SoftDenoise = res
+	u.Data.Setup.Audio.UsersSetup[nickname] = us
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) MuteUnmuteMic(res bool) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if res {
+		u.Data.Setup.Audio.Mutes.FullMute = false
+	}
+	u.Data.Setup.Audio.Mutes.MicMute = res
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) MuteUnmuteFull(res bool) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if res {
+		u.Data.Setup.Audio.Mutes.MicMute = false
+	}
+	u.Data.Setup.Audio.Mutes.FullMute = res
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
@@ -255,7 +367,7 @@ func (u *User) SetUsersVolume(nickname string, vc float32) error {
 	defer u.mu.Unlock()
 	us, ok := u.Data.Setup.Audio.UsersSetup[nickname]
 	if !ok {
-		us = &UsersSetup{
+		us = setups.UsersSetup{
 			VolumeCoefficient: 1,
 		}
 	}
@@ -270,55 +382,63 @@ func (u *User) SetUsersVolume(nickname string, vc float32) error {
 	return nil
 }
 
-func (u *User) NewFriendReq(nickname string) {
+func (u *User) NewFriendReq(frReq FriendReq) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Personal.FriendsReqs = append(u.Data.Personal.FriendsReqs, FriendReq{Nickname: nickname})
+	u.Data.Personal.FriendsReqs = append(u.Data.Personal.FriendsReqs, frReq)
 }
 
-func (u *User) NewFriend(nickname string) {
+func (u *User) NewFriend(friend Friend) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Personal.Friends = append(u.Data.Personal.Friends, nickname)
+	u.Data.Personal.Friends[friend.ID] = friend
+	u.Data.Personal.FriendsReqs = slices.DeleteFunc(u.Data.Personal.FriendsReqs, func(f FriendReq) bool {
+		return f.Identity.ID == friend.ID
+	})
 }
 
-func (u *User) DeleteFriendReq(nickname string) {
+func (u *User) DeleteFriendReq(id uuid.UUID) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.Data.Personal.FriendsReqs = slices.DeleteFunc(u.Data.Personal.FriendsReqs, func(f FriendReq) bool {
-		return f.Nickname == nickname
+		return f.Identity.ID == id
 	})
 }
 
-func (u *User) DeleteFriend(nickname string) error {
+func (u *User) DeleteFriend(iden Identity) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Personal.Friends = slices.DeleteFunc(u.Data.Personal.Friends, func(f string) bool {
-		return f == nickname
-	})
-	delete(u.Data.Setup.Audio.UsersSetup, nickname)
+	delete(u.Data.Personal.Friends, iden.ID)
+	delete(u.Data.Setup.Audio.UsersSetup, iden.Nickname)
 	if err := u.UpdateUserJSON(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (u *User) BlockUser(nickname string) error {
+func (u *User) BlockUser(iden Identity) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Personal.BlockedUsers = append(u.Data.Personal.BlockedUsers, nickname)
-	var deletedFriend bool
-	u.Data.Personal.Friends = slices.DeleteFunc(u.Data.Personal.Friends, func(f string) bool {
-		deletedFriend = f == nickname
+	u.Data.Personal.BlockedUsers = append(u.Data.Personal.BlockedUsers, iden)
+	var (
+		deletedFriend     bool
+		deletedFriendNick string
+	)
+	maps.DeleteFunc(u.Data.Personal.Friends, func(id uuid.UUID, f Friend) bool {
+		deletedFriend = id == iden.ID
+		if deletedFriend {
+			deletedFriendNick = f.Nickname
+		}
 		return deletedFriend
 	})
 	u.Data.Personal.FriendsReqs = slices.DeleteFunc(u.Data.Personal.FriendsReqs, func(f FriendReq) bool {
-		return f.Nickname == nickname
+		return f.Identity == iden
 	})
 
 	if deletedFriend {
-		delete(u.Data.Setup.Audio.UsersSetup, nickname)
-		if u.Data.Statistics.BestFriend.Nickname == nickname {
+		delete(u.Data.Setup.Audio.UsersSetup, deletedFriendNick)
+		bf := u.Data.Statistics.BestFriend
+		if bf.Identity == iden {
 			u.Data.Statistics.BestFriend = noBF()
 		}
 		if err := u.UpdateUserJSON(); err != nil {
@@ -328,23 +448,98 @@ func (u *User) BlockUser(nickname string) error {
 	return nil
 }
 
-func (u *User) UnblockUser(nickname string) {
+func (u *User) UnblockUser(iden Identity) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.Data.Personal.BlockedUsers = slices.DeleteFunc(u.Data.Personal.BlockedUsers, func(b string) bool {
-		return b == nickname
+	u.Data.Personal.BlockedUsers = slices.DeleteFunc(u.Data.Personal.BlockedUsers, func(bIden Identity) bool {
+		return iden == bIden
 	})
-
 }
 
-func (u *User) IsFriend(nickname string) bool {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return slices.Contains(u.Data.Personal.Friends, nickname)
+func (u *User) NewUserSetup(nickname string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Setup.Audio.UsersSetup[nickname] = setups.UsersSetup{
+		VolumeCoefficient: 1,
+	}
+
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (u *User) IsBlocked(nickname string) bool {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return slices.Contains(u.Data.Personal.BlockedUsers, nickname)
+func (u *User) UpdateFriendTagline(id uuid.UUID, tagline string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	_, ok := u.Data.Personal.Friends[id]
+	if !ok {
+		return errs.ErrNotFriend()
+	}
+
+	f := u.Data.Personal.Friends[id]
+	f.Tagline = tagline
+	u.Data.Personal.Friends[id] = f
+
+	return nil
+}
+
+func (u *User) NewNickname(newNickname string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Identity.Nickname = newNickname
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) UpdateForeignNickname(iden Identity, newNickname string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	foreignId := iden.ID
+	foreignNickname := iden.Nickname
+	fr, ok := u.Data.Personal.Friends[foreignId]
+	if ok {
+		fr.Nickname = newNickname
+		u.Data.Personal.Friends[iden.ID] = fr
+		if u.Data.Statistics.BestFriend.Identity.ID == foreignId {
+			u.Data.Statistics.BestFriend.Identity.Nickname = newNickname
+		}
+	} else {
+		for i, b := range u.Data.Personal.BlockedUsers {
+			if b.ID == foreignId {
+				u.Data.Personal.BlockedUsers[i].Nickname = newNickname
+				break
+			}
+		}
+	}
+	for i, fr := range u.Data.Personal.FriendsReqs {
+		if fr.Identity.ID == foreignId {
+			u.Data.Personal.FriendsReqs[i].Identity.Nickname = newNickname
+			break
+		}
+	}
+	us, ok := u.Data.Setup.Audio.UsersSetup[foreignNickname]
+	if ok {
+		delete(u.Data.Setup.Audio.UsersSetup, iden.Nickname)
+		u.Data.Setup.Audio.UsersSetup[newNickname] = us
+	}
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) UpdateFriendColor(iden Identity, newColor string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	foreignId := iden.ID
+	fr, ok := u.Data.Personal.Friends[foreignId]
+	if !ok {
+		return errs.ErrNotFound()
+	}
+	fr.Color = newColor
+	u.Data.Personal.Friends[iden.ID] = fr
+	return nil
 }

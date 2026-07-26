@@ -3,6 +3,7 @@ package main
 import (
 	"aloh-tui/internal/app"
 	"aloh-tui/pkg/logger"
+	_ "net/http/pprof"
 )
 
 var (

@@ -1,20 +1,31 @@
 package users
 
 import (
+	"aloh-tui/internal/entities/setups"
 	"aloh-tui/internal/media/audio"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+)
+
+const (
+	DEF_TM     = "#A6E22E"
+	DEF_BFTAG  = "👑"
+	DEF_NOTTAG = "🔔"
+	DEF_BANTAG = "🚫"
+	DEF_COLOR  = "#random"
 )
 
 type User struct {
-	Data       Data
-	Paths      Paths
-	Networking networking.Networking
-	Engines    Engines
-	SSHClient  sshclient.SSHClient
-	mu         sync.RWMutex
+	Data       Data                  `json:"data"`
+	Paths      Paths                 `json:"paths"`
+	Networking networking.Networking `json:"-"`
+	Engines    Engines               `json:"-"`
+	SSHClient  sshclient.SSHClient   `json:"-"`
+	mu         sync.RWMutex          `json:"-"`
 }
 
 func NewUser(logFilePath, keysPath, dataFilePath string) *User {
@@ -27,25 +38,42 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 		Data: Data{
 			Setup: Setup{
 				Audio: Audio{
-					UsersSetup:  make(map[string]*UsersSetup, 5),
-					SoftDenoise: true,
+					Denoises: Denoises{
+						SoftDenoise: true,
+					},
+					UsersSetup: make(map[string]setups.UsersSetup, 5),
 				},
 				Notifications: Notifications{
 					AudioNotifications:   true,
 					DesktopNotifications: true,
 					AppNotifications:     true,
 				},
-				Appereance: Appereance{
-					ShowTime: true,
-					ShowDate: true,
-					ShowZone: true,
+				Binds: Binds{
+					FriendsTab:  "ALT+F",
+					ChatTab:     "ALT+C",
+					VoiceTab:    "ALT+G",
+					VideoTab:    "ALT+D",
+					ProfileTab:  "ALT+E",
+					SettingsTab: "ALT+S",
+					MicMute:     "ALT+V",
+					FullMute:    "ALT+B",
+					UserMute:    "ALT+Z",
 				},
+				Appereance: Appereance{
+					BestFriendTag:  DEF_BFTAG,
+					ThemeColor:     DEF_TM,
+					NotificaionTag: DEF_NOTTAG,
+					BanTag:         DEF_BANTAG,
+				},
+			},
+			Account: Account{
+				Color: DEF_COLOR,
 			},
 			Statistics: Statistics{
 				BestFriend: noBF(),
 			},
 			Personal: Personal{
-				Friends:     make([]string, 0, 5),
+				Friends:     make(map[uuid.UUID]Friend, 5),
 				FriendsReqs: make([]FriendReq, 0, 5),
 			},
 		},
@@ -53,22 +81,25 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 }
 
 type Data struct {
-	Personal   Personal   `json:"personalData"`
+	Identity   Identity   `json:"identity"`
+	Personal   Personal   `json:"personal"`
 	Devices    Devices    `json:"devices"`
 	Setup      Setup      `json:"setup"`
+	Account    Account    `json:"account"`
 	Statistics Statistics `json:"statistics"`
 }
 
+type Identity = sshclient.Identity
+
 type Personal struct {
-	Nickname     string      `json:"nickname"`
-	RegisterTime string      `json:"registerTime"`
-	FriendsReqs  []FriendReq `json:"-"`
-	Friends      []string    `json:"-"`
-	BlockedUsers []string    `json:"-"`
+	RegisterTime string               `json:"registerTime"`
+	FriendsReqs  []FriendReq          `json:"-"`
+	Friends      map[uuid.UUID]Friend `json:"-"`
+	BlockedUsers []Identity           `json:"-"`
 }
 
 type FriendReq struct {
-	Nickname string    `json:"nickname"`
+	Identity Identity  `json:"identity"`
 	ReqTime  time.Time `json:"reqTime"`
 }
 
@@ -91,6 +122,19 @@ type Setup struct {
 	Audio         Audio         `json:"audio"`
 	Appereance    Appereance    `json:"appereance"`
 	Notifications Notifications `json:"notifications"`
+	Binds         Binds         `json:"binds"`
+}
+
+type Binds struct {
+	FriendsTab  string `json:"friends-tab"`
+	ChatTab     string `json:"chat-tab"`
+	VoiceTab    string `json:"voice-tab"`
+	VideoTab    string `json:"video-tab"`
+	ProfileTab  string `json:"profile-tab"`
+	SettingsTab string `json:"settings-tab"`
+	MicMute     string `json:"mic-mute"`
+	FullMute    string `json:"full-mute"`
+	UserMute    string `json:"user-mute"`
 }
 
 type Appereance struct {
@@ -103,6 +147,11 @@ type Appereance struct {
 	ShowZone       bool   `json:"show-zone"`
 }
 
+type Account struct {
+	Tagline string `json:"tagline"`
+	Color   string `json:"color"`
+}
+
 type Notifications struct {
 	DesktopNotifications bool `json:"desktop-notifications"`
 	AudioNotifications   bool `json:"audio-notifications"`
@@ -110,17 +159,22 @@ type Notifications struct {
 }
 
 type Audio struct {
-	HardDenoise bool                   `json:"hard-denoise"`
-	SoftDenoise bool                   `json:"soft-denoise"`
-	AEC         bool                   `json:"aec"`
-	Filter      bool                   `json:"filter"`
-	UsersSetup  map[string]*UsersSetup `json:"users-setup"`
+	AEC      bool     `json:"aec"`
+	Denoises Denoises `json:"denoises"`
+	Mutes    Mutes    `json:"mutes"`
+	Filter   bool     `json:"filter"`
+
+	UsersSetup map[string]setups.UsersSetup `json:"users-setup"`
 }
 
-type UsersSetup struct {
-	VolumeCoefficient   float32 `json:"volume-coeficent"`
-	Muted               bool    `json:"muted"`
-	AmountOfConnections uint    `json:"amount-of-connections"`
+type Denoises struct {
+	HardDenoise bool `json:"hard-denoise"`
+	SoftDenoise bool `json:"soft-denoise"`
+}
+
+type Mutes struct {
+	FullMute bool `json:"full-mute"`
+	MicMute  bool `json:"mic-mute"`
 }
 
 type Statistics struct {
@@ -133,12 +187,14 @@ type Statistics struct {
 }
 
 type BestFriend struct {
-	Nickname            string `json:"nickname"`
-	AmountOfConnections uint   `json:"amount-of-connections"`
+	Identity            Identity `json:"identity"`
+	AmountOfConnections uint     `json:"amount-of-connections"`
 }
 
 func noBF() BestFriend {
 	return BestFriend{
-		Nickname: "nobody",
+		Identity: Identity{
+			Nickname: "nobody",
+		},
 	}
 }

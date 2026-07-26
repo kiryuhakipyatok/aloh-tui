@@ -10,37 +10,38 @@ type MuteUnmuteUserMsg struct {
 	Err error
 }
 
-func MuteUnmuteUserCmd(user *users.User, nickname string) tea.Cmd {
+func MuteUnmuteUserCmd(user *users.User, iden users.Identity) tea.Cmd {
 	return func() tea.Msg {
 		msg := MuteUnmuteUserMsg{}
 		if user.Engines.AudioEngine != nil {
-			res, err := user.Engines.AudioEngine.MuteUnmuteUser(nickname)
+			res, err := user.Engines.AudioEngine.MuteUnmuteUser(iden.ID)
 			if err != nil {
-				msg.Err = err
-				return msg
+
 			}
 
-			if err := user.MuteUnmuteUser(nickname, res); err != nil {
+			if err := user.MuteUnmuteUser(iden.Nickname, res); err != nil {
 				msg.Err = err
 			}
 		}
-
 		return msg
 	}
 
 }
 
-func SetupUserMuteCmd(user *users.User, nickname string) tea.Cmd {
+func SetupUserMuteCmd(user *users.User, iden users.Identity) tea.Cmd {
 	return func() tea.Msg {
+		msg := MuteUnmuteUserMsg{}
 		var state bool
 		if user.Engines.AudioEngine != nil {
-			us := user.GetUsersSetup(nickname)
-			if us != nil {
-				state = us.Muted
+			us, err := user.GetUsersSetup(iden.Nickname)
+			if err != nil {
+				msg.Err = err
+				return msg
 			}
-			user.Engines.AudioEngine.SetMuteState(nickname, state)
+			state = us.Muted
+			user.Engines.AudioEngine.SetMuteState(iden.ID, state)
 		}
 
-		return MuteUnmuteUserMsg{}
+		return msg
 	}
 }

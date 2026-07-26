@@ -6,8 +6,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+const (
+	BF = iota
+)
+
 type StatiscticsMsg struct {
-	Err error
+	Typee uint
+	Res   bool
+	Err   error
 }
 
 func IncreaseAmountOfMessagesCmd(user *users.User) tea.Cmd {
@@ -40,12 +46,16 @@ func CountMaxTimeInConnectionCmd(user *users.User, stop chan struct{}) tea.Cmd {
 	}
 }
 
-func IncreaseAmountOfConnectionsByUser(user *users.User, nickname string) tea.Cmd {
+func IncreaseAmountOfConnectionsByUser(user *users.User, iden users.Identity) tea.Cmd {
 	return func() tea.Msg {
-		msg := StatiscticsMsg{}
-		if err := user.IncreaseAmountOfConnectionsByUser(nickname); err != nil {
+		msg := StatiscticsMsg{
+			Typee: BF,
+		}
+		newBf, err := user.IncreaseAmountOfConnectionsByUser(iden)
+		if err != nil {
 			msg.Err = err
 		}
+		msg.Res = newBf
 		return msg
 	}
 }
