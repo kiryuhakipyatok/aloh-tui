@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/google/uuid"
+	passwordvalidator "github.com/wagslane/go-password-validator"
 )
 
 func (m Model) getChatSizes() (int, int, int) {
@@ -230,6 +231,7 @@ func (m Model) inCurrentWindow(msg tea.MouseMsg) bool {
 
 func (m Model) Err(err error) (Model, tea.Cmd) {
 	m.err = err
+	m.prState = m.state
 	m.state = states.ERR_STATE
 	return m, nil
 }
@@ -303,4 +305,20 @@ func updateNicknameInConn(conns []users.Identity, id uuid.UUID, newNickname stri
 			break
 		}
 	}
+}
+
+func isEmptyString(s string) (string, bool) {
+	trimmed := strings.TrimSpace(s)
+	if len(strings.TrimSpace(s)) == 0 {
+		return "", true
+	}
+	return trimmed, false
+}
+
+func validatePassword(s string) error {
+	entropy := passwordvalidator.GetEntropy(s)
+	if err := passwordvalidator.Validate(s, 72); err != nil {
+		return errs.ErrInvalidPassword(entropy)
+	}
+	return nil
 }

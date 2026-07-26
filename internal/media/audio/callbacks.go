@@ -82,6 +82,11 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 			}
 
 			for len(ae.workMic) >= frameLen {
+				if !ae.connected.Load() {
+					ae.workMic = ae.workMic[:0]
+					break
+				}
+
 				chunk := ae.workMic[:frameLen]
 				copy(ae.pcmBuffer, chunk)
 
@@ -164,8 +169,13 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 				} else {
 					packetToSend := ae.bytesBuffersPool.Get().([]byte)
 					copy(packetToSend[:n], ae.voiceBuffer[:n])
+					sid := ae.sessionId.Load()
+					uv := userVoice{
+						data:      packetToSend[:n],
+						sessionId: sid,
+					}
 					select {
-					case ae.micDataChan <- packetToSend[:n]:
+					case ae.micDataChan <- uv:
 					default:
 						ae.bytesBuffersPool.Put(packetToSend[:1000])
 					}
@@ -194,9 +204,7 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 
 		if pOutputSample != nil {
 			ae.playbackReady.Store(true)
-			for i := range pOutputSample {
-				pOutputSample[i] = 0
-			}
+			clear(pOutputSample)
 
 			nativeSamples := len(pOutputSample) / 2
 

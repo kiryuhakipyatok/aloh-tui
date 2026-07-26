@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/hraban/opus.v2"
 )
 
@@ -87,42 +88,69 @@ func (ae *audioEngine) SetConnected() {
 }
 
 func (ae *audioEngine) SetDisconnected() error {
+	ae.sessionId.Add(1)
 	ae.connected.Store(false)
 	ae.voiceHolder.Store(0)
 	ae.userIsSpeaking.Store(false)
-	// ae.micNativeBuffer = ae.micNativeBuffer[:0]
-	// ae.workMic = ae.workMic[:0]
-	// ae.resampledWorkMic = ae.resampledWorkMic[:0]
-	// ae.monoCaptureBuffer = ae.monoCaptureBuffer
-	// ae.mu.Lock()
-	// defer ae.mu.Unlock()
+
+	ae.mu.Lock()
+	for len(ae.micDataChan) > 0 {
+		unusedVoice := <-ae.micDataChan
+		ae.bytesBuffersPool.Put(unusedVoice.data[:1000])
+	}
+	ae.micNativeBuffer = ae.micNativeBuffer[:0]
+	clear(ae.workMic)
+	ae.resampledWorkMic = ae.resampledWorkMic[:0]
+	ae.monoCaptureBuffer = ae.monoCaptureBuffer[:0]
+
+	clear(ae.voiceBuffer)
+
+	ae.playbackNativeBuffer = ae.playbackNativeBuffer[:0]
+	ae.resampledWorkMix = ae.resampledWorkMix[:0]
+
+	clear(ae.workMix)
+	clear(ae.pcmBuffer)
+
+	ae.notificationBytes = nil
+	ae.notificationPos = 0
+	ae.mu.Unlock()
 	if ae.opusEncoder != nil {
 		if err := ae.opusEncoder.Reset(); err != nil {
 			return err
 		}
 	}
-
+	var eg errgroup.Group
 	ae.mu.Lock()
 	for _, ua := range ae.usersAudio {
-		ua.data = ua.data[:0]
-		ua.playing = false
-		ua.framesCount = 0
-		ua.isSpeaking.Store(false)
+		eg.Go(func() error {
+			ua.data = ua.data[:0]
+			ua.playing = false
+			ua.framesCount = 0
+			ua.isSpeaking.Store(false)
 
-		if ua.personalPreprocessor != nil {
-			if err := ua.personalPreprocessor.Close(); err != nil {
-				return err
+			if ua.personalPreprocessor != nil {
+				if err := ua.personalPreprocessor.Close(); err != nil {
+					return err
+				}
 			}
-		}
-		if ua.personalHardDenoise != nil {
-			if err := ua.personalHardDenoise.Close(); err != nil {
-				return err
+			ua.personalPreprocessor = nil
+			if ua.personalHardDenoise != nil {
+				if err := ua.personalHardDenoise.Close(); err != nil {
+					return err
+				}
 			}
-		}
+			ua.personalHardDenoise = nil
+			return nil
+		})
 	}
 
+	ae.mu.Unlock()
+	if err := eg.Wait(); err != nil {
+		clear(ae.usersAudio)
+		return err
+	}
+	ae.mu.Lock()
 	clear(ae.usersAudio)
-
 	ae.mu.Unlock()
 	return nil
 }

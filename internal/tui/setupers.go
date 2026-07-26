@@ -62,16 +62,18 @@ func (m *Model) setupInputs() {
 	for i := range m.regTextInputs {
 		ti := textinput.New()
 		ti.PlaceholderStyle = styles.CGrayStyle
-		ti.CharLimit = 24
 		switch i {
 		case 0:
+			ti.CharLimit = 24
 			ti.Placeholder = "unique nickname"
 		case 1:
 			ti.Placeholder = "secret"
 			ti.EchoMode = textinput.EchoPassword
+			ti.Validate = validatePassword
 		case 2:
 			ti.Placeholder = "repeat secret"
 			ti.EchoMode = textinput.EchoPassword
+			ti.Validate = validatePassword
 		}
 		m.regTextInputs[i] = ti
 	}
@@ -229,7 +231,7 @@ func (m *Model) setupFriendsColors() {
 
 func newUC(color string) styles.UserColors {
 	var uc styles.UserColors
-	if color != "" {
+	if color != users.DEF_COLOR {
 		uc = styles.UserColors{
 			MainColor: lipgloss.Color(color),
 			SubColor:  lipgloss.Color(utils.DarkenHex(color, 0.7)),

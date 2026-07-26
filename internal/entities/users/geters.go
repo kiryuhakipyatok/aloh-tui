@@ -203,7 +203,9 @@ func (u *User) IsBlocked(iden Identity) bool {
 func (u *User) GetFriendIdentityById(id uuid.UUID) (Identity, error) {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	iden := Identity{}
+	iden := Identity{
+		ID: id,
+	}
 	for _, f := range u.Data.Personal.Friends {
 		i := f.Identity.ID
 		if i == id {
@@ -220,7 +222,9 @@ func (u *User) GetFriendIdentityById(id uuid.UUID) (Identity, error) {
 func (u *User) GetFriendIdentityByNick(nickname string) (Identity, error) {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	iden := Identity{}
+	iden := Identity{
+		Nickname: nickname,
+	}
 	for _, f := range u.Data.Personal.Friends {
 		n := f.Nickname
 		if n == nickname {

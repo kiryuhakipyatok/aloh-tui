@@ -46,6 +46,8 @@ type audioEngine struct {
 	opusEncoder *opus.Encoder
 	rnnoise     *rnnoise.RNNoise
 
+	sessionId atomic.Int32
+
 	buffers
 	atmoics
 	devices
@@ -57,6 +59,11 @@ type audioEngine struct {
 	sounds
 	logComps
 	mutexes
+}
+
+type userVoice struct {
+	data      []byte
+	sessionId int32
 }
 
 func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
@@ -130,7 +137,7 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 
 		chans: chans{
 			stopSendVoiceChan: make(chan struct{}, 1),
-			micDataChan:       make(chan []byte, 100),
+			micDataChan:       make(chan userVoice, 100),
 		},
 
 		pools: pools{
@@ -395,20 +402,29 @@ func (ae *audioEngine) sendVoice() {
 			ae.log.Info(0, "stopping voice sending")
 			return
 		case voice := <-ae.micDataChan:
+			sessionId := ae.sessionId.Load()
+			if !ae.connected.Load() {
+				ae.bytesBuffersPool.Put(voice.data[:1000])
+				continue
+			}
+
 			if ae.mutedMicro.Load() {
-				ae.bytesBuffersPool.Put(voice[:1000])
+				ae.bytesBuffersPool.Put(voice.data[:1000])
 				continue
 			}
 
 			ae.mu.RLock()
 			netw := ae.netw
+			isConn := ae.connected.Load()
+
 			ae.mu.RUnlock()
-			if ae.connected.Load() && netw != nil {
-				if err := ae.netw.SendVoiceData(voice); err != nil {
+			if isConn && netw != nil && sessionId == voice.sessionId {
+
+				if err := ae.netw.SendVoiceData(voice.data); err != nil {
 					ae.log.Error(ae.errLogCount, "failed to send voice data", logger.Err(err))
 				}
 			}
-			ae.bytesBuffersPool.Put(voice[:1000])
+			ae.bytesBuffersPool.Put(voice.data[:1000])
 		}
 	}
 }
@@ -432,8 +448,6 @@ func (ae *audioEngine) start() error {
 func (ae *audioEngine) Stop() {
 	ae.lifecycleMu.Lock()
 	defer ae.lifecycleMu.Unlock()
-
-	ae.stopSendVoiceChan <- struct{}{}
 
 	close(ae.stopSendVoiceChan)
 	close(ae.micDataChan)

@@ -21,7 +21,10 @@ type FriendItem struct {
 }
 
 func (fi FriendItem) Title() string {
-	return fi.Relation + " " + fi.Identity.Nickname
+	if fi.Relation != "" {
+		return fi.Relation + " " + fi.Identity.Nickname
+	}
+	return fi.Identity.Nickname
 }
 
 func (fi FriendItem) Description() string {
@@ -110,9 +113,10 @@ func SetupFriendsList(user *users.User, ls ListSetup) FriendsList {
 
 func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[uuid.UUID][]users.Identity) tea.Cmd {
 	friends := user.GetFriends()
-	bfTag := user.Data.Setup.Appereance.BestFriendTag
-	bfIden := user.Data.Statistics.BestFriend.Identity
-	banTag := user.Data.Setup.Appereance.BanTag
+
+	bfTag := user.GetBFTag()
+	bf := user.GetBestFriend()
+	banTag := user.GetBanTag()
 
 	//slices.Sort(friends)
 
@@ -135,7 +139,7 @@ func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[uuid.UUI
 			nicks := make([]string, 0, len(cons))
 			for _, c := range cons {
 				n := c.Nickname
-				if bfIden.ID == c.ID {
+				if bf.Identity.ID == c.ID {
 					n = bfTag + " " + c.Nickname
 				} else if user.IsBlocked(c) {
 					n = banTag + " " + c.Nickname
@@ -148,7 +152,7 @@ func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[uuid.UUI
 		}
 
 		var rel string
-		if bfIden == f.Identity {
+		if bf.Identity == f.Identity {
 			rel = bfTag
 		}
 
@@ -171,4 +175,37 @@ func (l *FriendsList) UpdateFriendsList(user *users.User, curOnline map[uuid.UUI
 	frItems = append(onlineItems, offlineItems...)
 
 	return l.LipList.SetItems(frItems)
+}
+
+func (l *FriendsList) UpdateBestFriend(user *users.User) tea.Cmd {
+	var cmds []tea.Cmd
+	items := l.LipList.Items()
+	bfTag := user.GetBFTag()
+	bf := user.GetBestFriend()
+	var (
+		oldChanged bool
+		newChanged bool
+	)
+	for i, v := range items {
+		fr, ok := v.(FriendItem)
+		if !ok {
+			continue
+		}
+		if fr.Relation == bfTag {
+			fr.Relation = ""
+			oldChanged = true
+			cmds = append(cmds, l.LipList.SetItem(i, fr))
+			if newChanged {
+				break
+			}
+		} else if fr.Identity == bf.Identity {
+			fr.Relation = bfTag
+			newChanged = true
+			cmds = append(cmds, l.LipList.SetItem(i, fr))
+			if oldChanged {
+				break
+			}
+		}
+	}
+	return tea.Batch(cmds...)
 }

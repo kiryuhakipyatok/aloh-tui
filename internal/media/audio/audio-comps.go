@@ -91,7 +91,7 @@ type callbacks struct {
 }
 
 type chans struct {
-	micDataChan       chan []byte
+	micDataChan       chan userVoice
 	stopSendVoiceChan chan struct{}
 }
 

@@ -45,32 +45,30 @@ func (u *User) IncreaseAmountOfConnections() error {
 	return nil
 }
 
-func (u *User) IncreaseAmountOfConnectionsByUser(iden Identity) error {
+func (u *User) IncreaseAmountOfConnectionsByUser(iden Identity) (bool, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	var newBf bool
 	if !u.conatinsFriends(iden) {
-		return nil
-	}
-
-	if u.Data.Statistics.BestFriend.Identity == iden {
-		u.Data.Statistics.BestFriend.AmountOfConnections++
-		if err := u.UpdateUserJSON(); err != nil {
-			return err
-		}
-		return nil
+		return newBf, nil
 	}
 
 	if uc, ok := u.Data.Setup.Audio.UsersSetup[iden.Nickname]; ok {
 		uc.AmountOfConnections++
-		if uc.AmountOfConnections > u.Data.Statistics.BestFriend.AmountOfConnections {
+		u.Data.Setup.Audio.UsersSetup[iden.Nickname] = uc
+		if iden == u.Data.Statistics.BestFriend.Identity {
+			u.Data.Statistics.BestFriend.AmountOfConnections++
+		} else if uc.AmountOfConnections > u.Data.Statistics.BestFriend.AmountOfConnections &&
+			uc.AmountOfConnections > 10 {
 			u.Data.Statistics.BestFriend.AmountOfConnections = uc.AmountOfConnections
 			u.Data.Statistics.BestFriend.Identity = iden
+			newBf = true
 		}
 		if err := u.UpdateUserJSON(); err != nil {
-			return err
+			return newBf, err
 		}
 	}
-	return nil
+	return newBf, nil
 }
 
 func (u *User) CountMaxTimeInConnection(stop chan struct{}) error {

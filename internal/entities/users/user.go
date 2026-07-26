@@ -16,6 +16,7 @@ const (
 	DEF_BFTAG  = "👑"
 	DEF_NOTTAG = "🔔"
 	DEF_BANTAG = "🚫"
+	DEF_COLOR  = "#random"
 )
 
 type User struct {
@@ -64,6 +65,9 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 					NotificaionTag: DEF_NOTTAG,
 					BanTag:         DEF_BANTAG,
 				},
+			},
+			Account: Account{
+				Color: DEF_COLOR,
 			},
 			Statistics: Statistics{
 				BestFriend: noBF(),

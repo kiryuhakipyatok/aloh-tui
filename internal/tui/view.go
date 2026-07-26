@@ -245,7 +245,7 @@ func (m Model) renderVoiceTab(w, h int) string {
 		textStyle := styles.CGrayBold.Render(titles.ALONE1)
 		leftMiddleSect = lipgloss.Place(
 			leftW,
-			leftMiddleHeight,
+			leftMiddleHeight-1,
 			lipgloss.Center,
 			lipgloss.Center,
 			textStyle,
@@ -381,7 +381,16 @@ func (m Model) renderFriendsTab(w, h int) string {
 	lblBottomRight := m.headerActiveStyle.Render("► manage friends")
 	var rightBottomContent string
 	if m.state == states.LOAD_STATE && m.prState == states.FRIEND_STATE {
-		rightBottomContent = safeTruncate(styles.PaddingLeftCDimStyle.Render(m.spinner.View()+"sending friend request..."), rightW)
+		switch m.cursor {
+		case 1:
+			rightBottomContent = safeTruncate(styles.PaddingLeftCDimStyle.Render(m.spinner.View()+"sending friend request..."), rightW)
+		case 2:
+			rightBottomContent = safeTruncate(styles.PaddingLeftCDimStyle.Render(m.spinner.View()+"deleting user from friends..."), rightW)
+		case 3:
+			rightBottomContent = safeTruncate(styles.PaddingLeftCDimStyle.Render(m.spinner.View()+"blocking user..."), rightW)
+		case 4:
+			rightBottomContent = safeTruncate(styles.PaddingLeftCDimStyle.Render(m.spinner.View()+"unblocking user..."), rightW)
+		}
 	} else {
 		inputWidth := max(1, (rightW-4)/2)
 		for i := range m.friendsInputs {
@@ -848,28 +857,14 @@ func (m Model) renderLoginTab(w, h int) string {
 }
 
 func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
-	coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(m.user.Data.Identity.Nickname)
-	usersAudioState := coloredUserNickname
 
-	if m.user.Engines.AudioEngine.CheckUserIsSpeaking() {
-		usersAudioState = coloredUserNickname + " 🔊"
-	}
-
-	mutes := m.user.GetMutes()
-
-	if mutes.FullMute {
-		usersAudioState += " 🙊🙉"
-	} else if mutes.MicMute {
-		usersAudioState += " 🙊"
-	}
-
-	topSect := usersAudioState
+	var userAudioState string
 
 	chatW := w - 4
 	m.chatTextInput.Width = max(1, chatW)
 
 	var bottomSect string
-	middleH := h - lipgloss.Height(topSect) - 2
+	middleH := h - lipgloss.Height(userAudioState) - 2
 	if middleH < 0 {
 		middleH = 0
 	}
@@ -888,6 +883,23 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 			textStyle,
 		)
 	} else {
+		iden := m.user.GetUserIdentity()
+		coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).
+			Render(iden.Nickname)
+		userAudioState = coloredUserNickname
+
+		if m.user.Engines.AudioEngine.CheckUserIsSpeaking() {
+			userAudioState = coloredUserNickname + " 🔊"
+		}
+
+		mutes := m.user.GetMutes()
+
+		if mutes.FullMute {
+			userAudioState += " 🙊🙉"
+		} else if mutes.MicMute {
+			userAudioState += " 🙊"
+		}
+
 		cons := make([]string, 0, len(m.connections))
 		speakingUsers := m.user.Engines.AudioEngine.FetchSpeakingUsers()
 		mutedUsers := m.user.Engines.AudioEngine.FetchUsersMutes()
@@ -990,7 +1002,7 @@ func (m Model) renderChatTab(w, h int, c lipgloss.AdaptiveColor) string {
 		bottomSect = styles.PaddingLeftStyle.MaxWidth(chatW).Render(m.chatTextInput.View())
 	}
 
-	finalView := lipgloss.JoinVertical(lipgloss.Left, topSect, middleSect, "", bottomSect)
+	finalView := lipgloss.JoinVertical(lipgloss.Left, userAudioState, middleSect, "", bottomSect)
 	return m.zone.Mark("chatW", finalView)
 }
 

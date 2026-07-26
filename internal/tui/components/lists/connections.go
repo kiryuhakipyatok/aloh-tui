@@ -79,23 +79,23 @@ func SetupConnestionsList(ls ListSetup) ConnectionsList {
 }
 
 func (l *ConnectionsList) UpdateConnectionItemList(iden users.Identity, volume float32, muted, phd, psd bool) tea.Cmd {
-	var cmds []tea.Cmd
+	var cmd tea.Cmd
 	items := l.LipList.Items()
 	for i, v := range items {
 		conn, ok := v.(ConnectionItem)
 		if !ok {
 			continue
 		}
-		if conn.Identity == iden {
+		if conn.Identity.ID == iden.ID {
 			conn.VolumeCoefficient = volume
 			conn.Muted = muted
 			conn.PersonalHardDenoise = phd
 			conn.PersonalSoftDenoise = psd
+			return l.LipList.SetItem(i, conn)
 		}
 
-		cmds = append(cmds, l.LipList.SetItem(i, conn))
 	}
-	return tea.Batch(cmds...)
+	return cmd
 }
 
 func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []users.Identity,
@@ -103,7 +103,9 @@ func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []
 	slices.SortFunc(connections, func(c1, c2 users.Identity) int {
 		return strings.Compare(c1.Nickname, c2.Nickname)
 	})
-
+	usersSetups := user.GetAudio().UsersSetup
+	bf := user.GetBestFriend()
+	bfTag := user.GetBFTag()
 	newItems := make([]list.Item, 0, len(connections))
 	for _, conn := range connections {
 		var (
@@ -111,14 +113,14 @@ func (l *ConnectionsList) UpdateConnectionsList(user *users.User, connections []
 			muted bool
 			name  = conn.Nickname
 		)
-		us, ok := user.Data.Setup.Audio.UsersSetup[name]
+		us, ok := usersSetups[name]
 		if ok {
 			vc = us.VolumeCoefficient
 			muted = us.Muted
 		}
 		var rel string
-		if user.Data.Statistics.BestFriend.Identity.Nickname == name {
-			rel = user.Data.Setup.Appereance.BestFriendTag
+		if bf.Identity.Nickname == name {
+			rel = bfTag
 		}
 		coloredName := lipgloss.NewStyle().Foreground(colors[conn.ID].MainColor).Render(name)
 		conn.Nickname = coloredName

@@ -74,7 +74,6 @@ func SendFriendRequestCmd(user *users.User, iden users.Identity) tea.Cmd {
 		defer cancel()
 		if err := user.SSHClient.NewFriendReq(ctx, iden.Nickname); err != nil {
 			msg.Err = err
-			return msg
 		}
 		return msg
 	}
