@@ -81,29 +81,35 @@ jobs:
           go-version: '1.26'
           cache: true
 
+      - name: Set up MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Cache OpenCV Windows
         id: cache-opencv-windows
         uses: actions/cache@v4
         with:
           path: C:/opencv_install
-          key: opencv-windows-4.10.0-minimal
+          key: opencv-windows-4.10.0-minimal-v2
 
       - name: Build Minimal OpenCV (Windows)
         if: steps.cache-opencv-windows.outputs.cache-hit != 'true'
+        shell: pwsh
         run: |
           git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
-          mkdir opencv/build; cd opencv/build
-          # Оборачиваем аргументы с запятыми в кавычки для PowerShell
+          mkdir opencv/build
+          cd opencv/build
           cmake -G "Visual Studio 17 2022" -A x64 `
-            "-DCMAKE_INSTALL_PREFIX=C:/opencv_install" `
-            "-DBUILD_LIST=core,videoio,imgproc,imgcodecs" `
-            "-DBUILD_SHARED_LIBS=OFF" "-DWITH_WEBP=ON" "-DBUILD_WEBP=ON" `
-            "-DWITH_MSMF=ON" "-DWITH_DSHOW=ON" "-DBUILD_EXAMPLES=OFF" "-DBUILD_TESTS=OFF" ..
+            -DCMAKE_INSTALL_PREFIX="C:/opencv_install" `
+            -DBUILD_LIST=core,videoio,imgproc,imgcodecs `
+            -DBUILD_SHARED_LIBS=OFF `
+            -DWITH_WEBP=ON -DBUILD_WEBP=ON `
+            -DWITH_MSMF=ON -DWITH_DSHOW=ON `
+            -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF `
+            -DBUILD_opencv_apps=OFF -DBUILD_opencv_videoio_ffmpeg=OFF ..
           cmake --build . --config Release --target install
 
       - name: Build Audio Libs (Windows)
         run: |
-          # Используем глобальный триплет для статической сборки всех зависимостей
           vcpkg install opus opusfile libogg speexdsp rnnoise --triplet x64-windows-static
 
       - name: Build App (Windows)
@@ -112,15 +118,14 @@ jobs:
           VCPKG_PATH="/c/vcpkg/installed/x64-windows-static"
           
           export CGO_CFLAGS="-I/c/opencv_install/include/opencv4 -I$VCPKG_PATH/include"
-          # Важно: библиотека OpenCV может называться opencv_core4100 или opencv_core410
-          # Добавляем стандартные системные либы Windows в конец
+
           export CGO_LDFLAGS="-L/c/opencv_install/x64/vc17/staticlib -L$VCPKG_PATH/lib \
             -Wl,--start-group \
             -lopencv_core4100 -lopencv_videoio4100 -lopencv_imgproc4100 -lopencv_imgcodecs4100 \
             -lopusfile -lopus -logg -lspeexdsp -lrnnoise \
             -lzlib -llibwebp -llibjpeg-turbo -llibpng -lpng -lz \
             -Wl,--end-group \
-            -lws2_32 -lole32 -lgdi32 -lavifil32 -lmsvfw32 -lcomdlg32 -ladvapi32 -lshell32 -luser32 -lkernel32"
+            -lws2_32 -lole32 -lgdi32 -lavifil32 -lmsvfw32 -lcomdlg32 -ladvapi32 -lshell32 -luser32 -lkernel32 -loleaut32 -luuid"
           
           go build -tags netgo,osusergo -ldflags="-s -w -extldflags '-static' -X 'main.version=${{ github.event.inputs.version }}' -X 'main.env=${{ github.event.inputs.env }}'" -o aloh.exe ./cmd/app
 
