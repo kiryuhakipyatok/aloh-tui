@@ -17,7 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -27,17 +26,14 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libx11-dev libxcb1-dev libasound2-dev libpulse-dev libwebp-dev cmake
-
-      - name: Install Audio Libs (Apt)
-        run: sudo apt-get install -y libogg-dev libopus-dev libopusfile-dev libspeexdsp-dev
+          sudo apt-get install -y libx11-dev libxcb1-dev libasound2-dev libpulse-dev libwebp-dev cmake libogg-dev libopus-dev libopusfile-dev libspeexdsp-dev
 
       - name: Cache OpenCV Linux
         id: cache-opencv-linux
         uses: actions/cache@v4
         with:
           path: ~/opencv_install
-          key: opencv-linux-4.10.0-minimal
+          key: opencv-linux-4.10.0-minimal-v2
 
       - name: Build Minimal OpenCV (Linux)
         if: steps.cache-opencv-linux.outputs.cache-hit != 'true'
@@ -52,19 +48,18 @@ jobs:
       - name: Build App (Linux)
         run: |
           OPENCV_PC_DIR=$(find $HOME/opencv_install -name "opencv4.pc" | xargs dirname | head -n 1)
-          echo "Found opencv4.pc in: $OPENCV_PC_DIR"
           export PKG_CONFIG_PATH="$OPENCV_PC_DIR:$PKG_CONFIG_PATH"
-          export CGO_CFLAGS="-I$HOME/opencv_install/include/opencv4"
-          
-          export CGO_LDFLAGS="-L$HOME/opencv_install/lib -L$HOME/opencv_install/lib64 -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopusfile -lopus -logg -lspeexdsp -lm"
 
+          export CGO_CFLAGS="-I$HOME/opencv_install/include/opencv4"
+          export CGO_LDFLAGS="-L$HOME/opencv_install/lib -L$HOME/opencv_install/lib64 -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopusfile -lopus -logg -lspeexdsp -lm"
+          
           go build -o aloh-linux ./cmd/app
 
       - name: Collect Libraries (Linux)
         run: |
           mkdir -p out/libs
           cp aloh-linux out/
-          cp -P $HOME/opencv_install/lib/*.so* out/libs/ 2>/dev/null || true
+          cp -P $(find $HOME/opencv_install -name "*.so*") out/libs/ 2>/dev/null || true
           cp /usr/lib/x86_64-linux-gnu/libopus.so* out/libs/ 2>/dev/null || true
           tar cfvz aloh-linux.tar.gz -C out .
 
@@ -78,11 +73,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22' # Или 1.26, если доступна
+          go-version: '1.26'
           cache: true
 
       - name: Set up MSVC Developer Command Prompt
@@ -93,7 +87,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:/opencv_install
-          key: opencv-windows-4.10.0-ninja-v5
+          key: opencv-windows-4.10.0-ninja-v6
 
       - name: Build Minimal OpenCV (Windows)
         if: steps.cache-opencv-windows.outputs.cache-hit != 'true'
@@ -107,51 +101,34 @@ jobs:
             -DCMAKE_INSTALL_PREFIX="C:/opencv_install" ^
             -DBUILD_LIST=core,videoio,imgproc,imgcodecs ^
             -DBUILD_SHARED_LIBS=OFF ^
-            -DWITH_WEBP=ON ^
-            -DBUILD_WEBP=ON ^
-            -DWITH_MSMF=ON ^
-            -DWITH_DSHOW=ON ^
-            -DBUILD_EXAMPLES=OFF ^
-            -DBUILD_TESTS=OFF ^
-            -DBUILD_PERF_TESTS=OFF ^
-            -DBUILD_opencv_apps=OFF ^
-            -DBUILD_opencv_videoio_ffmpeg=OFF ^
-            ..
+            -DWITH_WEBP=ON -DBUILD_WEBP=ON -DWITH_MSMF=ON -DWITH_DSHOW=ON ^
+            -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF ^
+            -DBUILD_opencv_apps=OFF -DBUILD_opencv_videoio_ffmpeg=OFF ..
           cmake --build . --target install
 
       - name: Build Audio Libs (vcpkg)
-        # Убираем rnnoise из vcpkg, так как он не поддерживает Windows официально
-        run: |
-          vcpkg install opus opusfile libogg speexdsp --triplet x64-windows-static
+        run: vcpkg install opus opusfile libogg speexdsp --triplet x64-windows-static
 
-      - name: Build RNNoise manually (Windows)
+      - name: Build RNNoise manually
         shell: cmd
         run: |
           git clone --depth 1 https://github.com/xiph/rnnoise.git
-          cd rnnoise
-          mkdir build_win
-          # Компилируем все .c файлы в один статический объект (упрощенная сборка для статики)
-          # Используем cl (компилятор MSVC) напрямую
-          cl /O2 /Iinclude /Isrc /c src/*.c
-          lib /out:rnnoise.lib *.obj
-          # Копируем результат в общую папку библиотек
-          mkdir C:\rnnoise_install\lib
-          mkdir C:\rnnoise_install\include
-          copy rnnoise.lib C:\rnnoise_install\lib\
-          copy include\rnnoise.h C:\rnnoise_install\include\
+          cd rnnoise & mkdir build_win & cl /O2 /Iinclude /Isrc /c src/*.c & lib /out:rnnoise.lib *.obj
+          mkdir C:\rnnoise_install\lib & mkdir C:\rnnoise_install\include
+          copy rnnoise.lib C:\rnnoise_install\lib\ & copy include\rnnoise.h C:\rnnoise_install\include\
 
       - name: Build App (Windows)
         shell: bash
         run: |
-          VCPKG_PATH="/c/vcpkg/installed/x64-windows-static"
-          OPENCV_LIB_PATH="/c/opencv_install/lib"
-          RNNOISE_PATH="/c/rnnoise_install"
+          # ВАЖНО: Используем прямые пути Windows для CGO
+          VCPKG_ROOT="C:/vcpkg/installed/x64-windows-static"
+          OPENCV_ROOT="C:/opencv_install"
+          RNNOISE_ROOT="C:/rnnoise_install"
+          export PKG_CONFIG=""
           
-          # Объединяем пути инклудов и библиотек
-          export CGO_CFLAGS="-I/c/opencv_install/include/opencv4 -I$VCPKG_PATH/include -I$RNNOISE_PATH/include"
-          
-          # Уточняем имена библиотек для vcpkg (иногда они начинаются с lib...)
-          export CGO_LDFLAGS="-L$OPENCV_LIB_PATH -L$VCPKG_PATH/lib -L$RNNOISE_PATH/lib \
+          export CGO_CFLAGS="-I$OPENCV_ROOT/include/opencv4 -I$VCPKG_ROOT/include -I$RNNOISE_ROOT/include"
+
+          export CGO_LDFLAGS="-L$OPENCV_ROOT/lib -L$VCPKG_ROOT/lib -L$RNNOISE_ROOT/lib \
             -Wl,--start-group \
             -lopencv_core4100 -lopencv_videoio4100 -lopencv_imgproc4100 -lopencv_imgcodecs4100 \
             -lopusfile -lopus -logg -lspeexdsp -lrnnoise \
