@@ -93,25 +93,25 @@ jobs:
 
       - name: Build Minimal OpenCV (Windows)
         if: steps.cache-opencv-windows.outputs.cache-hit != 'true'
-        shell: pwsh
+        shell: cmd
         run: |
           git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
-          mkdir opencv/build
-          cd opencv/build
-          cmake -G "Ninja" `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_INSTALL_PREFIX="C:/opencv_install" `
-            -DBUILD_LIST=core,videoio,imgproc,imgcodecs `
-            -DBUILD_SHARED_LIBS=OFF `
-            -DWITH_WEBP=ON `
-            -DBUILD_WEBP=ON `
-            -DWITH_MSMF=ON `
-            -DWITH_DSHOW=ON `
-            -DBUILD_EXAMPLES=OFF `
-            -DBUILD_TESTS=OFF `
-            -DBUILD_PERF_TESTS=OFF `
-            -DBUILD_opencv_apps=OFF `
-            -DBUILD_opencv_videoio_ffmpeg=OFF `
+          mkdir opencv\build
+          cd opencv\build
+          cmake -G "Ninja" ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_INSTALL_PREFIX="C:/opencv_install" ^
+            -DBUILD_LIST=core,videoio,imgproc,imgcodecs ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DWITH_WEBP=ON ^
+            -DBUILD_WEBP=ON ^
+            -DWITH_MSMF=ON ^
+            -DWITH_DSHOW=ON ^
+            -DBUILD_EXAMPLES=OFF ^
+            -DBUILD_TESTS=OFF ^
+            -DBUILD_PERF_TESTS=OFF ^
+            -DBUILD_opencv_apps=OFF ^
+            -DBUILD_opencv_videoio_ffmpeg=OFF ^
             ..
           cmake --build . --target install
 
