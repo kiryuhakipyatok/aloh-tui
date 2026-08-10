@@ -29,7 +29,8 @@ jobs:
       - name: Build Dependencies (Linux)
         run: |
           mkdir -p $HOME/local_libs
-          export PREFIX=$HOME/local_libs
+          PREFIX=$HOME/local_libs
+          
           export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
 
           git clone --depth 1 https://github.com/xiph/ogg.git
@@ -63,8 +64,8 @@ jobs:
         run: |
           export PREFIX=$HOME/local_libs
           export OCV=$HOME/opencv_install
-          # Добавляем все пути к pkgconfig
-          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$(find $OCV -name pkgconfig -type d | tr '\n' ':')"
+          OCV_PC=$(find $OCV -name pkgconfig -type d | tr '\n' ':')
+          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$OCV_PC$PKG_CONFIG_PATH"
           export LD_LIBRARY_PATH="$PREFIX/lib:$OCV/lib:$OCV/lib64"
           
           go build -v -o aloh-linux ./cmd/app
@@ -104,7 +105,6 @@ jobs:
         shell: cmd
         run: |
           set PREFIX=C:\local_libs
-          set PKG_CONFIG_PATH=%PREFIX%\lib\pkgconfig
           mkdir %PREFIX%\lib\pkgconfig
           mkdir %PREFIX%\include
 
@@ -118,7 +118,7 @@ jobs:
 
           git clone --depth 1 https://github.com/xiph/opusfile.git
           cd opusfile && mkdir build && cd build
-          cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%PREFIX% -DBUILD_SHARED_LIBS=OFF -DOP_DISABLE_HTTP=ON ..
+          cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%PREFIX% -DBUILD_SHARED_LIBS=OFF -DOP_DISABLE_HTTP=ON -DOPUS_INCLUDE_DIR=%PREFIX%/include/opus -DOGG_INCLUDE_DIR=%PREFIX%/include ..
           ninja install
           cd ..\..\
 
@@ -132,11 +132,13 @@ jobs:
           lib /out:rnnoise.lib *.obj
           copy rnnoise.lib %PREFIX%\lib\
           copy include\rnnoise.h %PREFIX%\include\
-          echo Name: rnnoise > %PREFIX%\lib\pkgconfig\rnnoise.pc
-          echo Version: 0.1 >> %PREFIX%\lib\pkgconfig\rnnoise.pc
-          echo Description: rnnoise >> %PREFIX%\lib\pkgconfig\rnnoise.pc
-          echo Libs: -L%PREFIX:\=/%/lib -lrnnoise >> %PREFIX%\lib\pkgconfig\rnnoise.pc
-          echo Cflags: -I%PREFIX:\=/%/include >> %PREFIX%\lib\pkgconfig\rnnoise.pc
+          (
+            echo Name: rnnoise
+            echo Version: 0.1
+            echo Description: rnnoise
+            echo Libs: -LC:/local_libs/lib -lrnnoise
+            echo Cflags: -IC:/local_libs/include
+          ) > %PREFIX%\lib\pkgconfig\rnnoise.pc
           cd ..
 
       - name: Build OpenCV (Windows Static)
@@ -158,10 +160,13 @@ jobs:
         shell: bash
         env:
           CGO_ENABLED: 1
-          PKG_CONFIG_PATH: "C:/local_libs/lib/pkgconfig:C:/opencv_install/lib/pkgconfig:C:/opencv_install/staticlib/pkgconfig"
         run: |
           PREFIX="C:/local_libs"
           OCV="C:/opencv_install"
+          
+          OCV_PC=$(find $OCV -name pkgconfig -type d | tr '\n' ':')
+          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$OCV_PC"
+          
           OCV_LIB_DIR=$(find $OCV -name "opencv_world4100.lib" | xargs dirname | head -n 1)
           
           export CGO_CFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
