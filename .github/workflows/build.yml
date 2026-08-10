@@ -89,7 +89,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:/opencv_install
-          key: opencv-windows-4.10.0-minimal-v3
+          key: opencv-windows-4.10.0-ninja-v4
 
       - name: Build Minimal OpenCV (Windows)
         if: steps.cache-opencv-windows.outputs.cache-hit != 'true'
@@ -98,21 +98,22 @@ jobs:
           git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
           mkdir opencv/build
           cd opencv/build
-          cmake -G "Visual Studio 17 2022" -A x64 `
-            "-DCMAKE_INSTALL_PREFIX=C:/opencv_install" `
-            "-DBUILD_LIST=core,videoio,imgproc,imgcodecs" `
-            "-DBUILD_SHARED_LIBS=OFF" `
-            "-DWITH_WEBP=ON" `
-            "-DBUILD_WEBP=ON" `
-            "-DWITH_MSMF=ON" `
-            "-DWITH_DSHOW=ON" `
-            "-DBUILD_EXAMPLES=OFF" `
-            "-DBUILD_TESTS=OFF" `
-            "-DBUILD_PERF_TESTS=OFF" `
-            "-DBUILD_opencv_apps=OFF" `
-            "-DBUILD_opencv_videoio_ffmpeg=OFF" `
+          cmake -G "Ninja" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_INSTALL_PREFIX="C:/opencv_install" `
+            -DBUILD_LIST=core,videoio,imgproc,imgcodecs `
+            -DBUILD_SHARED_LIBS=OFF `
+            -DWITH_WEBP=ON `
+            -DBUILD_WEBP=ON `
+            -DWITH_MSMF=ON `
+            -DWITH_DSHOW=ON `
+            -DBUILD_EXAMPLES=OFF `
+            -DBUILD_TESTS=OFF `
+            -DBUILD_PERF_TESTS=OFF `
+            -DBUILD_opencv_apps=OFF `
+            -DBUILD_opencv_videoio_ffmpeg=OFF `
             ..
-          cmake --build . --config Release --target install
+          cmake --build . --target install
 
       - name: Build Audio Libs (Windows)
         run: |
@@ -122,10 +123,11 @@ jobs:
         shell: bash
         run: |
           VCPKG_PATH="/c/vcpkg/installed/x64-windows-static"
+          OPENCV_LIB_PATH="/c/opencv_install/lib"
           
           export CGO_CFLAGS="-I/c/opencv_install/include/opencv4 -I$VCPKG_PATH/include"
           
-          export CGO_LDFLAGS="-L/c/opencv_install/x64/vc17/staticlib -L$VCPKG_PATH/lib \
+          export CGO_LDFLAGS="-L$OPENCV_LIB_PATH -L$VCPKG_PATH/lib \
             -Wl,--start-group \
             -lopencv_core4100 -lopencv_videoio4100 -lopencv_imgproc4100 -lopencv_imgcodecs4100 \
             -lopusfile -lopus -logg -lspeexdsp -lrnnoise \
