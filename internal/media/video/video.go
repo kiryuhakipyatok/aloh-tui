@@ -24,6 +24,7 @@ type VideoEngine interface {
 	SetConnected()
 	SetDisconnected()
 	RenderUsersVideoTerminal(id uuid.UUID, data []byte)
+	OnOffUsersWindow(id uuid.UUID, nickname string) (bool, error)
 	GetUsersFramesTerminal() map[uuid.UUID]string
 	RemoveUserFromUsersVideo(id uuid.UUID)
 	OnOffWebcam() (bool, error)
@@ -59,7 +60,10 @@ type VideoSetup struct {
 }
 
 type userVideo struct {
-	frame string
+	frame    string
+	window   *gocv.Window
+	windowed atomic.Bool
+	img      gocv.Mat
 }
 
 func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
@@ -107,7 +111,36 @@ func (ve *videoEngine) GetUserFrame() string {
 	return f
 }
 
-func openFirstAvailableCamera() (*gocv.VideoCapture, error) {
+func (ve *videoEngine) OnOffUsersWindow(id uuid.UUID, nickname string) (bool, error) {
+	ve.mu.Lock()
+	defer ve.mu.Unlock()
+	us, ok := ve.usersVideo[id]
+	if !ok {
+		return false, errs.ErrNotFound()
+	}
+	s := us.windowed.Load()
+
+	if !s == true {
+		window := gocv.NewWindow(nickname)
+		img := gocv.NewMat()
+		us.window = window
+		us.img = img
+	} else {
+		if us.window != nil {
+			if err := us.window.Close(); err != nil {
+				return false, err
+			}
+			us.window = nil
+			if err := us.img.Close(); err != nil {
+				return false, err
+			}
+		}
+	}
+	us.windowed.Store(!s)
+	return !s, nil
+}
+
+func openFirstAvailableWebcam() (*gocv.VideoCapture, error) {
 	for id := range 5 {
 		webcam, err := gocv.OpenVideoCapture(id)
 		if err != nil {
@@ -140,7 +173,7 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 
 	if !s == true {
 
-		webcam, err := openFirstAvailableCamera()
+		webcam, err := openFirstAvailableWebcam()
 		if err != nil {
 			ve.log.Error("failed to open webcam", logger.Err(err))
 			return !s, err
@@ -190,6 +223,7 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 	ve.log.Info("processing webcam")
 	timer := time.NewTicker(50 * time.Millisecond)
 	imge := gocv.NewMat()
+
 	//smallMat := gocv.NewMat()
 	defer imge.Close()
 	closeWaitChan := sync.OnceFunc(func() {
@@ -256,12 +290,23 @@ func (ve *videoEngine) RenderUsersVideoTerminal(id uuid.UUID, data []byte) {
 	n := len(ve.usersVideo)
 	ve.mu.Unlock()
 
-	frame, err := renderImg(n, data)
+	frame, err := renderTerminalImg(n, data)
 	if err != nil {
 		ve.log.Error("failed to render img", logger.Err(err))
 	}
 	ve.mu.Lock()
 	uv.frame = frame
+
+	if uv.windowed.Load() && uv.window != nil {
+		imgData, err := uv.img.DataPtrUint8()
+		if err == nil {
+			copy(imgData, data)
+		}
+
+		if err := uv.window.IMShow(uv.img); err != nil {
+			ve.log.Error("failed to window img", logger.Err(err))
+		}
+	}
 	ve.mu.Unlock()
 }
 
@@ -282,7 +327,7 @@ func (ve *videoEngine) GetUsersFramesTerminal() map[uuid.UUID]string {
 	return frames
 }
 
-func renderImg(n int, data []byte) (string, error) {
+func renderTerminalImg(n int, data []byte) (string, error) {
 	img, err := webp.Decode(bytes.NewReader(data))
 	if err != nil {
 		return "", err
