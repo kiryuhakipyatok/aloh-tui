@@ -78,7 +78,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.23' # Используем стабильную 1.23
           cache: true
 
       - name: Set up MSVC
@@ -113,27 +113,36 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_INSTALL_PREFIX="C:/opencv_install" ^
             -DBUILD_opencv_world=ON ^
-            -DBUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo ^
+            -DBUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo,stitching,ml ^
             -DBUILD_SHARED_LIBS=OFF -DWITH_WEBP=ON -DBUILD_WEBP=ON -DWITH_MSMF=ON -DWITH_DSHOW=ON ^
-            -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF ^
-            -DOPENCV_GENERATE_PKGCONFIG=ON ..
+            -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DOPENCV_GENERATE_PKGCONFIG=ON ..
           ninja install
+
+      - name: Verify OpenCV Install
+        shell: bash
+        run: |
+          echo "Checking OpenCV headers..."
+          ls -R "C:/opencv_install/include/opencv4/opencv2" | head -n 20
+          echo "Checking OpenCV libs..."
+          ls -R "C:/opencv_install/" | grep ".lib"
 
       - name: Run Go Build (Windows)
         shell: bash
+        env:
+          CGO_ENABLED: 1
+          # Важно: добавляем и корневой include, и include/opencv4
+          CGO_CFLAGS: "-IC:/local_libs/include -IC:/opencv_install/include/opencv4 -IC:/opencv_install/include"
+          CGO_CXXFLAGS: "-IC:/local_libs/include -IC:/opencv_install/include/opencv4 -IC:/opencv_install/include"
         run: |
-          export PREFIX="C:/local_libs"
-          export OCV="C:/opencv_install"
+          PREFIX="C:/local_libs"
+          OCV="C:/opencv_install"
           
-          # Поиск пути к статической либе (в OpenCV 4.10 это часто x64/vc17/staticlib)
-          OCV_LIB=$(find $OCV -name "opencv_world4100.lib" | xargs dirname | head -n 1)
+          # Находим путь к либам (в OpenCV 4 статические либы могут быть в разных подпапках)
+          OCV_LIB_DIR=$(find $OCV -name "opencv_world4100.lib" | xargs dirname | head -n 1)
+          echo "Found OpenCV libs in: $OCV_LIB_DIR"
           
-          export CGO_ENABLED=1
-          export CGO_CPPFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
-          export CGO_CXXFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
-          
-          # Добавляем путь к либам OpenCV в LDFLAGS
-          export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV_LIB \
+          # Указываем LDFLAGS прямо в команде сборки для надежности
+          export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV_LIB_DIR \
             -Wl,--start-group -lopencv_world4100 -lopus -logg -lrnnoise \
             -lzlib -llibwebp -llibjpeg-turbo -llibpng -lws2_32 -lole32 -lgdi32 -lavifil32 -lmsvfw32 -lcomdlg32 -ladvapi32 -lshell32 -luser32 -lkernel32 -loleaut32 -luuid -Wl,--end-group"
           
