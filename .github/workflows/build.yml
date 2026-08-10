@@ -51,9 +51,13 @@ jobs:
 
       - name: Build App (Linux)
         run: |
-          export PKG_CONFIG_PATH=$HOME/opencv_install/lib/pkgconfig:$HOME/opencv_install/lib64/pkgconfig
+          OPENCV_PC_DIR=$(find $HOME/opencv_install -name "opencv4.pc" | xargs dirname | head -n 1)
+          echo "Found opencv4.pc in: $OPENCV_PC_DIR"
+          export PKG_CONFIG_PATH="$OPENCV_PC_DIR:$PKG_CONFIG_PATH"
           export CGO_CFLAGS="-I$HOME/opencv_install/include/opencv4"
+          
           export CGO_LDFLAGS="-L$HOME/opencv_install/lib -L$HOME/opencv_install/lib64 -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopusfile -lopus -logg -lspeexdsp -lm"
+
           go build -o aloh-linux ./cmd/app
 
       - name: Collect Libraries (Linux)
