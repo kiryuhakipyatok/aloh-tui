@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.26'
           cache: true
 
       - name: Install System Dependencies
@@ -72,7 +72,6 @@ jobs:
           name: aloh-linux
           path: aloh-linux.tar.gz
 
-  # --- WINDOWS JOB ---
   build-windows:
     runs-on: windows-latest
     steps:
@@ -80,7 +79,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.26'
           cache: true
 
       - name: Set up MSVC
