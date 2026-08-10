@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.22'
           cache: true
 
       - name: Install System Dependencies
@@ -32,34 +32,37 @@ jobs:
         id: cache-opencv-linux
         uses: actions/cache@v4
         with:
-          path: ~/opencv_install
-          key: opencv-linux-4.10.0-minimal-v2
+          path: /home/runner/opencv_install
+          key: opencv-linux-4.10.0-v7
 
-      - name: Build Minimal OpenCV (Linux)
+      - name: Build OpenCV (Linux)
         if: steps.cache-opencv-linux.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
           mkdir -p opencv/build && cd opencv/build
-          cmake -D CMAKE_BUILD_TYPE=RELEASE -D CMAKE_INSTALL_PREFIX=$HOME/opencv_install \
-                -D BUILD_LIST=core,videoio,imgproc,imgcodecs -D WITH_V4L=ON -D WITH_WEBP=ON \
-                -D BUILD_EXAMPLES=OFF -D BUILD_TESTS=OFF -D BUILD_PERF_TESTS=OFF ..
+          # Собираем OPENCV_WORLD - это один большой файл, gocv его любит больше всего
+          cmake -D CMAKE_BUILD_TYPE=RELEASE \
+                -D CMAKE_INSTALL_PREFIX=/home/runner/opencv_install \
+                -D BUILD_opencv_world=ON \
+                -D BUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo \
+                -D WITH_V4L=ON -D WITH_WEBP=ON -D BUILD_EXAMPLES=OFF -D BUILD_TESTS=OFF ..
           make -j$(nproc) && make install
 
       - name: Build App (Linux)
+        env:
+          PKG_CONFIG_PATH: /home/runner/opencv_install/lib/pkgconfig:/home/runner/opencv_install/lib64/pkgconfig
+          LD_LIBRARY_PATH: /home/runner/opencv_install/lib:/home/runner/opencv_install/lib64
+          CGO_CPPFLAGS: -I/home/runner/opencv_install/include/opencv4
+          CGO_LDFLAGS: -L/home/runner/opencv_install/lib -L/home/runner/opencv_install/lib64
         run: |
-          OPENCV_PC_DIR=$(find $HOME/opencv_install -name "opencv4.pc" | xargs dirname | head -n 1)
-          export PKG_CONFIG_PATH="$OPENCV_PC_DIR:$PKG_CONFIG_PATH"
-
-          export CGO_CFLAGS="-I$HOME/opencv_install/include/opencv4"
-          export CGO_LDFLAGS="-L$HOME/opencv_install/lib -L$HOME/opencv_install/lib64 -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopusfile -lopus -logg -lspeexdsp -lm"
-          
-          go build -o aloh-linux ./cmd/app
+          pkg-config --cflags opencv4
+          go build -v -o aloh-linux ./cmd/app
 
       - name: Collect Libraries (Linux)
         run: |
           mkdir -p out/libs
           cp aloh-linux out/
-          cp -P $(find $HOME/opencv_install -name "*.so*") out/libs/ 2>/dev/null || true
+          find /home/runner/opencv_install -name "*.so*" -exec cp -P {} out/libs/ \;
           cp /usr/lib/x86_64-linux-gnu/libopus.so* out/libs/ 2>/dev/null || true
           tar cfvz aloh-linux.tar.gz -C out .
 
@@ -69,6 +72,7 @@ jobs:
           name: aloh-linux
           path: aloh-linux.tar.gz
 
+  # --- WINDOWS JOB ---
   build-windows:
     runs-on: windows-latest
     steps:
@@ -76,10 +80,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.22'
           cache: true
 
-      - name: Set up MSVC Developer Command Prompt
+      - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Cache OpenCV Windows
@@ -87,9 +91,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:/opencv_install
-          key: opencv-windows-4.10.0-ninja-v6
+          key: opencv-windows-4.10.0-v7
 
-      - name: Build Minimal OpenCV (Windows)
+      - name: Build OpenCV (Windows)
         if: steps.cache-opencv-windows.outputs.cache-hit != 'true'
         shell: cmd
         run: |
@@ -99,46 +103,45 @@ jobs:
           cmake -G "Ninja" ^
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_INSTALL_PREFIX="C:/opencv_install" ^
-            -DBUILD_LIST=core,videoio,imgproc,imgcodecs ^
-            -DBUILD_SHARED_LIBS=OFF ^
-            -DWITH_WEBP=ON -DBUILD_WEBP=ON -DWITH_MSMF=ON -DWITH_DSHOW=ON ^
-            -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF ^
-            -DBUILD_opencv_apps=OFF -DBUILD_opencv_videoio_ffmpeg=OFF ..
+            -DBUILD_opencv_world=ON ^
+            -DBUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo ^
+            -DBUILD_SHARED_LIBS=OFF -DWITH_WEBP=ON -DBUILD_WEBP=ON -DWITH_MSMF=ON -DWITH_DSHOW=ON ^
+            -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DBUILD_opencv_apps=OFF ..
           cmake --build . --target install
 
-      - name: Build Audio Libs (vcpkg)
+      - name: Build Audio Libs
         run: vcpkg install opus opusfile libogg speexdsp --triplet x64-windows-static
 
-      - name: Build RNNoise manually
+      - name: Build RNNoise
         shell: cmd
         run: |
           git clone --depth 1 https://github.com/xiph/rnnoise.git
-          cd rnnoise & mkdir build_win & cl /O2 /Iinclude /Isrc /c src/*.c & lib /out:rnnoise.lib *.obj
-          mkdir C:\rnnoise_install\lib & mkdir C:\rnnoise_install\include
-          copy rnnoise.lib C:\rnnoise_install\lib\ & copy include\rnnoise.h C:\rnnoise_install\include\
+          cd rnnoise && mkdir build_win && cl /O2 /Iinclude /Isrc /c src/*.c && lib /out:rnnoise.lib *.obj
+          mkdir C:\rnnoise_install\lib && mkdir C:\rnnoise_install\include
+          copy rnnoise.lib C:\rnnoise_install\lib\ && copy include\rnnoise.h C:\rnnoise_install\include\
 
       - name: Build App (Windows)
         shell: bash
         run: |
-          # ВАЖНО: Используем прямые пути Windows для CGO
-          VCPKG_ROOT="C:/vcpkg/installed/x64-windows-static"
-          OPENCV_ROOT="C:/opencv_install"
-          RNNOISE_ROOT="C:/rnnoise_install"
-          export PKG_CONFIG=""
+          VCPKG_INC="C:/vcpkg/installed/x64-windows-static/include"
+          VCPKG_LIB="C:/vcpkg/installed/x64-windows-static/lib"
+          OCV_INC="C:/opencv_install/include/opencv4"
+          OCV_LIB="C:/opencv_install/x64/vc17/staticlib" # Если Ninja не сработал, проверить /lib
+          [ -d "C:/opencv_install/lib" ] && OCV_LIB="C:/opencv_install/lib"
           
-          export CGO_CFLAGS="-I$OPENCV_ROOT/include/opencv4 -I$VCPKG_ROOT/include -I$RNNOISE_ROOT/include"
+          export CGO_ENABLED=1
+          export PKG_CONFIG="" # Важно: отключаем pkg-config на Windows
+          
+          export CGO_CPPFLAGS="-I$OCV_INC -I$VCPKG_INC -I/c/rnnoise_install/include"
 
-          export CGO_LDFLAGS="-L$OPENCV_ROOT/lib -L$VCPKG_ROOT/lib -L$RNNOISE_ROOT/lib \
-            -Wl,--start-group \
-            -lopencv_core4100 -lopencv_videoio4100 -lopencv_imgproc4100 -lopencv_imgcodecs4100 \
-            -lopusfile -lopus -logg -lspeexdsp -lrnnoise \
-            -lzlib -llibwebp -llibjpeg-turbo -llibpng -lpng -lz \
-            -Wl,--end-group \
+          export CGO_LDFLAGS="-L$OCV_LIB -L$VCPKG_LIB -L/c/rnnoise_install/lib \
+            -Wl,--start-group -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise \
+            -lzlib -llibwebp -llibjpeg-turbo -llibpng -lpng -lz -Wl,--end-group \
             -lws2_32 -lole32 -lgdi32 -lavifil32 -lmsvfw32 -lcomdlg32 -ladvapi32 -lshell32 -luser32 -lkernel32 -loleaut32 -luuid"
           
-          go build -tags netgo,osusergo -ldflags="-s -w -extldflags '-static' -X 'main.version=${{ github.event.inputs.version }}' -X 'main.env=${{ github.event.inputs.env }}'" -o aloh.exe ./cmd/app
+          go build -v -tags netgo,osusergo -ldflags="-s -w -extldflags '-static' -X 'main.version=${{ github.event.inputs.version }}'" -o aloh.exe ./cmd/app
 
-      - name: Upload Windows Binary
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: aloh-windows
