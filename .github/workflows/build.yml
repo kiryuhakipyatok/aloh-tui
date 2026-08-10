@@ -82,7 +82,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.22' # Или 1.26, если доступна
           cache: true
 
       - name: Set up MSVC Developer Command Prompt
@@ -93,7 +93,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:/opencv_install
-          key: opencv-windows-4.10.0-ninja-v4
+          key: opencv-windows-4.10.0-ninja-v5
 
       - name: Build Minimal OpenCV (Windows)
         if: steps.cache-opencv-windows.outputs.cache-hit != 'true'
@@ -119,19 +119,39 @@ jobs:
             ..
           cmake --build . --target install
 
-      - name: Build Audio Libs (Windows)
+      - name: Build Audio Libs (vcpkg)
+        # Убираем rnnoise из vcpkg, так как он не поддерживает Windows официально
         run: |
-          vcpkg install opus opusfile libogg speexdsp rnnoise --triplet x64-windows-static
+          vcpkg install opus opusfile libogg speexdsp --triplet x64-windows-static
+
+      - name: Build RNNoise manually (Windows)
+        shell: cmd
+        run: |
+          git clone --depth 1 https://github.com/xiph/rnnoise.git
+          cd rnnoise
+          mkdir build_win
+          # Компилируем все .c файлы в один статический объект (упрощенная сборка для статики)
+          # Используем cl (компилятор MSVC) напрямую
+          cl /O2 /Iinclude /Isrc /c src/*.c
+          lib /out:rnnoise.lib *.obj
+          # Копируем результат в общую папку библиотек
+          mkdir C:\rnnoise_install\lib
+          mkdir C:\rnnoise_install\include
+          copy rnnoise.lib C:\rnnoise_install\lib\
+          copy include\rnnoise.h C:\rnnoise_install\include\
 
       - name: Build App (Windows)
         shell: bash
         run: |
           VCPKG_PATH="/c/vcpkg/installed/x64-windows-static"
           OPENCV_LIB_PATH="/c/opencv_install/lib"
+          RNNOISE_PATH="/c/rnnoise_install"
           
-          export CGO_CFLAGS="-I/c/opencv_install/include/opencv4 -I$VCPKG_PATH/include"
+          # Объединяем пути инклудов и библиотек
+          export CGO_CFLAGS="-I/c/opencv_install/include/opencv4 -I$VCPKG_PATH/include -I$RNNOISE_PATH/include"
           
-          export CGO_LDFLAGS="-L$OPENCV_LIB_PATH -L$VCPKG_PATH/lib \
+          # Уточняем имена библиотек для vcpkg (иногда они начинаются с lib...)
+          export CGO_LDFLAGS="-L$OPENCV_LIB_PATH -L$VCPKG_PATH/lib -L$RNNOISE_PATH/lib \
             -Wl,--start-group \
             -lopencv_core4100 -lopencv_videoio4100 -lopencv_imgproc4100 -lopencv_imgcodecs4100 \
             -lopusfile -lopus -logg -lspeexdsp -lrnnoise \
