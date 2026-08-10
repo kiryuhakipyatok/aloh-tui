@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.22'
           cache: true
 
       - name: Install System Dependencies
@@ -33,14 +33,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /home/runner/opencv_install
-          key: opencv-linux-4.10.0-v7
+          key: opencv-linux-4.10.0-v8
 
       - name: Build OpenCV (Linux)
         if: steps.cache-opencv-linux.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
           mkdir -p opencv/build && cd opencv/build
-          # Собираем OPENCV_WORLD - это один большой файл, gocv его любит больше всего
           cmake -D CMAKE_BUILD_TYPE=RELEASE \
                 -D CMAKE_INSTALL_PREFIX=/home/runner/opencv_install \
                 -D BUILD_opencv_world=ON \
@@ -48,15 +47,18 @@ jobs:
                 -D WITH_V4L=ON -D WITH_WEBP=ON -D BUILD_EXAMPLES=OFF -D BUILD_TESTS=OFF ..
           make -j$(nproc) && make install
 
-      - name: Build App (Linux)
-        env:
-          PKG_CONFIG_PATH: /home/runner/opencv_install/lib/pkgconfig:/home/runner/opencv_install/lib64/pkgconfig
-          LD_LIBRARY_PATH: /home/runner/opencv_install/lib:/home/runner/opencv_install/lib64
-          CGO_CPPFLAGS: -I/home/runner/opencv_install/include/opencv4
-          CGO_LDFLAGS: -L/home/runner/opencv_install/lib -L/home/runner/opencv_install/lib64
+      - name: Set Environment & Build (Linux)
         run: |
-          pkg-config --cflags opencv4
-          go build -v -o aloh-linux ./cmd/app
+          PC_DIR=$(find /home/runner/opencv_install -name opencv4.pc -exec dirname {} \; | head -n 1)
+          echo "PKG_CONFIG_PATH=$PC_DIR:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          
+          echo "CGO_CPPFLAGS=-I/home/runner/opencv_install/include/opencv4" >> $GITHUB_ENV
+          echo "CGO_CXXFLAGS=-I/home/runner/opencv_install/include/opencv4" >> $GITHUB_ENV
+          echo "CGO_LDFLAGS=-L/home/runner/opencv_install/lib -L/home/runner/opencv_install/lib64 -lopencv_world -lopusfile -lopus -logg -lspeexdsp -lm" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/home/runner/opencv_install/lib:/home/runner/opencv_install/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+
+      - name: Run Go Build (Linux)
+        run: go build -v -o aloh-linux ./cmd/app
 
       - name: Collect Libraries (Linux)
         run: |
@@ -79,7 +81,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.22'
           cache: true
 
       - name: Set up MSVC
@@ -90,7 +92,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:/opencv_install
-          key: opencv-windows-4.10.0-v7
+          key: opencv-windows-4.10.0-v8
 
       - name: Build OpenCV (Windows)
         if: steps.cache-opencv-windows.outputs.cache-hit != 'true'
@@ -109,7 +111,9 @@ jobs:
           cmake --build . --target install
 
       - name: Build Audio Libs
-        run: vcpkg install opus opusfile libogg speexdsp --triplet x64-windows-static
+        run: |
+          $env:VCPKG_ROOT = "C:\vcpkg"
+          vcpkg install opus opusfile libogg speexdsp --triplet x64-windows-static
 
       - name: Build RNNoise
         shell: cmd
@@ -119,28 +123,27 @@ jobs:
           mkdir C:\rnnoise_install\lib && mkdir C:\rnnoise_install\include
           copy rnnoise.lib C:\rnnoise_install\lib\ && copy include\rnnoise.h C:\rnnoise_install\include\
 
-      - name: Build App (Windows)
+      - name: Set Windows Environment
         shell: bash
         run: |
           VCPKG_INC="C:/vcpkg/installed/x64-windows-static/include"
           VCPKG_LIB="C:/vcpkg/installed/x64-windows-static/lib"
           OCV_INC="C:/opencv_install/include/opencv4"
-          OCV_LIB="C:/opencv_install/x64/vc17/staticlib" # Если Ninja не сработал, проверить /lib
-          [ -d "C:/opencv_install/lib" ] && OCV_LIB="C:/opencv_install/lib"
+          OCV_LIB="C:/opencv_install/lib"
+          [ -d "C:/opencv_install/x64/vc17/staticlib" ] && OCV_LIB="C:/opencv_install/x64/vc17/staticlib"
           
-          export CGO_ENABLED=1
-          export PKG_CONFIG="" # Важно: отключаем pkg-config на Windows
-          
-          export CGO_CPPFLAGS="-I$OCV_INC -I$VCPKG_INC -I/c/rnnoise_install/include"
+          echo "CGO_ENABLED=1" >> $GITHUB_ENV
+          echo "PKG_CONFIG=" >> $GITHUB_ENV
+          echo "CGO_CPPFLAGS=-I$OCV_INC -I$VCPKG_INC -I/c/rnnoise_install/include" >> $GITHUB_ENV
+          echo "CGO_CXXFLAGS=-I$OCV_INC -I$VCPKG_INC -I/c/rnnoise_install/include" >> $GITHUB_ENV
+ 
+          LDFLAGS="-L$OCV_LIB -L$VCPKG_LIB -L/c/rnnoise_install/lib -Wl,--start-group -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise -lzlib -llibwebp -llibjpeg-turbo -llibpng -lpng -lz -Wl,--end-group -lws2_32 -lole32 -lgdi32 -lavifil32 -lmsvfw32 -lcomdlg32 -ladvapi32 -lshell32 -luser32 -lkernel32 -loleaut32 -luuid"
+          echo "CGO_LDFLAGS=$LDFLAGS" >> $GITHUB_ENV
 
-          export CGO_LDFLAGS="-L$OCV_LIB -L$VCPKG_LIB -L/c/rnnoise_install/lib \
-            -Wl,--start-group -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise \
-            -lzlib -llibwebp -llibjpeg-turbo -llibpng -lpng -lz -Wl,--end-group \
-            -lws2_32 -lole32 -lgdi32 -lavifil32 -lmsvfw32 -lcomdlg32 -ladvapi32 -lshell32 -luser32 -lkernel32 -loleaut32 -luuid"
-          
-          go build -v -tags netgo,osusergo -ldflags="-s -w -extldflags '-static' -X 'main.version=${{ github.event.inputs.version }}'" -o aloh.exe ./cmd/app
+      - name: Run Go Build (Windows)
+        run: go build -v -tags netgo,osusergo -ldflags="-s -w -extldflags '-static' -X 'main.version=${{ github.event.inputs.version }}'" -o aloh.exe ./cmd/app
 
-      - name: Upload
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: aloh-windows

@@ -2,6 +2,7 @@ package video
 
 import (
 	"aloh-tui/internal/networking"
+	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
 	"bytes"
 	"image"
@@ -106,11 +107,40 @@ func (ve *videoEngine) GetUserFrame() string {
 	return f
 }
 
+func openFirstAvailableCamera() (*gocv.VideoCapture, error) {
+	for id := range 5 {
+		webcam, err := gocv.OpenVideoCapture(id)
+		if err != nil {
+			continue
+		}
+
+		img := gocv.NewMat()
+		defer img.Close()
+
+		success := false
+		for range 5 {
+			if webcam.Read(&img) && !img.Empty() {
+				success = true
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+
+		if success {
+			return webcam, nil
+		}
+
+		webcam.Close()
+	}
+	return nil, errs.ErrNoAvailableWebcam()
+}
+
 func (ve *videoEngine) OnOffWebcam() (bool, error) {
 	s := ve.started.Load()
 
 	if !s == true {
-		webcam, err := gocv.OpenVideoCapture(0)
+
+		webcam, err := openFirstAvailableCamera()
 		if err != nil {
 			ve.log.Error("failed to open webcam", logger.Err(err))
 			return !s, err
