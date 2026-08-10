@@ -1,4 +1,4 @@
-name: Build Aloh App
+name: Build Aloh App (Manual Static Windows)
 
 on:
   workflow_dispatch:
@@ -9,97 +9,76 @@ on:
         default: '1.0.0'
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-          cache: true
-
-      - name: Install Build Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build build-essential pkg-config libtool autoconf \
-            libx11-dev libxcb1-dev libasound2-dev libpulse-dev libwebp-dev \
-            libogg-dev libopus-dev libopusfile-dev libspeexdsp-dev
-
-      - name: Build RNNoise (Linux)
-        run: |
-          git clone --depth 1 https://github.com/xiph/rnnoise.git
-          cd rnnoise && ./autogen.sh
-          ./configure --prefix=$HOME/local_libs --enable-shared --disable-static
-          make -j$(nproc) && make install
-
-      - name: Build OpenCV (Linux)
-        run: |
-          git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
-          mkdir -p opencv/build && cd opencv/build
-          cmake -D CMAKE_BUILD_TYPE=RELEASE \
-                -D CMAKE_INSTALL_PREFIX=$HOME/opencv_install \
-                -D OPENCV_GENERATE_PKGCONFIG=ON \
-                -D BUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo \
-                -D WITH_V4L=ON -D WITH_WEBP=ON -D BUILD_EXAMPLES=OFF -D BUILD_TESTS=OFF ..
-          make -j$(nproc) && make install
-
-      - name: Run Go Build (Linux)
-        run: |
-          export PREFIX=$HOME/local_libs
-          export OCV=$HOME/opencv_install
-          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$(find $OCV -name pkgconfig -type d | tr '\n' ':')$PKG_CONFIG_PATH"
-          
-          export CGO_CPPFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
-          export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV/lib -L$OCV/lib64 -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopencv_highgui -lopusfile -lopus -logg -lspeexdsp -lrnnoise -lm"
-          
-          go build -v -o aloh-linux ./cmd/app
-
-      - name: Collect Artifacts (Linux)
-        run: |
-          mkdir -p out/libs
-          cp aloh-linux out/
-          find $HOME/local_libs/lib -name "*.so*" -exec cp -P {} out/libs/ \;
-          find $HOME/opencv_install -name "*.so*" -exec cp -P {} out/libs/ \;
-          tar cfvz aloh-linux.tar.gz -C out .
-
-      - name: Upload Linux
-        uses: actions/upload-artifact@v4
-        with:
-          name: aloh-linux
-          path: aloh-linux.tar.gz
-
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.23'
           cache: true
-
-      - name: Install pkg-config and Dependencies
-        run: |
-          choco install pkgconfiglite
-          vcpkg install opus opusfile libogg speexdsp --triplet x64-windows-static
 
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Build RNNoise (Windows)
+      - name: Install Pkg-Config
+        run: choco install pkgconfiglite
+
+      - name: Build All Dependencies Manually
         shell: cmd
         run: |
+          set PREFIX=C:\local_libs
+          mkdir %PREFIX%\lib\pkgconfig
+          mkdir %PREFIX%\include
+
+          :: 1. Сборка OGG (Статически)
+          git clone --depth 1 https://github.com/xiph/ogg.git
+          cd ogg && mkdir build && cd build
+          cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%PREFIX% -DBUILD_SHARED_LIBS=OFF ..
+          ninja install
+          cd ..\..\
+
+          :: 2. Сборка OPUS (Статически)
+          git clone --depth 1 https://github.com/xiph/opus.git
+          cd opus && mkdir build && cd build
+          cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%PREFIX% -DBUILD_SHARED_LIBS=OFF ..
+          ninja install
+          cd ..\..\
+
+          :: 3. Сборка SPEEXDSP (Статически)
+          git clone --depth 1 https://github.com/xiph/speexdsp.git
+          cd speexdsp && mkdir build && cd build
+          cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%PREFIX% -DBUILD_SHARED_LIBS=OFF ..
+          ninja install
+          cd ..\..\
+
+          :: 4. Сборка RNNOISE (Вручную через cl.exe)
           git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise
-          cl /O2 /Iinclude /Isrc /D_USE_MATH_DEFINES /D_CRT_SECURE_NO_WARNINGS /c ^
-             src/denoise.c src/rnn.c src/rnn_data.c src/pitch.c src/kiss_fft.c src/celt_lpc.c src/nnet.c
-          if %errorlevel% neq 0 exit /b %errorlevel%
-          lib /out:rnnoise.lib denoise.obj rnn.obj rnn_data.obj pitch.obj kiss_fft.obj celt_lpc.obj nnet.obj
-          mkdir C:\local_libs\include && mkdir C:\local_libs\lib
-          copy rnnoise.lib C:\local_libs\lib\ && copy include\rnnoise.h C:\local_libs\include\
+          cl /O2 /Iinclude /Isrc /c src/*.c
+          lib /out:rnnoise.lib *.obj
+          copy rnnoise.lib %PREFIX%\lib\
+          copy include\rnnoise.h %PREFIX%\include\
+          cd ..
 
-      - name: Build OpenCV (Windows Static)
+          :: 5. Создание .pc файлов вручную (чтобы Go их увидел)
+          :: RNNOISE.PC
+          echo prefix=C:/local_libs> %PREFIX%/lib/pkgconfig/rnnoise.pc
+          echo libdir=${prefix}/lib>> %PREFIX%/lib/pkgconfig/rnnoise.pc
+          echo includedir=${prefix}/include>> %PREFIX%/lib/pkgconfig/rnnoise.pc
+          echo Name: rnnoise>> %PREFIX%/lib/pkgconfig/rnnoise.pc
+          echo Description: RNNoise library>> %PREFIX%/lib/pkgconfig/rnnoise.pc
+          echo Version: 0.1>> %PREFIX%/lib/pkgconfig/rnnoise.pc
+          echo Libs: -L${libdir} -lrnnoise>> %PREFIX%/lib/pkgconfig/rnnoise.pc
+          echo Cflags: -I${includedir}>> %PREFIX%/lib/pkgconfig/rnnoise.pc
+
+          :: Для OGG, OPUS и SPEEXDSP файлы обычно создаются сами в %PREFIX%/lib/pkgconfig/
+          :: Если их там нет, Go упадет. Проверим наличие:
+          dir %PREFIX%\lib\pkgconfig\
+
+      - name: Build OpenCV (Static World)
         shell: cmd
         run: |
           git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
@@ -108,37 +87,42 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_INSTALL_PREFIX="C:/opencv_install" ^
             -DBUILD_opencv_world=ON ^
-            -DBUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo ^
+            -DOPENCV_GENERATE_PKGCONFIG=ON ^
             -DBUILD_SHARED_LIBS=OFF ^
-            -DWITH_WEBP=ON -DBUILD_WEBP=ON ^
-            -DWITH_MSMF=ON -DWITH_DSHOW=ON ^
-            -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF ^
-            -DOPENCV_GENERATE_PKGCONFIG=ON ..
+            -DBUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo ^
+            -DWITH_WEBP=ON -DBUILD_WEBP=ON -DWITH_MSMF=ON -DWITH_DSHOW=ON ^
+            -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF ..
           ninja install
 
-      - name: Run Go Build (Windows)
+      - name: Run Go Build (Windows Static)
         shell: bash
         env:
           CGO_ENABLED: 1
+          # Важно: указываем все пути, где лежат .pc файлы
+          PKG_CONFIG_PATH: "C:/local_libs/lib/pkgconfig:C:/opencv_install/lib/pkgconfig:C:/opencv_install/staticlib/pkgconfig"
         run: |
           PREFIX="C:/local_libs"
           OCV="C:/opencv_install"
-          VCPKG="C:/vcpkg/installed/x64-windows-static"
           
-          export PKG_CONFIG_PATH="$VCPKG/lib/pkgconfig:$OCV/lib/pkgconfig:$PKG_CONFIG_PATH"
-
+          # Поиск папки с либами OpenCV (в static билдах путь может быть разным)
           OCV_LIB_DIR=$(find $OCV -name "opencv_world4100.lib" | xargs dirname | head -n 1)
-          OCV_3RDPARTY=$(find $OCV -name "zlib.lib" | xargs dirname | head -n 1)
+          echo "OpenCV Libs found in: $OCV_LIB_DIR"
           
-          export CGO_CFLAGS="-I$PREFIX/include -I$OCV/include/opencv4 -I$OCV/include -I$VCPKG/include"
-          export CGO_CXXFLAGS="-I$PREFIX/include -I$OCV/include/opencv4 -I$OCV/include -I$VCPKG/include"
-       
-          export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV_LIB_DIR -L$OCV_3RDPARTY -L$VCPKG/lib \
-            -lopencv_world4100 -lrnnoise -lopusfile -lopus -logg -lspeexdsp \
-            -lade -littnotify -lzlib -llibwebp -llibjpeg-turbo -llibpng -llibopenjp2 \
-            -luser32 -lgdi32 -lws2_32 -lcomdlg32 -ladvapi32 -lshell32 -lole32 -loleaut32 -luuid -lavifil32 -lmsvfw32"
-
-          go build -v -tags netgo,osusergo -ldflags="-s -w -extldflags '-static' -X 'main.version=${{ github.event.inputs.version }}'" -o aloh.exe ./cmd/app
+          # Флаги компиляции
+          export CGO_CFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
+          export CGO_CXXFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
+          
+          # Полный список либ для статического билда (включая системные)
+          # Для MSVC порядок и список важны
+          export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV_LIB_DIR \
+            -lopencv_world4100 -lopus -logg -lspeexdsp -lrnnoise \
+            -lzlib -llibwebp -llibjpeg-turbo -llibpng \
+            -lws2_32 -lwinmm -lole32 -lgdi32 -lavifil32 -lmsvfw32 -lcomdlg32 -ladvapi32 -lshell32 -luser32 -lkernel32 -loleaut32 -luuid"
+          
+          # Сборка
+          go build -v -tags netgo,osusergo \
+            -ldflags="-s -w -extldflags '-static' -X 'main.version=${{ github.event.inputs.version }}'" \
+            -o aloh.exe ./cmd/app
 
       - name: Upload Windows
         uses: actions/upload-artifact@v4
