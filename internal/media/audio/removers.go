@@ -11,7 +11,6 @@ type Removers interface {
 func (ae *audioEngine) RemoveFromUsersAudio(id uuid.UUID) error {
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
-	ae.log.Info(0, "users audio", ae.usersAudio)
 	ua, ok := ae.usersAudio[id]
 	if !ok {
 		return nil

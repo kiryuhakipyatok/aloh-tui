@@ -17,11 +17,11 @@ import (
 )
 
 type CallbacksSetup struct {
-	User            *users.User
-	RawMsgChan      chan commands.RawChatMessage
-	PeerConnChan    chan commands.PeerConnectedMsg
-	PeerDisconnChan chan commands.PeerDisconnectedMsg
-	NetwEventChan   chan commands.NetworkEventMsg
+	User             *users.User
+	RawMsgChan       chan commands.RawChatMessage
+	PeerConnChan     chan commands.PeerConnectedMsg
+	PeerDisconnChan  chan commands.PeerDisconnectedMsg
+	NetwEventChan    chan commands.NetworkEventMsg
 }
 
 func SetupCallbacks(cs CallbacksSetup) {
@@ -31,6 +31,13 @@ func SetupCallbacks(cs CallbacksSetup) {
 	})
 	cs.User.Networking.VoiceCallback(func(id uuid.UUID, data []byte) {
 		cs.User.Engines.AudioEngine.PlayUserVoice(id, data)
+	})
+	cs.User.Networking.VideoCallback(func(id uuid.UUID, data []byte) {
+		// select {
+		// case cs.RawWebcamMsgChan <- commands.RawWebcamMsg{Id: id, Data: data}:
+		// default:
+		// }
+		cs.User.Engines.VideoEngine.RenderUsersVideoTerminal(id, data)
 	})
 	cs.User.Networking.PeerConnectedCallback(func(id uuid.UUID) {
 		t := time.Now().Format("15:04:05")
@@ -284,7 +291,7 @@ func (m *Model) setupAnims() {
 
 func setupUserColor(color string) lipgloss.Color {
 	var c string
-	if color == "" {
+	if color == "#random" {
 		c = randomcolor.GetRandomColorInHex()
 	} else {
 		c = color

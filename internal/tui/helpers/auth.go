@@ -3,6 +3,7 @@ package helpers
 import (
 	"aloh-tui/internal/entities/users"
 	"aloh-tui/internal/media/audio"
+	"aloh-tui/internal/media/video"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
 	"aloh-tui/pkg/errs"
@@ -82,13 +83,18 @@ func SetupAuth(as AuthSetup) error {
 		if err != nil {
 			return err
 		}
-		
-		if err := audioEngine.SetNetworking(networking); err != nil {
+
+		videoEngine, err := video.NewVideoEngine(as.Log, video.VideoSetup{})
+		if err != nil {
 			return err
 		}
 
+		audioEngine.SetNetworking(networking)
+		videoEngine.SetNetworking(networking)
+
 		as.User.SSHClient = client
 		as.User.Engines.AudioEngine = audioEngine
+		as.User.Engines.VideoEngine = videoEngine
 		as.User.Networking = networking
 
 		if err := as.User.UpdateUserJSON(); err != nil {

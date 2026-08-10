@@ -322,3 +322,50 @@ func validatePassword(s string) error {
 	}
 	return nil
 }
+
+func renderWebcamsFrames(frames []string) string {
+	lenF := len(frames)
+	if lenF <= 0 {
+		return ""
+	}
+	if lenF%2 == 0 {
+		lenF -= lenF / 2
+	} else {
+		lenF -= lenF/2 + 1
+	}
+	// var strBuilder strings.Builder
+
+	// rows := 1
+	// if lenF > 2 {
+	// 	rows = 2
+	// }
+
+	// cols := 1
+
+	// if lenF == 2 {
+	// 	cols = 2
+	// } else if lenF%2 == 0 {
+	// 	cols = lenF / 2
+	// } else {
+	// 	cols = lenF/2 + 1
+	// }
+
+	var (
+		upFrames   []string
+		downFrames []string
+	)
+
+	if lenF > 2 {
+		upFrames = frames[:lenF/2]
+		downFrames = frames[len(upFrames):]
+	} else {
+		upFrames = frames
+	}
+
+	upJoined := lipgloss.JoinHorizontal(lipgloss.Top, upFrames...)
+	downJoined := lipgloss.JoinHorizontal(lipgloss.Top, downFrames...)
+
+	full := lipgloss.JoinVertical(lipgloss.Center, upJoined, downJoined)
+
+	return full
+}

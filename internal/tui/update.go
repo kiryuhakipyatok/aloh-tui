@@ -90,6 +90,9 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 				m.state = states.DEF_STATE
 			}
 			delete(m.tabsNotifications, "voice")
+		case 3:
+			m.state = states.WEBCAM_STATE
+			delete(m.tabsNotifications, "webcam")
 		case 4:
 			m.state = states.PROFILE_STATE
 			delete(m.tabsNotifications, "profile")
@@ -248,7 +251,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.activeTab = 1
 					} else if m.zone.Get("voiceT").InBounds(msg) || m.zone.Get("voiceW").InBounds(msg) {
 						m.activeTab = 2
-					} else if m.zone.Get("videoT").InBounds(msg) || m.zone.Get("videoW").InBounds(msg) {
+					} else if m.zone.Get("webcamT").InBounds(msg) || m.zone.Get("webcamW").InBounds(msg) {
 						m.activeTab = 3
 					} else if m.zone.Get("profileT").InBounds(msg) || m.zone.Get("profileW").InBounds(msg) {
 						m.activeTab = 4
@@ -362,6 +365,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							i.PersonalHardDenoise, false))
 					cmds = append(cmds, seq)
 				}
+			case networking.WEBCAM:
+				state, err := networking.DataToState(msg.Event.Data)
+				if err != nil {
+					return m.Err(err)
+				}
+				us.webcam = state
+				if !state {
+					m.user.Engines.VideoEngine.RemoveUserFromUsersVideo(id)
+				}
+				if m.activeTab != 3 {
+					m.tabsNotifications["webcam"] = struct{}{}
+				}
+
+				// if state {
+				// 	m.webcamUsersFrames[id] = userVideoFrame{
+				// 		nickname: nick,
+				// 	}
+				// } else {
+				// 	delete(m.webcamUsersFrames, id)
+				// }
+
 			case networking.GENERAL:
 				generalData, err := networking.DataToGeneral(msg.Event.Data)
 				if err != nil {
@@ -730,7 +754,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg,
-		commands.MuteUnmuteUserMsg, commands.NotificationMessage,
+		commands.MuteUnmuteUserMsg, commands.NotificationMessage, commands.UserWebcam,
 		commands.ChangeDeviceMessage, commands.UserInfoMsg, commands.UsersDenoiseMsg:
 		var err error
 		switch mes := msg.(type) {
@@ -752,13 +776,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			err = mes.Err
 		case commands.UsersDenoiseMsg:
 			err = mes.Err
+		case commands.UserWebcam:
+			err = mes.Err
 		}
 
 		if err != nil {
 			m.err = err
 			m.state = states.ERR_STATE
 		} else {
-			if m.state == states.LOAD_STATE && (m.activeTab == 2 || m.activeTab == 4 || m.activeTab == 5) {
+			if m.state == states.LOAD_STATE {
 				m.state = m.prState
 			}
 			m.focusInputs()
@@ -801,6 +827,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			if m.user.Engines.VideoEngine != nil {
+				m.user.Engines.VideoEngine.SetDisconnected()
+			}
+
 			if m.activeTab == 2 && m.state == states.LOAD_STATE {
 				m.state = m.prState
 			}
@@ -814,6 +844,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.connections = []users.Identity{}
 			m.connecctionsNicks = []string{}
 			clear(m.usersStates)
+			//clear(m.webcamUsersFrames)
 			m.user.Engines.AudioEngine.PlayNotification()
 			cmds = append(cmds, commands.UpdateCurrentConnectsCmd(m.user, m.connections))
 			//m.activeTab = 0
@@ -891,10 +922,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan), textinput.Blink)
 		}
 
+	// case commands.RawWebcamMsg:
+	// 	data := msg.Data
+	// 	id := msg.Id
+	// 	//webcamFrame := m.user.Engines.VideoEngine.RenderUsersVideoTerminal(id, data)
+
+	// 	// select {
+	// 	// case m.webcamMsgChan <- commands.WebcamMsg{Id: id, Frame: webcamFrame}:
+	// 	// default:
+	// 	// }
+	// 	cmds = append(cmds, commands.RenderUsersFrameCmd(m.user.Engines.VideoEngine, id, data),
+	// 		commands.WaitForRawWebcamMsgCmd(m.rawWebcamMsgChan))
+	// 	return m, tea.Batch(cmds...)
+
+	// case commands.WebcamMsg:
+	// 	wuf, ok := m.webcamUsersFrames[msg.Id]
+	// 	if ok {
+	// 		wuf.frame = msg.Frame
+	// 		m.webcamUsersFrames[msg.Id] = wuf
+	// 	}
+
+	// 	return m, commands.WaitForWebcamMsgCmd(m.webcamMsgChan)
+
 	case commands.RawChatMessage:
 		data := msg.Data
-		var textMsg string
-		textForDesktopNotification := textMsg
+		var (
+			textMsg                    string
+			textForDesktopNotification string
+		)
 		dataLen := len(data)
 		if dataLen > 3 && slices.Equal(data[:3], []byte{'i', 'm', 'g'}) {
 			img, _, err := image.Decode(bytes.NewReader(data[3:]))
@@ -930,6 +985,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			textMsg = fmt.Sprintf("\n%s", textMsg)
 		} else {
 			textMsg = string(msg.Data)
+			textForDesktopNotification = textMsg
 		}
 
 		iden, err := getIdentityInConnections(m.connections, msg.Id)
@@ -1048,6 +1104,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.user.Engines.AudioEngine != nil {
 				m.user.Engines.AudioEngine.SetConnected()
 			}
+			if m.user.Engines.VideoEngine != nil {
+				m.user.Engines.VideoEngine.SetConnected()
+			}
 		}
 		if m.activeTab != 2 {
 			m.tabsNotifications["voice"] = struct{}{}
@@ -1113,6 +1172,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = states.ERR_STATE
 				}
 			}
+			if m.user.Engines.VideoEngine != nil {
+				m.user.Engines.VideoEngine.SetDisconnected()
+			}
 
 		}
 
@@ -1124,6 +1186,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tabsNotifications["voice"] = struct{}{}
 		}
 		delete(m.usersStates, id)
+		//delete(m.webcamUsersFrames, id)
 		//	id := iden.ID
 		coloredNickname := lipgloss.NewStyle().Foreground(m.usersColors[id].MainColor).Render(nickname)
 
@@ -1131,6 +1194,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = err
 			m.state = states.ERR_STATE
 		}
+		m.user.Engines.VideoEngine.RemoveUserFromUsersVideo(id)
 		m.messages = append(m.messages, commands.ChatMessage{
 			Identity: users.Identity{
 				Nickname: "system",
@@ -1141,7 +1205,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case spinner.TickMsg:
 		if (m.isLoggedIn() && m.state == states.LOAD_STATE &&
-			(m.activeTab == 0 || m.activeTab == 4 || m.activeTab == 5)) ||
+			(m.activeTab == 0 || m.activeTab == 3 || m.activeTab == 4 || m.activeTab == 5)) ||
 			(!m.isLoggedIn() && m.state == states.LOAD_STATE) {
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
@@ -1833,7 +1897,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							size.Y = ch
 						}
 						imageWidget := termimg.NewImageWidgetFromImage(img)
-						imageWidget.SetProtocol(termimg.Auto)
+						imageWidget.SetProtocol(termimg.Halfblocks)
 
 						toSend = utils.SetThreeFirstByte([]byte{'i', 'm', 'g'}, m.imageBuffer)
 
@@ -1864,6 +1928,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.prState = m.state
 						m.state = states.LOAD_STATE
 						cmds = append(cmds, commands.LeaveCmd(m.user.Networking))
+					}
+				case 3:
+					if m.connected {
+						m.prState = m.state
+						m.state = states.LOAD_STATE
+						cmds = append(cmds, commands.OnOffWebcamCmd(m.user), m.spinner.Tick)
 					}
 				case 4:
 					switch m.sideState {

@@ -144,7 +144,7 @@ func (m Model) View() string {
 			case 2:
 				mark = "voiceT"
 			case 3:
-				mark = "videoT"
+				mark = "webcamT"
 			case 4:
 				mark = "profileT"
 			case 5:
@@ -182,7 +182,7 @@ func (m Model) View() string {
 			case 2:
 				uiContent = m.renderVoiceTab(windowInnerW, windowInnerH)
 			case 3:
-				uiContent = m.renderVideoTab(windowInnerW, windowInnerH)
+				uiContent = m.renderWebcamTab(windowInnerW, windowInnerH)
 			case 4:
 				uiContent = m.renderProfileView(windowInnerW, windowInnerH, styles.CText)
 			case 5:
@@ -268,26 +268,18 @@ func (m Model) renderVoiceTab(w, h int) string {
 
 	lblRight := m.headerActiveStyle.Render("► details")
 	voicePowerLbl := ""
-	statusText := "not connected"
-	statusColor := styles.CDim
 	disc := ""
 	if m.connected {
 		voicePowerLbl = styles.PaddingLeftCDimStyle.Width(rightW).Align(lipgloss.Center).Render("voice powers")
-		statusText = "connected"
-		statusColor = m.themeColor
 		disc = styles.CErrPaddingStyle.Render("ENTER to disconnect")
 	}
 
-	bottomRightLPart := lipgloss.NewStyle().Foreground(statusColor).Render("status: " + statusText)
-
-	bottomRightLWidth := lipgloss.Width(bottomRightLPart)
-
-	bottomRightRPart := lipgloss.NewStyle().
-		Width(rightW - bottomRightLWidth).
-		Align(lipgloss.Right).
+	bottomRightDisc := lipgloss.NewStyle().
+		Width(rightW).
+		Align(lipgloss.Center).
 		Render(disc)
 
-	bottomRight := lipgloss.JoinHorizontal(lipgloss.Bottom, bottomRightLPart, bottomRightRPart)
+	bottomRight := lipgloss.JoinHorizontal(lipgloss.Bottom, bottomRightDisc)
 	rightMiddleHeight := h - lipgloss.Height(lblRight) - lipgloss.Height(bottomRight) - lipgloss.Height(voicePowerLbl)
 	if rightMiddleHeight < 0 {
 		rightMiddleHeight = 0
@@ -297,7 +289,7 @@ func (m Model) renderVoiceTab(w, h int) string {
 		textStyle := styles.CGrayBold.Render(titles.NOT_CONN1)
 		rightMiddleSect = lipgloss.Place(
 			rightW,
-			rightMiddleHeight,
+			rightMiddleHeight-1,
 			lipgloss.Center,
 			lipgloss.Center,
 			textStyle,
@@ -328,8 +320,126 @@ func (m Model) renderVoiceTab(w, h int) string {
 	return m.zone.Mark("voiceW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPanel, rightPane))
 }
 
-func (m Model) renderVideoTab(w, h int) string {
-	return m.zone.Mark("videoW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, safeTruncate(styles.CDimStyle.Render("~ video functionality coming soon ~"), w)))
+func (m Model) renderWebcamTab(w, h int) string {
+	lbl := m.headerActiveStyle.Render("► active webcams")
+	var content string
+	if !m.connected {
+
+		textStyle := styles.CGrayBold.Render(titles.ALONE1)
+
+		content = lipgloss.Place(
+			w,
+			h-2,
+			lipgloss.Center,
+			lipgloss.Center,
+			textStyle,
+		)
+	} else {
+		usersFrames := m.user.Engines.VideoEngine.GetUsersFramesTerminal()
+		userStarted := m.user.Engines.VideoEngine.IsStarted()
+
+		lUFrames := len(usersFrames)
+
+		lenFrames := len(usersFrames)
+
+		if lUFrames%2 == 0 {
+			lenFrames += lUFrames/2 + 2
+		} else {
+			lenFrames += lUFrames/2 + 3
+		}
+
+		if lUFrames > 0 && userStarted {
+			frames := make([]string, 0, lenFrames)
+
+			uf := m.user.Engines.VideoEngine.GetUserFrame()
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf)
+			frames = append(frames, ufStr, "   ")
+
+			for i, c := range m.connections {
+				f, ok := usersFrames[c.ID]
+				if ok {
+					if f != "" {
+						usersColor := m.usersColors[c.ID]
+						coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
+						frame := lipgloss.JoinVertical(lipgloss.Left, coloredNick, f)
+						frames = append(frames, frame)
+						if i != len(m.connections)-1 {
+							frames = append(frames, "   ")
+						}
+					}
+				}
+			}
+
+			//framesStr := strings.Join(frames, "    ")
+
+			joinedFrames := renderWebcamsFrames(frames)
+			//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
+
+		} else if lUFrames > 0 && !userStarted {
+			frames := make([]string, 0, lenFrames)
+
+			if m.state == states.LOAD_STATE && m.prState == states.WEBCAM_STATE {
+				loadWebcam := styles.CGrayStyle.Render(m.spinner.View(), "loading webcam...")
+				iden := m.user.GetUserIdentity()
+				coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+				ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, "", loadWebcam)
+				//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
+				frames = append(frames, ufStr, "   ")
+
+				joinedFrames := renderWebcamsFrames(frames)
+				content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
+
+				for i, c := range m.connections {
+					f, ok := usersFrames[c.ID]
+					if ok {
+						if f != "" {
+							usersColor := m.usersColors[c.ID]
+							coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
+							frame := lipgloss.JoinVertical(lipgloss.Left, coloredNick, f)
+							frames = append(frames, frame)
+							if i != len(m.connections)-1 {
+								frames = append(frames, "   ")
+							}
+						}
+					}
+				}
+
+				//framesStr := strings.Join(frames, "    ")
+
+			} else {
+				joinedFrames := renderWebcamsFrames(frames)
+				content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
+			}
+
+		} else if userStarted && lUFrames == 0 {
+			uf := m.user.Engines.VideoEngine.GetUserFrame()
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, ufStr)
+		} else if !userStarted && m.state == states.LOAD_STATE && m.prState == states.WEBCAM_STATE {
+			loadWebcam := styles.CGrayStyle.Render(m.spinner.View(), "loading webcam...")
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, "", loadWebcam)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, ufStr)
+		} else {
+			textStyle := styles.CGrayBold.Render(titles.NO_WEBCAMS)
+
+			content = lipgloss.Place(
+				w,
+				h-2,
+				lipgloss.Center,
+				lipgloss.Center,
+				textStyle,
+			)
+		}
+	}
+
+	return m.zone.Mark("webcamW", lipgloss.JoinVertical(lipgloss.Top, lbl, content))
 }
 
 func (m Model) renderFriendsTab(w, h int) string {

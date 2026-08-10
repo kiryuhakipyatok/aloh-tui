@@ -38,7 +38,6 @@ func (ae *audioEngine) PlayUserVoice(id uuid.UUID, userVoiceByte []byte) {
 		return
 	}
 	v := ua.volumeCoefficient
-	ae.mu.Unlock()
 	pcmBuffer := ae.int16BuffersPool.Get().([]int16)
 	n, err := ua.decoder.Decode(userVoiceByte, pcmBuffer)
 	if err != nil {
@@ -46,7 +45,6 @@ func (ae *audioEngine) PlayUserVoice(id uuid.UUID, userVoiceByte []byte) {
 		return
 	}
 	setupVolume(v, pcmBuffer[:n])
-	ae.mu.Lock()
 	casters.Int16ToBytes(pcmBuffer[:n], ua.decodedBuffer[:n*2])
 
 	ua.data = append(ua.data, ua.decodedBuffer[:n*2]...)

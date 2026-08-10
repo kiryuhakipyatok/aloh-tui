@@ -3,7 +3,6 @@ package audio
 import (
 	"aloh-tui/internal/networking"
 	"aloh-tui/pkg/logger"
-	"errors"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
@@ -11,8 +10,7 @@ import (
 )
 
 type Seters interface {
-	SetNetworking(netw networking.Networking) error
-
+	SetNetworking(netw networking.Networking)
 	SetConnected()
 	SetDisconnected() error
 
@@ -73,14 +71,10 @@ type Seters interface {
 // 	return nil
 // }
 
-func (ae *audioEngine) SetNetworking(netw networking.Networking) error {
-	if netw == nil {
-		return errors.New("networking is nil")
-	}
+func (ae *audioEngine) SetNetworking(netw networking.Networking) {
 	ae.mu.Lock()
+	defer ae.mu.Unlock()
 	ae.netw = netw
-	ae.mu.Unlock()
-	return nil
 }
 
 func (ae *audioEngine) SetConnected() {
@@ -191,7 +185,6 @@ func (ae *audioEngine) SetVolume(id uuid.UUID, vc float32) {
 		ae.mu.Unlock()
 		return
 	}
-	ae.mu.Unlock()
 	if existingUa, ok := ae.usersAudio[id]; ok {
 		existingUa.volumeCoefficient = vc
 	} else {
@@ -202,6 +195,7 @@ func (ae *audioEngine) SetVolume(id uuid.UUID, vc float32) {
 		}
 		ae.usersAudio[id] = ua
 	}
+	ae.mu.Unlock()
 	ae.log.Info(0, "usersAudo after set volume", ae.usersAudio)
 }
 

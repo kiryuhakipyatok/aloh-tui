@@ -20,6 +20,7 @@ type userState struct {
 	micMute      bool
 	hardDenoised bool
 	softDenoised bool
+	webcam       bool
 }
 
 type sizes struct {
@@ -116,7 +117,6 @@ type curs struct {
 }
 
 type boolStates struct {
-	speaking  bool
 	ticked    bool
 	connected bool
 }
@@ -131,6 +131,9 @@ type other struct {
 	headerActiveStyle lipgloss.Style
 
 	zone *bz.Manager
+
+	//webcamUsersFrames map[uuid.UUID]userVideoFrame
+	userWebcamFrame   string
 }
 
 type datas struct {

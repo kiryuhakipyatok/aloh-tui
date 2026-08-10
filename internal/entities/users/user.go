@@ -3,6 +3,7 @@ package users
 import (
 	"aloh-tui/internal/entities/setups"
 	"aloh-tui/internal/media/audio"
+	"aloh-tui/internal/media/video"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
 	"sync"
@@ -111,6 +112,7 @@ type Paths struct {
 
 type Engines struct {
 	AudioEngine audio.AudioEngine
+	VideoEngine video.VideoEngine
 }
 
 type Devices struct {

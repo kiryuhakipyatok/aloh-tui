@@ -3,6 +3,7 @@ app:
   version: "1.0.0"
   env: "local"
   receiveSDPSize: 100
+  packetSize: 100
   sendSDPSize: 100
   logPath: ""
 

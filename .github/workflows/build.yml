@@ -1,0 +1,113 @@
+name: Build Aloh App
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'App version'
+        required: true
+        default: '1.0.0'
+      env:
+        description: 'Environment'
+        required: true
+        default: 'prod'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxcb1-dev libasound2-dev libpulse-dev libwebp-dev cmake
+
+      - name: Install Audio Libs (Apt)
+        run: sudo apt-get install -y libogg-dev libopus-dev libopusfile-dev libspeexdsp-dev
+
+      - name: Cache OpenCV Linux
+        id: cache-opencv-linux
+        uses: actions/cache@v4
+        with:
+          path: ~/opencv_install
+          key: opencv-linux-4.10.0-minimal
+
+      - name: Build Minimal OpenCV (Linux)
+        if: steps.cache-opencv-linux.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
+          mkdir -p opencv/build && cd opencv/build
+          cmake -D CMAKE_BUILD_TYPE=RELEASE -D CMAKE_INSTALL_PREFIX=$HOME/opencv_install \
+                -D BUILD_LIST=core,videoio,imgproc,imgcodecs -D WITH_V4L=ON -D WITH_WEBP=ON \
+                -D BUILD_EXAMPLES=OFF -D BUILD_TESTS=OFF -D BUILD_PERF_TESTS=OFF ..
+          make -j$(nproc) && make install
+
+      - name: Build App (Linux)
+        run: |
+          export PKG_CONFIG_PATH=$HOME/opencv_install/lib/pkgconfig:$HOME/opencv_install/lib64/pkgconfig
+          export CGO_CFLAGS="-I$HOME/opencv_install/include/opencv4"
+          export CGO_LDFLAGS="-L$HOME/opencv_install/lib -L$HOME/opencv_install/lib64 -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopusfile -lopus -logg -lspeexdsp -lm"
+          go build -o aloh-linux ./cmd/app
+
+      - name: Collect Libraries (Linux)
+        run: |
+          mkdir -p out/libs
+          cp aloh-linux out/
+          cp -P $HOME/opencv_install/lib/*.so* out/libs/ 2>/dev/null || true
+          cp /usr/lib/x86_64-linux-gnu/libopus.so* out/libs/ 2>/dev/null || true
+          tar cfvz aloh-linux.tar.gz -C out .
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aloh-linux
+          path: aloh-linux.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Cache OpenCV Windows
+        id: cache-opencv-windows
+        uses: actions/cache@v4
+        with:
+          path: C:/opencv_install
+          key: opencv-windows-4.10.0-minimal
+
+      - name: Build Minimal OpenCV (Windows)
+        if: steps.cache-opencv-windows.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
+          mkdir opencv/build; cd opencv/build
+          cmake -G "Visual Studio 17 2022" -A x64 `
+                -DCMAKE_INSTALL_PREFIX=C:/opencv_install `
+                -DBUILD_LIST=core,videoio,imgproc,imgcodecs `
+                -DBUILD_SHARED_LIBS=OFF -DWITH_WEBP=ON -DBUILD_WEBP=ON `
+                -DWITH_MSMF=ON -DWITH_DSHOW=ON -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF ..
+          cmake --build . --config Release --target install
+
+      - name: Build Audio Libs (Windows)
+        run: |
+          vcpkg install opus opusfile libogg speexdsp rnnoise:x64-windows-static
+
+      - name: Build App (Windows)
+        shell: bash
+        run: |
+          # Указываем пути к OpenCV и либам из vcpkg
+          export CGO_CFLAGS="-I/c/opencv_install/include/opencv4"
+          export CGO_LDFLAGS="-L/c/opencv_install/x64/vc17/staticlib -lopencv_core4100 -lopencv_videoio4100 -lopencv_imgproc4100 -lopencv_imgcodecs4100 -lzlib -llibwebp"
+          # Добавь сюда пути к vcpkg библиотекам, если они не подхватятся сами
+          go build -ldflags="-s -w -extldflags '-static'" -o aloh.exe ./cmd/app
+
+      - name: Upload Windows Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: aloh-windows
+          path: aloh.exe
