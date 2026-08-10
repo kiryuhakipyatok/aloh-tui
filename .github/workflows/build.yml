@@ -17,33 +17,33 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
           cache: true
 
       - name: Install Build Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build build-essential pkg-config libtool autoconf \
+          sudo apt-get install -y cmake ninja-build build-essential pkg-config libtool autoconf automake m4 \
             libx11-dev libxcb1-dev libasound2-dev libpulse-dev libwebp-dev
 
       - name: Build Dependencies (Linux)
         run: |
           mkdir -p $HOME/local_libs
           export PREFIX=$HOME/local_libs
-          
-          # 1. Ogg
+          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
+
           git clone --depth 1 https://github.com/xiph/ogg.git
           cd ogg && ./autogen.sh && ./configure --prefix=$PREFIX --enable-shared && make -j$(nproc) install && cd ..
-          
-          # 2. Opus
+
           git clone --depth 1 https://github.com/xiph/opus.git
           cd opus && ./autogen.sh && ./configure --prefix=$PREFIX --enable-shared && make -j$(nproc) install && cd ..
-          
-          # 3. SpeexDSP
+
+          git clone --depth 1 https://github.com/xiph/opusfile.git
+          cd opusfile && ./autogen.sh && ./configure --prefix=$PREFIX --enable-shared --disable-http && make -j$(nproc) install && cd ..
+ 
           git clone --depth 1 https://github.com/xiph/speexdsp.git
           cd speexdsp && ./autogen.sh && ./configure --prefix=$PREFIX --enable-shared && make -j$(nproc) install && cd ..
-          
-          # 4. RNNoise
+
           git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise && ./autogen.sh && ./configure --prefix=$PREFIX --enable-shared && make -j$(nproc) install && cd ..
 
@@ -63,6 +63,7 @@ jobs:
         run: |
           export PREFIX=$HOME/local_libs
           export OCV=$HOME/opencv_install
+          # Добавляем все пути к pkgconfig
           export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$(find $OCV -name pkgconfig -type d | tr '\n' ':')"
           export LD_LIBRARY_PATH="$PREFIX/lib:$OCV/lib:$OCV/lib64"
           
@@ -90,7 +91,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
           cache: true
 
       - name: Set up MSVC
@@ -103,40 +104,39 @@ jobs:
         shell: cmd
         run: |
           set PREFIX=C:\local_libs
+          set PKG_CONFIG_PATH=%PREFIX%\lib\pkgconfig
           mkdir %PREFIX%\lib\pkgconfig
           mkdir %PREFIX%\include
 
-          :: 1. OGG
           git clone --depth 1 https://github.com/xiph/ogg.git
           cd ogg && mkdir build && cd build && cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%PREFIX% -DBUILD_SHARED_LIBS=OFF .. && ninja install
           cd ..\..\
-          
-          :: 2. OPUS
+
           git clone --depth 1 https://github.com/xiph/opus.git
           cd opus && mkdir build && cd build && cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%PREFIX% -DBUILD_SHARED_LIBS=OFF .. && ninja install
           cd ..\..\
 
-          :: 3. SPEEXDSP
+          git clone --depth 1 https://github.com/xiph/opusfile.git
+          cd opusfile && mkdir build && cd build
+          cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%PREFIX% -DBUILD_SHARED_LIBS=OFF -DOP_DISABLE_HTTP=ON ..
+          ninja install
+          cd ..\..\
+
           git clone --depth 1 https://github.com/xiph/speexdsp.git
           cd speexdsp && mkdir build && cd build && cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%PREFIX% -DBUILD_SHARED_LIBS=OFF .. && ninja install
           cd ..\..\
 
-          :: 4. RNNOISE (Manual cl.exe)
           git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise
           cl /O2 /Iinclude /Isrc /c src/*.c
           lib /out:rnnoise.lib *.obj
           copy rnnoise.lib %PREFIX%\lib\
           copy include\rnnoise.h %PREFIX%\include\
-          
-          :: Create rnnoise.pc manually
-          echo prefix=C:/local_libs> %PREFIX%\lib\pkgconfig\rnnoise.pc
-          echo libdir=${prefix}/lib>> %PREFIX%\lib\pkgconfig\rnnoise.pc
-          echo includedir=${prefix}/include>> %PREFIX%\lib\pkgconfig\rnnoise.pc
-          echo Name: rnnoise>> %PREFIX%\lib\pkgconfig\rnnoise.pc
-          echo Version: 0.1>> %PREFIX%\lib\pkgconfig\rnnoise.pc
-          echo Libs: -L${libdir} -lrnnoise>> %PREFIX%\lib\pkgconfig\rnnoise.pc
-          echo Cflags: -I${includedir}>> %PREFIX%\lib\pkgconfig\rnnoise.pc
+          echo Name: rnnoise > %PREFIX%\lib\pkgconfig\rnnoise.pc
+          echo Version: 0.1 >> %PREFIX%\lib\pkgconfig\rnnoise.pc
+          echo Description: rnnoise >> %PREFIX%\lib\pkgconfig\rnnoise.pc
+          echo Libs: -L%PREFIX:\=/%/lib -lrnnoise >> %PREFIX%\lib\pkgconfig\rnnoise.pc
+          echo Cflags: -I%PREFIX:\=/%/include >> %PREFIX%\lib\pkgconfig\rnnoise.pc
           cd ..
 
       - name: Build OpenCV (Windows Static)
@@ -167,9 +167,8 @@ jobs:
           export CGO_CFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
           export CGO_CXXFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
           
-          # Флаги линковки без GCC-специфичных групп
           export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV_LIB_DIR \
-            -lopencv_world4100 -lopus -logg -lspeexdsp -lrnnoise \
+            -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise \
             -lzlib -llibwebp -llibjpeg-turbo -llibpng \
             -lws2_32 -lwinmm -lole32 -lgdi32 -lavifil32 -lmsvfw32 -lcomdlg32 -ladvapi32 -lshell32 -luser32 -lkernel32 -loleaut32 -luuid"
           
