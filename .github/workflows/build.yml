@@ -131,109 +131,243 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.26"
-          cache: true
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: "1.26"
+        cache: true
 
-      - name: Install MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          path-type: inherit
-          install: >-
-            git
-            make
-            autoconf
-            automake
-            libtool
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-libogg
-            mingw-w64-x86_64-opus
-            mingw-w64-x86_64-opusfile
-            mingw-w64-x86_64-speexdsp
-            mingw-w64-x86_64-opencv
+    - name: Install MSYS2 dependencies
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        path-type: inherit
+        install: >-
+          git
+          make
+          autoconf
+          automake
+          libtool
+          pkgconf
+          mingw-w64-x86_64-toolchain
+          mingw-w64-x86_64-cmake
+          mingw-w64-x86_64-ninja
+          mingw-w64-x86_64-opencv
+          mingw-w64-x86_64-opus
+          mingw-w64-x86_64-opusfile
+          mingw-w64-x86_64-libogg
+          mingw-w64-x86_64-speexdsp
 
-      - name: Build RNNoise
-        shell: msys2 {0}
-        run: |
-          set -e
+    - name: Verify OpenCV installation
+      shell: msys2 {0}
+      run: |
+        set -e
 
-          git clone --depth 1 https://github.com/xiph/rnnoise.git
-          cd rnnoise
-          ./autogen.sh
-          ./configure --prefix=/mingw64 --enable-shared --disable-static
-          make -j"$(nproc)"
-          make install
+        echo "=== OpenCV headers ==="
 
-      - name: Run Go Build
-        shell: msys2 {0}
-        env:
-          CGO_ENABLED: "1"
-          GOOS: windows
-          GOARCH: amd64
-        run: |
-          set -e
-          
-          export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
-          
-          ls -l /mingw64/lib/pkgconfig/opencv*.pc || echo "OpenCV pc not found!"
+        if [ ! -f /mingw64/include/opencv4/opencv2/opencv.hpp ]; then
+          echo "ERROR: OpenCV header not found!"
+          find /mingw64/include -maxdepth 4 -type f -name opencv.hpp -print || true
+          exit 1
+        fi
 
-          OPUS_FLAGS=$(pkg-config --cflags --libs opus opusfile ogg speexdsp)
-  
-          export CGO_CFLAGS="-I/mingw64/include/opencv4"
-          export CGO_CXXFLAGS="-I/mingw64/include/opencv4"
-          
-          if pkg-config --exists opencv4; then
-            OCV_FLAGS=$(pkg-config --libs opencv4)
-          elif pkg-config --exists opencv; then
-            OCV_FLAGS=$(pkg-config --libs opencv)
-          else
-            echo "Warning: pkg-config failed, using manual flags"
-            OCV_FLAGS="-lopencv_core4100 -lopencv_imgproc4100 -lopencv_imgcodecs4100 -lopencv_videoio4100 -lopencv_highgui4100 -lopencv_video4100 -lopencv_calib3d4100 -lopencv_features2d4100 -lopencv_objdetect4100 -lopencv_dnn4100 -lopencv_photo4100"
-          fi
+        echo "Found:"
+        ls -lh /mingw64/include/opencv4/opencv2/opencv.hpp
 
-          export CGO_LDFLAGS="$OCV_FLAGS $OPUS_FLAGS -L/mingw64/lib -lrnnoise"
-          
-          echo "Final CGO_LDFLAGS: $CGO_LDFLAGS"
-          
-          go build -v -o aloh.exe ./cmd/app
+        echo ""
+        echo "=== OpenCV libraries ==="
+        ls -lh /mingw64/lib/libopencv*.dll.a || true
 
-      - name: Package Windows
-        shell: msys2 {0}
-        run: |
-          set -e
-          mkdir -p dist-win
-          cp aloh.exe dist-win/
-          
-          cp /mingw64/bin/libopencv*.dll dist-win/
- 
-          cp /mingw64/bin/libopus*.dll dist-win/
-          cp /mingw64/bin/libogg*.dll dist-win/
-          cp /mingw64/bin/libspeex*.dll dist-win/
-          cp /mingw64/bin/librnnoise*.dll dist-win/
-          cp /mingw64/bin/libwinpthread-1.dll dist-win/
-          cp /mingw64/bin/libstdc++-6.dll dist-win/
-          cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/
-          
-          cp /mingw64/bin/libpng*.dll dist-win/ || true
-          cp /mingw64/bin/libjpeg*.dll dist-win/ || true
-          cp /mingw64/bin/libwebp*.dll dist-win/ || true
-          cp /mingw64/bin/zlib1.dll dist-win/ || true
-          cp /mingw64/bin/libopenjp2*.dll dist-win/ || true
-          
-          tar cfvz aloh-windows.tar.gz -C dist-win .
+        echo ""
+        echo "=== OpenCV DLLs ==="
+        ls -lh /mingw64/bin/libopencv*.dll || true
 
-      - name: Upload Windows
-        uses: actions/upload-artifact@v4
-        with:
-          name: aloh-windows
-          path: aloh-windows.tar.gz
+        echo ""
+        echo "=== pkg-config ==="
+        pkg-config --modversion opencv4 || true
+        pkg-config --cflags opencv4 || true
+        pkg-config --libs opencv4 || true
+
+    - name: Build RNNoise
+      shell: msys2 {0}
+      run: |
+        set -e
+
+        git clone --depth 1 https://github.com/xiph/rnnoise.git
+
+        cd rnnoise
+
+        ./autogen.sh
+
+        ./configure \
+          --prefix=/mingw64 \
+          --enable-shared \
+          --disable-static
+
+        make -j"$(nproc)"
+        make install
+
+        cd ..
+
+    - name: Verify CGO environment
+      shell: msys2 {0}
+      run: |
+        set -e
+
+        echo "=== GCC ==="
+        gcc --version
+
+        echo ""
+        echo "=== G++ ==="
+        g++ --version
+
+        echo ""
+        echo "=== Go ==="
+        go version
+
+        echo ""
+        echo "=== OpenCV header ==="
+        test -f /mingw64/include/opencv4/opencv2/opencv.hpp
+
+        echo ""
+        echo "=== pkg-config OpenCV ==="
+        pkg-config --cflags opencv4
+        pkg-config --libs opencv4
+
+        echo ""
+        echo "=== pkg-config audio ==="
+        pkg-config --cflags --libs opus opusfile ogg speexdsp
+
+    - name: Build Go application
+      shell: msys2 {0}
+      env:
+        CGO_ENABLED: "1"
+      run: |
+        set -e
+
+        export PATH="/mingw64/bin:$PATH"
+
+        export CGO_CFLAGS="-I/mingw64/include/opencv4"
+        export CGO_CXXFLAGS="-I/mingw64/include/opencv4"
+
+        export CGO_LDFLAGS="
+          -L/mingw64/lib
+          -lopencv_core
+          -lopencv_imgproc
+          -lopencv_imgcodecs
+          -lopencv_videoio
+          -lopencv_highgui
+          -lopencv_video
+          -lopencv_calib3d
+          -lopencv_features2d
+          -lopencv_objdetect
+          -lopencv_dnn
+          -lopencv_photo
+          -lopusfile
+          -lopus
+          -logg
+          -lspeexdsp
+          -lrnnoise
+        "
+
+        echo "=== CGO_CFLAGS ==="
+        echo "$CGO_CFLAGS"
+
+        echo ""
+        echo "=== CGO_CXXFLAGS ==="
+        echo "$CGO_CXXFLAGS"
+
+        echo ""
+        echo "=== CGO_LDFLAGS ==="
+        echo "$CGO_LDFLAGS"
+
+        echo ""
+        echo "=== Testing OpenCV header ==="
+
+        cat > /tmp/test_opencv.cpp <<'EOF'
+        #include <opencv2/opencv.hpp>
+
+        int main() {
+            cv::Mat image;
+            return 0;
+        }
+        EOF
+
+        g++ \
+          -I/mingw64/include/opencv4 \
+          /tmp/test_opencv.cpp \
+          -L/mingw64/lib \
+          -lopencv_core \
+          -o /tmp/test_opencv.exe
+
+        echo "OpenCV C++ test: OK"
+
+        echo ""
+        echo "=== Go build ==="
+
+        go build \
+          -v \
+          -o aloh.exe \
+          ./cmd/app
+
+    - name: Verify executable
+      shell: msys2 {0}
+      run: |
+        set -e
+
+        test -f aloh.exe
+
+        echo "Executable:"
+        ls -lh aloh.exe
+
+        file aloh.exe
+
+    - name: Package Windows
+      shell: msys2 {0}
+      run: |
+        set -e
+
+        rm -rf dist-win
+        mkdir -p dist-win
+
+        cp aloh.exe dist-win/
+
+        echo "Copying OpenCV DLLs..."
+        cp /mingw64/bin/libopencv*.dll dist-win/
+
+        echo "Copying audio DLLs..."
+        cp /mingw64/bin/libopus*.dll dist-win/
+        cp /mingw64/bin/libogg*.dll dist-win/
+        cp /mingw64/bin/libspeex*.dll dist-win/
+        cp /mingw64/bin/librnnoise*.dll dist-win/
+
+        echo "Copying MinGW runtime..."
+        cp /mingw64/bin/libwinpthread-1.dll dist-win/
+        cp /mingw64/bin/libstdc++-6.dll dist-win/
+        cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/
+
+        echo "Copying OpenCV dependencies..."
+        cp /mingw64/bin/libpng*.dll dist-win/ 2>/dev/null || true
+        cp /mingw64/bin/libjpeg*.dll dist-win/ 2>/dev/null || true
+        cp /mingw64/bin/libwebp*.dll dist-win/ 2>/dev/null || true
+        cp /mingw64/bin/zlib1.dll dist-win/ 2>/dev/null || true
+        cp /mingw64/bin/libtiff*.dll dist-win/ 2>/dev/null || true
+        cp /mingw64/bin/libopenjp2*.dll dist-win/ 2>/dev/null || true
+
+        echo ""
+        echo "=== Final package ==="
+
+        ls -lh dist-win/
+
+        tar cfvz aloh-windows.tar.gz \
+          -C dist-win .
+
+    - name: Upload Windows
+      uses: actions/upload-artifact@v4
+      with:
+        name: aloh-windows
+        path: aloh-windows.tar.gz
