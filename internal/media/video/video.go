@@ -63,7 +63,7 @@ type userVideo struct {
 	frame    string
 	window   *gocv.Window
 	windowed atomic.Bool
-	img      gocv.Mat
+	img      *gocv.Mat
 }
 
 func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
@@ -77,7 +77,7 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		usersVideo:            make(map[uuid.UUID]*userVideo, 3),
 		bytesBuffersPool: sync.Pool{
 			New: func() any {
-				buf := make([]byte, 1000)
+				buf := make([]byte, 1350)
 				return buf
 			},
 		},
@@ -112,31 +112,36 @@ func (ve *videoEngine) GetUserFrame() string {
 }
 
 func (ve *videoEngine) OnOffUsersWindow(id uuid.UUID, nickname string) (bool, error) {
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
-	us, ok := ve.usersVideo[id]
+	// ve.mu.Lock()
+	// defer ve.mu.Unlock()
+	uv, ok := ve.usersVideo[id]
 	if !ok {
 		return false, errs.ErrNotFound()
 	}
-	s := us.windowed.Load()
+	s := uv.windowed.Load()
 
 	if !s == true {
 		window := gocv.NewWindow(nickname)
 		img := gocv.NewMat()
-		us.window = window
-		us.img = img
+		uv.window = window
+		uv.img = &img
 	} else {
-		if us.window != nil {
-			if err := us.window.Close(); err != nil {
+		if uv.window != nil {
+			if err := uv.window.Close(); err != nil {
 				return false, err
 			}
-			us.window = nil
-			if err := us.img.Close(); err != nil {
+			uv.window = nil
+			uv.window.WaitKey(1)
+		}
+
+		if uv.img != nil {
+			if err := uv.img.Close(); err != nil {
 				return false, err
 			}
+			uv.img = nil
 		}
 	}
-	us.windowed.Store(!s)
+	uv.windowed.Store(!s)
 	return !s, nil
 }
 
@@ -206,7 +211,29 @@ func (ve *videoEngine) SetDisconnected() {
 	ve.connected.Store(false)
 	ve.started.Store(false)
 	ve.userFrame.Store("")
+	ve.mu.Lock()
+	for _, uv := range ve.usersVideo {
+		if uv.window != nil {
+			if err := uv.window.Close(); err != nil {
+				ve.log.Error("failed to close user's window", logger.Err(err))
+			}
+			ve.log.Debug("is open window", uv.window.IsOpen())
+			uv.window = nil
+		}
+
+		if uv.img != nil {
+			if err := uv.img.Close(); err != nil {
+				ve.log.Error("failed to close user's img", logger.Err(err))
+			}
+			uv.img = nil
+		}
+	}
+
 	clear(ve.usersVideo)
+	ve.mu.Unlock()
+
+	gocv.WaitKey(1)
+
 	if ve.stopProcessWebcamChan != nil {
 		close(ve.stopProcessWebcamChan)
 		ve.stopProcessWebcamChan = nil
@@ -273,7 +300,7 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 				closeWaitChan()
 				ve.userFrame.Store(f)
 			default:
-				ve.bytesBuffersPool.Put(buffer[:1000])
+				ve.bytesBuffersPool.Put(buffer[:1350])
 			}
 		}
 
@@ -295,25 +322,70 @@ func (ve *videoEngine) RenderUsersVideoTerminal(id uuid.UUID, data []byte) {
 		ve.log.Error("failed to render img", logger.Err(err))
 	}
 	ve.mu.Lock()
+	defer ve.mu.Unlock()
 	uv.frame = frame
 
-	if uv.windowed.Load() && uv.window != nil {
-		imgData, err := uv.img.DataPtrUint8()
-		if err == nil {
-			copy(imgData, data)
+	if uv.windowed.Load() && uv.window != nil && uv.img != nil {
+		if uv.window.GetWindowProperty(gocv.WindowPropertyAutosize) == -1 {
+			if err := uv.window.Close(); err != nil {
+				ve.log.Error("failed to close user's window", logger.Err(err))
+			}
+
+			uv.window = nil
+
+			uv.window.WaitKey(1)
+
+			if err := uv.img.Close(); err != nil {
+				ve.log.Error("failed to close user's img", logger.Err(err))
+			}
+			uv.img = nil
+
+			uv.windowed.Store(false)
+			return
 		}
 
-		if err := uv.window.IMShow(uv.img); err != nil {
-			ve.log.Error("failed to window img", logger.Err(err))
+		if err := gocv.IMDecodeIntoMat(data, gocv.IMReadUnchanged, uv.img); err != nil {
+			ve.log.Error("failed to decode img", logger.Err(err))
+			return
 		}
+		// imgData, err := uv.img.DataPtrUint8()
+		// if err == nil {
+		// 	ve.log.Info("imgDataLen before copy", len(imgData))
+		// 	copy(imgData, data)
+		// 	ve.log.Info("imgDataLen after copy", len(imgData))
+		// }
+
+		if err := uv.window.IMShow(*uv.img); err != nil {
+			ve.log.Error("failed to window img", logger.Err(err))
+			return
+		}
+
+		uv.window.WaitKey(1)
 	}
-	ve.mu.Unlock()
+
 }
 
 func (ve *videoEngine) RemoveUserFromUsersVideo(id uuid.UUID) {
 	ve.mu.Lock()
 	defer ve.mu.Unlock()
-	delete(ve.usersVideo, id)
+	uv, ok := ve.usersVideo[id]
+	if ok {
+		if uv.window != nil {
+			if err := uv.window.Close(); err != nil {
+				ve.log.Error("failed to close user's window", logger.Err(err))
+			}
+			uv.window = nil
+		}
+		uv.window.WaitKey(1)
+		if uv.img != nil {
+			if err := uv.img.Close(); err != nil {
+				ve.log.Error("failed to close user's img", logger.Err(err))
+			}
+			uv.img = nil
+		}
+		delete(ve.usersVideo, id)
+
+	}
 }
 
 func (ve *videoEngine) GetUsersFramesTerminal() map[uuid.UUID]string {
@@ -390,7 +462,7 @@ func (ve *videoEngine) sendVideo() {
 					ve.log.Error("failed to send video data", logger.Err(err))
 				}
 			}
-			ve.bytesBuffersPool.Put(frame[:1000])
+			ve.bytesBuffersPool.Put(frame[:1350])
 		}
 	}
 }

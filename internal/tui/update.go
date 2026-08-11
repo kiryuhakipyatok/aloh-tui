@@ -253,10 +253,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.activeTab = 2
 					} else if m.zone.Get("webcamT").InBounds(msg) || m.zone.Get("webcamW").InBounds(msg) {
 						m.activeTab = 3
+						iden, ok := m.onUsersWebcam(msg)
+						if ok {
+							m.prState = m.state
+							m.state = states.LOAD_STATE
+							return m, commands.OnOffWindowWebcamCmd(m.user.Engines.VideoEngine, iden)
+						}
 					} else if m.zone.Get("profileT").InBounds(msg) || m.zone.Get("profileW").InBounds(msg) {
 						m.activeTab = 4
 					} else if m.zone.Get("settingsT").InBounds(msg) || m.zone.Get("settingsW").InBounds(msg) {
 						m.activeTab = 5
+					} else if m.activeTab == 3 {
+						m.log.Info("click on webcam tab")
+						iden, ok := m.onUsersWebcam(msg)
+						if ok {
+							m.prState = m.state
+							m.state = states.LOAD_STATE
+							return m, commands.OnOffWindowWebcamCmd(m.user.Engines.VideoEngine, iden)
+						}
 					} else {
 						m.sideState = states.ZERO_STATE
 						m, cmd = m.syncTabState()
@@ -374,6 +388,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !state {
 					m.user.Engines.VideoEngine.RemoveUserFromUsersVideo(id)
 				}
+				m.log.Info("new webcam event", state, msg.Id)
 				if m.activeTab != 3 {
 					m.tabsNotifications["webcam"] = struct{}{}
 				}
@@ -755,7 +770,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg,
 		commands.MuteUnmuteUserMsg, commands.NotificationMessage, commands.UserWebcam,
-		commands.ChangeDeviceMessage, commands.UserInfoMsg, commands.UsersDenoiseMsg:
+		commands.ChangeDeviceMessage, commands.UserInfoMsg, commands.UsersDenoiseMsg, commands.OnOffWindowWebcamMsg:
 		var err error
 		switch mes := msg.(type) {
 		case commands.OnOffDenoiceMsg:
@@ -777,6 +792,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case commands.UsersDenoiseMsg:
 			err = mes.Err
 		case commands.UserWebcam:
+			err = mes.Err
+		case commands.OnOffWindowWebcamMsg:
 			err = mes.Err
 		}
 

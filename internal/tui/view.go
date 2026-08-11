@@ -336,11 +336,12 @@ func (m Model) renderWebcamTab(w, h int) string {
 		)
 	} else {
 		usersFrames := m.user.Engines.VideoEngine.GetUsersFramesTerminal()
+
 		userStarted := m.user.Engines.VideoEngine.IsStarted()
 
 		lUFrames := len(usersFrames)
 
-		lenFrames := len(usersFrames)
+		lenFrames := lUFrames
 
 		if lUFrames%2 == 0 {
 			lenFrames += lUFrames/2 + 2
@@ -359,16 +360,17 @@ func (m Model) renderWebcamTab(w, h int) string {
 
 			for i, c := range m.connections {
 				f, ok := usersFrames[c.ID]
-				if ok {
-					if f != "" {
-						usersColor := m.usersColors[c.ID]
-						coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
-						frame := lipgloss.JoinVertical(lipgloss.Left, coloredNick, f)
-						frames = append(frames, frame)
-						if i != len(m.connections)-1 {
-							frames = append(frames, "   ")
-						}
+				if ok && f != "" {
+
+					usersColor := m.usersColors[c.ID]
+					coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
+					zoneId := fmt.Sprintf("webcam-%s", c.ID.String())
+					frame := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredNick, f))
+					frames = append(frames, frame)
+					if i != len(m.connections)-1 {
+						frames = append(frames, "   ")
 					}
+
 				}
 			}
 
@@ -389,30 +391,26 @@ func (m Model) renderWebcamTab(w, h int) string {
 				//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
 				frames = append(frames, ufStr, "   ")
 
-				joinedFrames := renderWebcamsFrames(frames)
-				content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
-
-				for i, c := range m.connections {
-					f, ok := usersFrames[c.ID]
-					if ok {
-						if f != "" {
-							usersColor := m.usersColors[c.ID]
-							coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
-							frame := lipgloss.JoinVertical(lipgloss.Left, coloredNick, f)
-							frames = append(frames, frame)
-							if i != len(m.connections)-1 {
-								frames = append(frames, "   ")
-							}
-						}
-					}
-				}
-
-				//framesStr := strings.Join(frames, "    ")
-
-			} else {
-				joinedFrames := renderWebcamsFrames(frames)
-				content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
 			}
+
+			for i, c := range m.connections {
+				f, ok := usersFrames[c.ID]
+				if ok && f != "" {
+
+					usersColor := m.usersColors[c.ID]
+					coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
+					zoneId := fmt.Sprintf("webcam-%s", c.ID.String())
+					frame := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredNick, f))
+					frames = append(frames, frame)
+					if i != len(m.connections)-1 {
+						frames = append(frames, "   ")
+					}
+
+				}
+			}
+
+			joinedFrames := renderWebcamsFrames(frames)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
 
 		} else if userStarted && lUFrames == 0 {
 			uf := m.user.Engines.VideoEngine.GetUserFrame()
@@ -1137,7 +1135,7 @@ func (m Model) renderErrView(w, h int) string {
 	rightW := w - leftW - 3
 
 	lblLeft := styles.CErrBoldStyle.Render("► error detected")
-	errText := styles.PaddingLeftCTextStyle.Render(tuierrs.CastError(m.err))
+	errText := styles.PaddingLeftCTextStyle.Render(safeTruncate(tuierrs.CastError(m.err), rightW))
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", errText)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 

@@ -4,7 +4,7 @@ const (
 	freindsTab  = "friends"
 	chatTab     = "chat"
 	voiceTab    = "voice"
-	videoTab    = "video"
+	webcamTab   = "webcam"
 	profileTab  = "profile"
 	settingsTab = "settings"
 

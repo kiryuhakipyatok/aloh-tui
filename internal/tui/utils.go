@@ -317,10 +317,46 @@ func isEmptyString(s string) (string, bool) {
 
 func validatePassword(s string) error {
 	entropy := passwordvalidator.GetEntropy(s)
-	if err := passwordvalidator.Validate(s, 72); err != nil {
+	if err := passwordvalidator.Validate(s, 60); err != nil {
 		return errs.ErrInvalidPassword(entropy)
 	}
 	return nil
+}
+
+func (m Model) onUsersWebcam(msg tea.MouseMsg) (users.Identity, bool) {
+	var (
+		id     uuid.UUID
+		zoneId string
+	)
+
+	userFrames := m.user.Engines.VideoEngine.GetUsersFramesTerminal()
+
+	// for i, us := range m.usersStates {
+	// 	if us.webcam {
+	// 		zoneId = fmt.Sprintf("webcam-%s", i.String())
+	// 		m.log.Info(zoneId)
+	// 		if m.zone.Get(zoneId).InBounds(msg) {
+	// 			id = i
+	// 		}
+	// 	}
+	// }
+
+	for i := range userFrames {
+
+		zoneId = fmt.Sprintf("webcam-%s", i.String())
+		m.log.Info(zoneId)
+		if m.zone.Get(zoneId).InBounds(msg) {
+			id = i
+		}
+
+	}
+
+	iden, err := m.user.GetFriendIdentityById(id)
+	if err != nil {
+		return iden, false
+	}
+
+	return iden, true
 }
 
 func renderWebcamsFrames(frames []string) string {
