@@ -82,6 +82,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
+          path-type: inherit
           install: >-
             git
             autoconf
@@ -142,20 +143,24 @@ jobs:
         env:
           CGO_ENABLED: 1
         run: |
-          export PATH="/opt/local/bin:/opt/opencv/bin:$PATH"
-
-          export CGO_CFLAGS="-I/opt/local/include -I/opt/opencv/include/opencv4"
-          export CGO_CXXFLAGS="-I/opt/local/include -I/opt/opencv/include/opencv4"
+          LOCAL_LIBS_WIN=$(cygpath -w /opt/local)
+          OPENCV_WIN=$(cygpath -w /opt/opencv)
           
           if [ -d "/opt/opencv/x64/mingw/staticlib" ]; then
-            LIB_DIR="/opt/opencv/x64/mingw/staticlib"
+            LIB_DIR_WIN=$(cygpath -w /opt/opencv/x64/mingw/staticlib)
           else
-            LIB_DIR="/opt/opencv/lib"
+            LIB_DIR_WIN=$(cygpath -w /opt/opencv/lib)
           fi
-          export CGO_LDFLAGS="-L/opt/local/lib -L$LIB_DIR \
+
+          export CGO_CFLAGS="-I${LOCAL_LIBS_WIN}\\include -I${OPENCV_WIN}\\include\\opencv4"
+          export CGO_CXXFLAGS="-I${LOCAL_LIBS_WIN}\\include -I${OPENCV_WIN}\\include\\opencv4"
+          
+          export CGO_LDFLAGS="-L${LOCAL_LIBS_WIN}\\lib -L${LIB_DIR_WIN} \
             -lopencv_world4100 -lrnnoise -lopus -logg \
             -lwebp -lpng -ljpeg -ltiff -lz -lshlwapi -lws2_32 -lole32 -lgdi32 -lcomdlg32 -lavicap32 -lavifil32 -lmsvfw32"
 
+          go version
+          
           go build -v -tags netgo -ldflags="-s -w -extldflags '-static'" -o aloh.exe ./cmd/app
 
       - name: Upload Windows
