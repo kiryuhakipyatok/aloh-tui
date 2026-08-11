@@ -1,4 +1,4 @@
-name: Build Aloh App (Flat Dynamic)
+name: Build Aloh App (Manual Dynamic Build)
 
 on:
   workflow_dispatch:
@@ -29,6 +29,7 @@ jobs:
       - name: Build Dependencies (Linux Shared)
         run: |
           mkdir -p $HOME/local_libs
+
           git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise && ./autogen.sh && ./configure --prefix=$HOME/local_libs --enable-shared --disable-static
           make -j$(nproc) install && cd ..
@@ -84,24 +85,33 @@ jobs:
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-libogg
-            mingw-w64-x86_64-opus
-            mingw-w64-x86_64-speexdsp
 
-      - name: Build RNNoise & Opusfile (Windows Shared)
+      - name: Build Libraries Manually (Ogg, Opus, RNNoise, SpeexDSP, Opusfile)
         shell: msys2 {0}
         run: |
           mkdir -p /opt/local
-          # RNNoise
+
+          git clone --depth 1 https://github.com/xiph/ogg.git
+          cmake -S ogg -B ogg/build -G Ninja -DCMAKE_INSTALL_PREFIX=/opt/local -DBUILD_SHARED_LIBS=ON
+          cmake --build ogg/build --target install
+
+          git clone --depth 1 https://github.com/xiph/opus.git
+          cmake -S opus -B opus/build -G Ninja -DCMAKE_INSTALL_PREFIX=/opt/local -DBUILD_SHARED_LIBS=ON
+          cmake --build opus/build --target install
+
           git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise && ./autogen.sh && ./configure --prefix=/opt/local --enable-shared --disable-static
           make -j$(nproc) install && cd ..
-          
-          # Opusfile (теперь он легко найдет системные ogg и opus с правильными версиями)
+
+          git clone --depth 1 https://github.com/xiph/speexdsp.git
+          cd speexdsp && ./autogen.sh && ./configure --prefix=/opt/local --enable-shared --disable-static
+          make -j$(nproc) install && cd ..
+
           git clone --depth 1 https://github.com/xiph/opusfile.git
           cd opusfile && ./autogen.sh
+          export PKG_CONFIG_PATH="/opt/local/lib/pkgconfig:$PKG_CONFIG_PATH"
           ./configure --prefix=/opt/local --enable-shared --disable-static
-          make -j$(nproc) install
+          make -j$(nproc) install && cd ..
 
       - name: Build OpenCV (Windows Shared)
         shell: msys2 {0}
@@ -118,14 +128,17 @@ jobs:
 
       - name: Run Go Build (Windows)
         shell: msys2 {0}
+        env:
+          CGO_ENABLED: 1
         run: |
           WIN_PREFIX=$(cygpath -m /opt/local)
           WIN_OCV=$(cygpath -m /opt/opencv)
-          export CGO_ENABLED=1
-
+          
           export CGO_CFLAGS="-I${WIN_PREFIX}/include -I${WIN_OCV}/include/opencv4"
-
-          export CGO_LDFLAGS="-L${WIN_PREFIX}/bin -L${WIN_OCV}/bin -L/mingw64/bin -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise"
+          
+          export CGO_LDFLAGS="-L${WIN_PREFIX}/lib -L${WIN_PREFIX}/bin -L${WIN_OCV}/bin \
+            -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise"
+            
           go build -v -o aloh.exe ./cmd/app
 
       - name: Package Windows
@@ -133,21 +146,14 @@ jobs:
         run: |
           mkdir -p dist-win
           cp aloh.exe dist-win/
-          
+
           cp /opt/local/bin/*.dll dist-win/
           cp /opt/opencv/bin/*.dll dist-win/
 
           cp /mingw64/bin/libwinpthread-1.dll dist-win/
           cp /mingw64/bin/libstdc++-6.dll dist-win/
           cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/
-          cp /mingw64/bin/libogg-0.dll dist-win/
-          cp /mingw64/bin/libopus-0.dll dist-win/
-          cp /mingw64/bin/libspeexdsp-1.dll dist-win/
-          
-          cp /mingw64/bin/libwebp-*.dll dist-win/ 2>/dev/null || true
-          cp /mingw64/bin/liblzma-*.dll dist-win/ 2>/dev/null || true
-          cp /mingw64/bin/zlib1.dll dist-win/ 2>/dev/null || true
-          
+
           tar cfvz aloh-windows.tar.gz -C dist-win .
 
       - name: Upload Windows
