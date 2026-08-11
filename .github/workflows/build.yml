@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'App version'
+        description: "App version"
         required: true
-        default: '1.0.0'
+        default: "1.0.0"
 
 jobs:
   build-linux:
@@ -16,49 +16,43 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: "1.26"
           cache: true
-
       - name: Install Build Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build build-essential pkg-config libtool autoconf \
-            libx11-dev libxcb1-dev libasound2-dev libpulse-dev libwebp-dev \
-            libogg-dev libopus-dev libopusfile-dev libspeexdsp-dev
-      - name: Build RNNoise (Linux)
+          sudo apt-get install -y cmake ninja-build build-essential pkg-config libtool autoconf automake \
+            libx11-dev libxcb1-dev libasound2-dev libpulse-dev libwebp-dev libogg-dev libopus-dev \
+            libopusfile-dev libspeexdsp-dev
+      - name: Build RNNoise
         run: |
           git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise && ./autogen.sh
-          ./configure --prefix=$HOME/local_libs --enable-shared --disable-static
-          make -j$(nproc) && make install
-      - name: Build OpenCV (Linux)
+          ./configure --prefix="$HOME/local_libs" --enable-shared --disable-static
+          make -j$(nproc) install
+      - name: Build OpenCV
         run: |
           git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
-          mkdir -p opencv/build && cd opencv/build
-          # Добавлен OPENCV_GENERATE_PKGCONFIG и расширен список модулей для gocv
-          cmake -D CMAKE_BUILD_TYPE=RELEASE \
-                -D CMAKE_INSTALL_PREFIX=$HOME/opencv_install \
-                -D OPENCV_GENERATE_PKGCONFIG=ON \
-                -D BUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo \
-                -D WITH_V4L=ON -D WITH_WEBP=ON -D BUILD_EXAMPLES=OFF -D BUILD_TESTS=OFF ..
-          make -j$(nproc) && make install
-      - name: Run Go Build (Linux)
+          cmake -S opencv -B opencv/build -G Ninja -D CMAKE_BUILD_TYPE=Release \
+            -D CMAKE_INSTALL_PREFIX="$HOME/opencv_install" -D OPENCV_GENERATE_PKGCONFIG=ON \
+            -D BUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo \
+            -D WITH_V4L=ON -D WITH_WEBP=ON -D BUILD_EXAMPLES=OFF -D BUILD_TESTS=OFF
+          cmake --build opencv/build --parallel
+          cmake --install opencv/build
+      - name: Build Go application
         run: |
-          export PREFIX=$HOME/local_libs
-          export OCV=$HOME/opencv_install
-          # Правильный поиск pkgconfig (проверяем и lib, и lib64)
-          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$(find $OCV -name pkgconfig -type d | tr '\n' ':')$PKG_CONFIG_PATH"
-          
+          export PREFIX="$HOME/local_libs"
+          export OCV="$HOME/opencv_install"
+          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$OCV/lib/pkgconfig:$PKG_CONFIG_PATH"
           export CGO_CPPFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
-          export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV/lib -L$OCV/lib64 -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopencv_highgui -lopusfile -lopus -logg -lspeexdsp -lrnnoise -lm"
-          
+          export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV/lib -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopencv_highgui -lopusfile -lopus -logg -lspeexdsp -lrnnoise -lm"
           go build -v -o aloh-linux ./cmd/app
-      - name: Collect Artifacts (Linux)
+      - name: Collect Linux artifacts
         run: |
           mkdir -p out/libs
           cp aloh-linux out/
-          find $HOME/local_libs/lib -name "*.so*" -exec cp -P {} out/libs/ \;
-          find $HOME/opencv_install -name "*.so*" -exec cp -P {} out/libs/ \;
+          find "$HOME/local_libs/lib" -name "*.so*" -exec cp -P {} out/libs/ \;
+          find "$HOME/opencv_install" -name "*.so*" -exec cp -P {} out/libs/ \;
           tar cfvz aloh-linux.tar.gz -C out .
       - name: Upload Linux
         uses: actions/upload-artifact@v4
@@ -69,56 +63,53 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: "1.26"
           cache: true
 
-      - name: Install MSYS2 & Dependencies
+      - name: Install MSYS2
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
           path-type: inherit
           install: >-
-            git
-            autoconf
-            automake
-            libtool
-            make
-            mingw-w64-x86_64-gcc
+            git make autoconf automake libtool pkgconf
+            mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-libwebp
-            mingw-w64-x86_64-libtiff
-            mingw-w64-x86_64-libpng
-            mingw-w64-x86_64-libjpeg-turbo
 
-      - name: Build RNNoise (Windows MinGW)
+      - name: Build Native Dependencies
         shell: msys2 {0}
         run: |
-          git clone --depth 1 https://github.com/xiph/rnnoise.git
-          cd rnnoise
-          ./autogen.sh
-          ./configure --prefix=/opt/local --enable-shared=no --enable-static=yes
-          make -j$(nproc) install
-
-      - name: Build Ogg/Opus (Windows MinGW)
-        shell: msys2 {0}
-        run: |
+          mkdir -p /opt/local
+          # OGG
           git clone --depth 1 https://github.com/xiph/ogg.git
           cmake -S ogg -B ogg/build -G Ninja -DCMAKE_INSTALL_PREFIX=/opt/local -DBUILD_SHARED_LIBS=OFF
           cmake --build ogg/build --target install
-
+          # OPUS
           git clone --depth 1 https://github.com/xiph/opus.git
           cmake -S opus -B opus/build -G Ninja -DCMAKE_INSTALL_PREFIX=/opt/local -DBUILD_SHARED_LIBS=OFF
           cmake --build opus/build --target install
+          # OPUSFILE
+          git clone --depth 1 https://github.com/xiph/opusfile.git
+          cd opusfile && ./autogen.sh
+          PKG_CONFIG_PATH="/opt/local/lib/pkgconfig" ./configure --prefix=/opt/local --disable-shared --enable-static
+          make -j$(nproc) install && cd ..
+          # SPEEXDSP
+          git clone --depth 1 https://github.com/xiph/speexdsp.git
+          cd speexdsp && ./autogen.sh && ./configure --prefix=/opt/local --disable-shared --enable-static
+          make -j$(nproc) install && cd ..
+          # RNNOISE
+          git clone --depth 1 https://github.com/xiph/rnnoise.git
+          cd rnnoise && ./autogen.sh && ./configure --prefix=/opt/local --disable-shared --enable-static
+          make -j$(nproc) install
 
-      - name: Build OpenCV (Windows Static MinGW)
+      - name: Build OpenCV (Static World)
         shell: msys2 {0}
         run: |
           git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
@@ -126,42 +117,43 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/opt/opencv \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-            -DBUILD_opencv_world=ON \
             -DBUILD_SHARED_LIBS=OFF \
+            -DBUILD_opencv_world=ON \
             -DOPENCV_GENERATE_PKGCONFIG=OFF \
-            -DWITH_WEBP=ON \
-            -DBUILD_WEBP=OFF \
-            -DBUILD_PNG=ON \
-            -DBUILD_JPEG=ON \
-            -DBUILD_TIFF=ON \
             -DBUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo \
-            -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF
-          cmake --build opencv/build --target install
+            -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF \
+            -DBUILD_PNG=ON -DBUILD_JPEG=ON -DBUILD_TIFF=ON -DBUILD_WEBP=ON -DBUILD_ZLIB=ON
+          cmake --build opencv/build --parallel
+          cmake --install opencv/build
 
-      - name: Run Go Build (Windows)
+      - name: Run Go Build
         shell: msys2 {0}
         env:
-          CGO_ENABLED: 1
+          CGO_ENABLED: "1"
         run: |
-          LOCAL_LIBS_WIN=$(cygpath -w /opt/local)
-          OPENCV_WIN=$(cygpath -w /opt/opencv)
+          # Конвертируем пути MSYS2 в формат Windows для Go (Mixed Mode)
+          WIN_PREFIX=$(cygpath -m /opt/local)
+          WIN_OCV=$(cygpath -m /opt/opencv)
           
+          # Авто-поиск директории библиотек OpenCV
           if [ -d "/opt/opencv/x64/mingw/staticlib" ]; then
-            LIB_DIR_WIN=$(cygpath -w /opt/opencv/x64/mingw/staticlib)
+            WIN_OCV_LIB=$(cygpath -m /opt/opencv/x64/mingw/staticlib)
           else
-            LIB_DIR_WIN=$(cygpath -w /opt/opencv/lib)
+            WIN_OCV_LIB=$(cygpath -m /opt/opencv/lib)
           fi
 
-          export CGO_CFLAGS="-I${LOCAL_LIBS_WIN}\\include -I${OPENCV_WIN}\\include\\opencv4"
-          export CGO_CXXFLAGS="-I${LOCAL_LIBS_WIN}\\include -I${OPENCV_WIN}\\include\\opencv4"
+          export CGO_CFLAGS="-I${WIN_PREFIX}/include -I${WIN_OCV}/include/opencv4"
+          export CGO_CXXFLAGS="-I${WIN_PREFIX}/include -I${WIN_OCV}/include/opencv4"
           
-          export CGO_LDFLAGS="-L${LOCAL_LIBS_WIN}\\lib -L${LIB_DIR_WIN} \
-            -lopencv_world4100 -lrnnoise -lopus -logg \
-            -lwebp -lpng -ljpeg -ltiff -lz -lshlwapi -lws2_32 -lole32 -lgdi32 -lcomdlg32 -lavicap32 -lavifil32 -lmsvfw32"
+          # Порядок: кастомные либы -> OpenCV -> системные либы Windows
+          export CGO_LDFLAGS="-L${WIN_PREFIX}/lib -L${WIN_OCV_LIB} \
+            -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise \
+            -lwebp -lpng -ljpeg -ltiff -lz \
+            -lshlwapi -lws2_32 -lole32 -lgdi32 -lcomdlg32 -lavicap32 -lavifil32 -lmsvfw32 -loleaut32 -luuid"
 
-          go version
-          
-          go build -v -tags netgo -ldflags="-s -w -extldflags '-static'" -o aloh.exe ./cmd/app
+          go build -v -tags "netgo osusergo" \
+            -ldflags="-s -w -extldflags '-static' -X 'main.version=${{ github.event.inputs.version }}'" \
+            -o aloh.exe ./cmd/app
 
       - name: Upload Windows
         uses: actions/upload-artifact@v4
