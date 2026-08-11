@@ -1,4 +1,4 @@
-name: Build Aloh App (Dynamic)
+name: Build Aloh App (Flat Dynamic)
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.26"
           cache: true
 
       - name: Install Build Tools
@@ -32,6 +32,7 @@ jobs:
           git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise && ./autogen.sh && ./configure --prefix=$HOME/local_libs --enable-shared --disable-static
           make -j$(nproc) install && cd ..
+          
           git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
           cmake -S opencv -B opencv/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=$HOME/opencv_install -DBUILD_SHARED_LIBS=ON -DOPENCV_GENERATE_PKGCONFIG=ON \
@@ -43,19 +44,17 @@ jobs:
           export PREFIX="$HOME/local_libs"
           export OCV="$HOME/opencv_install"
           export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$OCV/lib/pkgconfig"
-
-          export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV/lib -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopencv_highgui -lopusfile -lopus -logg -lspeexdsp -lrnnoise -Wl,-rpath,'$ORIGIN/libs'"
+          export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV/lib -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopencv_highgui -lopusfile -lopus -logg -lspeexdsp -lrnnoise -Wl,-rpath,'\$ORIGIN'"
           export CGO_CPPFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
-          
           go build -v -o aloh-linux ./cmd/app
 
       - name: Package Linux
         run: |
-          mkdir -p out/libs
-          cp aloh-linux out/
-          cp -d $HOME/local_libs/lib/*.so* out/libs/
-          cp -d $HOME/opencv_install/lib/*.so* out/libs/
-          tar cfvz aloh-linux.tar.gz -C out .
+          mkdir -p dist-linux
+          cp aloh-linux dist-linux/
+          cp -d $HOME/local_libs/lib/*.so* dist-linux/
+          cp -d $HOME/opencv_install/lib/*.so* dist-linux/
+          tar cfvz aloh-linux.tar.gz -C dist-linux .
 
       - name: Upload Linux
         uses: actions/upload-artifact@v4
@@ -71,7 +70,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.26"
           cache: true
 
       - name: Install MSYS2
@@ -85,26 +84,23 @@ jobs:
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-libogg
+            mingw-w64-x86_64-opus
+            mingw-w64-x86_64-speexdsp
 
-      - name: Build Dependencies (Windows Shared)
+      - name: Build RNNoise & Opusfile (Windows Shared)
         shell: msys2 {0}
         run: |
           mkdir -p /opt/local
-          git clone --depth 1 https://github.com/xiph/ogg.git
-          cmake -S ogg -B ogg/build -G Ninja -DCMAKE_INSTALL_PREFIX=/opt/local -DBUILD_SHARED_LIBS=ON
-          cmake --build ogg/build --target install
-          git clone --depth 1 https://github.com/xiph/opus.git
-          cmake -S opus -B opus/build -G Ninja -DCMAKE_INSTALL_PREFIX=/opt/local -DBUILD_SHARED_LIBS=ON
-          cmake --build opus/build --target install
-          git clone --depth 1 https://github.com/xiph/speexdsp.git
-          cd speexdsp && ./autogen.sh && ./configure --prefix=/opt/local --enable-shared --disable-static
-          make -j$(nproc) install && cd ..
+          # RNNoise
           git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise && ./autogen.sh && ./configure --prefix=/opt/local --enable-shared --disable-static
           make -j$(nproc) install && cd ..
+          
+          # Opusfile (теперь он легко найдет системные ogg и opus с правильными версиями)
           git clone --depth 1 https://github.com/xiph/opusfile.git
           cd opusfile && ./autogen.sh
-          PKG_CONFIG_PATH="/opt/local/lib/pkgconfig" ./configure --prefix=/opt/local --enable-shared --disable-static
+          ./configure --prefix=/opt/local --enable-shared --disable-static
           make -j$(nproc) install
 
       - name: Build OpenCV (Windows Shared)
@@ -122,32 +118,40 @@ jobs:
 
       - name: Run Go Build (Windows)
         shell: msys2 {0}
-        env:
-          CGO_ENABLED: "1"
         run: |
           WIN_PREFIX=$(cygpath -m /opt/local)
           WIN_OCV=$(cygpath -m /opt/opencv)
+          export CGO_ENABLED=1
 
           export CGO_CFLAGS="-I${WIN_PREFIX}/include -I${WIN_OCV}/include/opencv4"
-          export CGO_LDFLAGS="-L${WIN_PREFIX}/lib -L${WIN_OCV}/bin -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise"
 
+          export CGO_LDFLAGS="-L${WIN_PREFIX}/bin -L${WIN_OCV}/bin -L/mingw64/bin -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise"
           go build -v -o aloh.exe ./cmd/app
 
-      - name: Collect Windows Artifacts
+      - name: Package Windows
         shell: msys2 {0}
         run: |
-          mkdir -p dist
-          cp aloh.exe dist/
-          cp /opt/local/bin/*.dll dist/
-          cp /opt/opencv/bin/*.dll dist/
-          cp /mingw64/bin/libwinpthread-1.dll dist/
-          cp /mingw64/bin/libstdc++-6.dll dist/
-          cp /mingw64/bin/libgcc_s_seh-1.dll dist/
-          cp /mingw64/bin/libwebp-*.dll dist/ 2>/dev/null || true
-          cp /mingw64/bin/liblzma-*.dll dist/ 2>/dev/null || true
+          mkdir -p dist-win
+          cp aloh.exe dist-win/
+          
+          cp /opt/local/bin/*.dll dist-win/
+          cp /opt/opencv/bin/*.dll dist-win/
+
+          cp /mingw64/bin/libwinpthread-1.dll dist-win/
+          cp /mingw64/bin/libstdc++-6.dll dist-win/
+          cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/
+          cp /mingw64/bin/libogg-0.dll dist-win/
+          cp /mingw64/bin/libopus-0.dll dist-win/
+          cp /mingw64/bin/libspeexdsp-1.dll dist-win/
+          
+          cp /mingw64/bin/libwebp-*.dll dist-win/ 2>/dev/null || true
+          cp /mingw64/bin/liblzma-*.dll dist-win/ 2>/dev/null || true
+          cp /mingw64/bin/zlib1.dll dist-win/ 2>/dev/null || true
+          
+          tar cfvz aloh-windows.tar.gz -C dist-win .
 
       - name: Upload Windows
         uses: actions/upload-artifact@v4
         with:
           name: aloh-windows
-          path: dist/*
+          path: aloh-windows.tar.gz
