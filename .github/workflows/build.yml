@@ -1,4 +1,4 @@
-name: Build Aloh App (Manual Dynamic Build)
+name: Build Aloh App (Flat Dynamic Manual)
 
 on:
   workflow_dispatch:
@@ -18,28 +18,23 @@ jobs:
         with:
           go-version: "1.26"
           cache: true
-
       - name: Install Build Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build build-essential pkg-config libtool autoconf automake \
             libx11-dev libxcb1-dev libasound2-dev libpulse-dev libwebp-dev libogg-dev libopus-dev \
             libopusfile-dev libspeexdsp-dev
-
       - name: Build Dependencies (Linux Shared)
         run: |
           mkdir -p $HOME/local_libs
-
           git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise && ./autogen.sh && ./configure --prefix=$HOME/local_libs --enable-shared --disable-static
           make -j$(nproc) install && cd ..
-
           git clone --depth 1 --branch 4.10.0 https://github.com/opencv/opencv.git
           cmake -S opencv -B opencv/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=$HOME/opencv_install -DBUILD_SHARED_LIBS=ON -DOPENCV_GENERATE_PKGCONFIG=ON \
             -DBUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo
           cmake --build opencv/build --target install
-
       - name: Build Go application (Linux)
         run: |
           export PREFIX="$HOME/local_libs"
@@ -48,7 +43,6 @@ jobs:
           export CGO_LDFLAGS="-L$PREFIX/lib -L$OCV/lib -lopencv_core -lopencv_videoio -lopencv_imgproc -lopencv_imgcodecs -lopencv_highgui -lopusfile -lopus -logg -lspeexdsp -lrnnoise -Wl,-rpath,'\$ORIGIN'"
           export CGO_CPPFLAGS="-I$PREFIX/include -I$OCV/include/opencv4"
           go build -v -o aloh-linux ./cmd/app
-
       - name: Package Linux
         run: |
           mkdir -p dist-linux
@@ -56,7 +50,6 @@ jobs:
           cp -d $HOME/local_libs/lib/*.so* dist-linux/
           cp -d $HOME/opencv_install/lib/*.so* dist-linux/
           tar cfvz aloh-linux.tar.gz -C dist-linux .
-
       - name: Upload Linux
         uses: actions/upload-artifact@v4
         with:
@@ -86,37 +79,33 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
 
-      - name: Build Libraries Manually (Ogg, Opus, RNNoise, SpeexDSP, Opusfile)
+      - name: Build Libraries Manually (Windows Shared)
         shell: msys2 {0}
         run: |
-          mkdir -p /opt/local/lib/pkgconfig
-          export PKG_CONFIG_PATH="/opt/local/lib/pkgconfig:$PKG_CONFIG_PATH"
-          export LDFLAGS="-L/opt/local/lib $LDFLAGS"
-          export CPPFLAGS="-I/opt/local/include $CPPFLAGS"
+          mkdir -p /opt/local
           
           git clone --depth 1 https://github.com/xiph/ogg.git
-          cd ogg && ./autogen.sh
-          ./configure --prefix=/opt/local --enable-shared --disable-static
+          cd ogg && ./autogen.sh && ./configure --prefix=/opt/local --enable-shared --disable-static
           make -j$(nproc) install && cd ..
 
           git clone --depth 1 https://github.com/xiph/opus.git
-          cd opus && ./autogen.sh
-          ./configure --prefix=/opt/local --enable-shared --disable-static
+          cd opus && ./autogen.sh && ./configure --prefix=/opt/local --enable-shared --disable-static
           make -j$(nproc) install && cd ..
 
           git clone --depth 1 https://github.com/xiph/rnnoise.git
-          cd rnnoise && ./autogen.sh
-          ./configure --prefix=/opt/local --enable-shared --disable-static
+          cd rnnoise && ./autogen.sh && ./configure --prefix=/opt/local --enable-shared --disable-static
           make -j$(nproc) install && cd ..
 
           git clone --depth 1 https://github.com/xiph/speexdsp.git
-          cd speexdsp && ./autogen.sh
-          ./configure --prefix=/opt/local --enable-shared --disable-static
+          cd speexdsp && ./autogen.sh && ./configure --prefix=/opt/local --enable-shared --disable-static
           make -j$(nproc) install && cd ..
 
           git clone --depth 1 https://github.com/xiph/opusfile.git
           cd opusfile && ./autogen.sh
-          ./configure --prefix=/opt/local --enable-shared --disable-static
+          # Мы принудительно передаем флаги зависимостей, чтобы configure не вызывал pkg-config
+          ./configure --prefix=/opt/local --enable-shared --disable-static \
+            DEPS_CFLAGS="-I/opt/local/include/opus -I/opt/local/include" \
+            DEPS_LIBS="-L/opt/local/lib -lopus -logg"
           make -j$(nproc) install && cd ..
 
       - name: Build OpenCV (Windows Shared)
@@ -139,12 +128,9 @@ jobs:
         run: |
           WIN_PREFIX=$(cygpath -m /opt/local)
           WIN_OCV=$(cygpath -m /opt/opencv)
-          
           export CGO_CFLAGS="-I${WIN_PREFIX}/include -I${WIN_OCV}/include/opencv4"
-          
           export CGO_LDFLAGS="-L${WIN_PREFIX}/lib -L${WIN_PREFIX}/bin -L${WIN_OCV}/bin \
             -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise"
-            
           go build -v -o aloh.exe ./cmd/app
 
       - name: Package Windows
@@ -152,14 +138,11 @@ jobs:
         run: |
           mkdir -p dist-win
           cp aloh.exe dist-win/
-          
           cp /opt/local/bin/*.dll dist-win/
           cp /opt/opencv/bin/*.dll dist-win/
-          
           cp /mingw64/bin/libwinpthread-1.dll dist-win/
           cp /mingw64/bin/libstdc++-6.dll dist-win/
           cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/
-          
           tar cfvz aloh-windows.tar.gz -C dist-win .
 
       - name: Upload Windows
