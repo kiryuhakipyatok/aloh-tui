@@ -181,10 +181,19 @@ jobs:
           GOARCH: amd64
         run: |
           set -e
-          export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
 
+          export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig:$PKG_CONFIG_PATH"
+          
+          OPUS_FLAGS=$(pkg-config --cflags --libs opus opusfile ogg speexdsp)
+  
           export CGO_CFLAGS="-I/mingw64/include/opencv4"
-          export CGO_LDFLAGS="-L/mingw64/lib -lopencv_world4100 -lopusfile -lopus -logg -lspeexdsp -lrnnoise"
+          export CGO_CXXFLAGS="-I/mingw64/include/opencv4"
+          
+          OCV_FLAGS=$(pkg-config --cflags --libs opencv4)
+
+          export CGO_LDFLAGS="$OCV_FLAGS $OPUS_FLAGS -L/mingw64/lib -lrnnoise"
+          
+          echo "Final CGO_LDFLAGS: $CGO_LDFLAGS"
           
           go build \
             -v \
@@ -197,21 +206,23 @@ jobs:
           set -e
           mkdir -p dist-win
           cp aloh.exe dist-win/
-
-          echo "Copying runtime DLLs..."
-          cp /mingw64/bin/libopencv_world4100.dll dist-win/
-          cp /mingw64/bin/libopusfile-0.dll dist-win/
-          cp /mingw64/bin/libopus-0.dll dist-win/
-          cp /mingw64/bin/libogg-0.dll dist-win/
-          cp /mingw64/bin/libspeexdsp-1.dll dist-win/
-          cp /mingw64/bin/librnnoise-0.dll dist-win/
-
+          
+          # Копируем основные зависимости
+          cp /mingw64/bin/libopus*.dll dist-win/
+          cp /mingw64/bin/libogg*.dll dist-win/
+          cp /mingw64/bin/libspeex*.dll dist-win/
+          cp /mingw64/bin/librnnoise*.dll dist-win/
+          
+          cp /mingw64/bin/libopencv*.dll dist-win/
+          
           cp /mingw64/bin/libwinpthread-1.dll dist-win/
           cp /mingw64/bin/libstdc++-6.dll dist-win/
           cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/
-
-          cp /mingw64/bin/libjpeg-8.dll dist-win/ 2>/dev/null || true
-          cp /mingw64/bin/libpng16-16.dll dist-win/ 2>/dev/null || true
+          
+          cp /mingw64/bin/libpng*.dll dist-win/ || true
+          cp /mingw64/bin/libjpeg*.dll dist-win/ || true
+          cp /mingw64/bin/libwebp*.dll dist-win/ || true
+          cp /mingw64/bin/zlib1.dll dist-win/ || true
           
           tar cfvz aloh-windows.tar.gz -C dist-win .
 
