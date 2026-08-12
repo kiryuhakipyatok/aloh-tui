@@ -37,7 +37,7 @@ func SetupCallbacks(cs CallbacksSetup) {
 		// case cs.RawWebcamMsgChan <- commands.RawWebcamMsg{Id: id, Data: data}:
 		// default:
 		// }
-		cs.User.Engines.VideoEngine.RenderUsersVideoTerminal(id, data)
+		cs.User.Engines.VideoEngine.RenderUsersWebcam(id, data)
 	})
 	cs.User.Networking.PeerConnectedCallback(func(id uuid.UUID) {
 		t := time.Now().Format("15:04:05")

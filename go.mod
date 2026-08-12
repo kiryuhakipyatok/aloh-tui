@@ -3,6 +3,7 @@ module aloh-tui
 go 1.26.0
 
 require (
+	gioui.org v0.10.2
 	github.com/AvraamMavridis/randomcolor v0.0.0-20180822172341-208aff70bf2c
 	github.com/blacktop/go-termimg v0.1.26
 	github.com/charmbracelet/bubbles v1.0.0
@@ -18,10 +19,11 @@ require (
 	github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260726211718-ebaf500ab11e
 	github.com/kiryuhakipyatok/aloh-ssh v0.0.0-20260726171110-30dc3a8c5b15
 	github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e
+	github.com/kolesa-team/go-webp v1.0.5
 	github.com/lrstanley/bubblezone v1.0.0
+	github.com/pion/mediadevices v0.10.0
 	github.com/spf13/viper v1.21.0
 	github.com/wagslane/go-password-validator v0.3.0
-	gocv.io/x/gocv v0.43.0
 	golang.design/x/clipboard v0.7.1
 	golang.org/x/crypto v0.48.0
 	golang.org/x/image v0.36.0
@@ -31,9 +33,11 @@ require (
 )
 
 require (
+	gioui.org/shader v1.0.9 // indirect
 	git.sr.ht/~jackmordaunt/go-toast v1.1.2 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/blackjack/webcam v0.6.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/charmbracelet/colorprofile v0.4.1 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
@@ -51,6 +55,7 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
+	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/jackmordaunt/icns/v3 v3.0.1 // indirect
@@ -67,14 +72,28 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
+	github.com/pion/datachannel v1.5.10 // indirect
 	github.com/pion/dtls/v2 v2.2.12 // indirect
+	github.com/pion/dtls/v3 v3.0.8 // indirect
 	github.com/pion/ice/v2 v2.3.38 // indirect
+	github.com/pion/ice/v4 v4.0.13 // indirect
+	github.com/pion/interceptor v0.1.42 // indirect
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns v0.0.12 // indirect
+	github.com/pion/mdns/v2 v2.1.0 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
+	github.com/pion/rtcp v1.2.16 // indirect
+	github.com/pion/rtp v1.8.26 // indirect
+	github.com/pion/sctp v1.8.41 // indirect
+	github.com/pion/sdp/v3 v3.0.16 // indirect
+	github.com/pion/srtp/v3 v3.0.9 // indirect
 	github.com/pion/stun v0.6.1 // indirect
+	github.com/pion/stun/v3 v3.0.2 // indirect
 	github.com/pion/transport/v2 v2.2.10 // indirect
+	github.com/pion/transport/v3 v3.1.1 // indirect
 	github.com/pion/turn/v2 v2.1.6 // indirect
+	github.com/pion/turn/v4 v4.1.3 // indirect
+	github.com/pion/webrtc/v4 v4.1.8 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect

@@ -9,14 +9,8 @@ on:
         default: "1.0.0"
 
 jobs:
-
-  # ============================================================
-  # LINUX
-  # ============================================================
-
   build-linux:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,232 +21,35 @@ jobs:
           go-version: "1.26"
           cache: true
 
-      # ----------------------------------------------------------
-      # System dependencies
-      # ----------------------------------------------------------
-
-      - name: Install Build Tools
-        shell: bash
+      - name: Install Dependencies
         run: |
-          set -e
-
           sudo apt-get update
-
           sudo apt-get install -y \
-            build-essential \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libtool \
-            autoconf \
-            automake \
-            libx11-dev \
-            libxcb1-dev \
-            libasound2-dev \
-            libpulse-dev \
-            libwebp-dev \
-            libogg-dev \
-            libopus-dev \
-            libopusfile-dev \
-            libspeexdsp-dev
+            libwayland-dev libx11-dev libxkbcommon-x11-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libffi-dev \
+            libv4l-dev libasound2-dev \
+            libwebp-dev pkg-config
 
-      # ----------------------------------------------------------
-      # RNNoise
-      # ----------------------------------------------------------
-
-      - name: Build RNNoise
-        shell: bash
+      - name: Build
         run: |
-          set -e
-
-          PREFIX="$HOME/local_libs"
-
-          mkdir -p "$PREFIX"
-
-          git clone \
-            --depth 1 \
-            https://github.com/xiph/rnnoise.git
-
-          cd rnnoise
-
-          ./autogen.sh
-
-          ./configure \
-            --prefix="$PREFIX" \
-            --enable-shared \
-            --disable-static
-
-          make -j"$(nproc)"
-          make install
-
-          cd ..
-
-      # ----------------------------------------------------------
-      # OpenCV 4.10.0
-      # ----------------------------------------------------------
-
-      - name: Build OpenCV 4.10.0
-        shell: bash
-        run: |
-          set -e
-
-          OCV="$HOME/opencv_install"
-
-          git clone \
-            --depth 1 \
-            --branch 4.10.0 \
-            https://github.com/opencv/opencv.git
-
-          cmake \
-            -S opencv \
-            -B opencv/build \
-            -G Ninja \
-            -D CMAKE_BUILD_TYPE=Release \
-            -D CMAKE_INSTALL_PREFIX="$OCV" \
-            -D BUILD_SHARED_LIBS=ON \
-            -D OPENCV_GENERATE_PKGCONFIG=ON \
-            -D BUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo \
-            -D BUILD_EXAMPLES=OFF \
-            -D BUILD_TESTS=OFF \
-            -D BUILD_PERF_TESTS=OFF \
-            -D BUILD_DOCS=OFF \
-            -D BUILD_JAVA=OFF \
-            -D BUILD_opencv_python3=OFF
-
-          cmake \
-            --build opencv/build \
-            --parallel
-
-          cmake \
-            --install opencv/build
-
-          echo "========== OpenCV =========="
-          "$OCV/bin/opencv_version" || true
-          echo "============================"
-
-      # ----------------------------------------------------------
-      # Build Go
-      # ----------------------------------------------------------
-
-      - name: Build Go application
-        shell: bash
-        run: |
-          set -e
-
-          PREFIX="$HOME/local_libs"
-          OCV="$HOME/opencv_install"
-
           export CGO_ENABLED=1
-
-          export PKG_CONFIG_PATH="\
-          $PREFIX/lib/pkgconfig:\
-          $OCV/lib/pkgconfig:\
-          $PKG_CONFIG_PATH"
-
-          export CGO_CPPFLAGS="\
-          -I$PREFIX/include \
-          -I$OCV/include/opencv4"
-
-          export CGO_CFLAGS="\
-          -I$PREFIX/include \
-          -I$OCV/include/opencv4"
-
-          export CGO_CXXFLAGS="\
-          -I$PREFIX/include \
-          -I$OCV/include/opencv4"
-
-          export CGO_LDFLAGS="\
-          -L$PREFIX/lib \
-          -L$OCV/lib \
-          -lopencv_core \
-          -lopencv_videoio \
-          -lopencv_imgproc \
-          -lopencv_imgcodecs \
-          -lopencv_highgui \
-          -lopencv_video \
-          -lopencv_calib3d \
-          -lopencv_features2d \
-          -lopencv_objdetect \
-          -lopencv_dnn \
-          -lopencv_photo \
-          -lopusfile \
-          -lopus \
-          -logg \
-          -lspeexdsp \
-          -lrnnoise \
-          -Wl,-rpath,'\$ORIGIN'"
-
-          echo "========== OpenCV =========="
-          pkg-config --modversion opencv4 || true
-          echo "============================"
-
-          echo "========== Headers =========="
-          test -f "$OCV/include/opencv4/opencv2/opencv.hpp"
-          echo "opencv2/opencv.hpp OK"
-          echo "============================="
-
-          echo "========== CGO FLAGS =========="
-          echo "$CGO_CPPFLAGS"
-          echo "$CGO_LDFLAGS"
-          echo "==============================="
-
-          go build \
-            -v \
-            -tags customenv \
-            -o aloh-linux \
-            ./cmd/app
-
-      # ----------------------------------------------------------
-      # Package Linux
-      # ----------------------------------------------------------
+          go build -v -o aloh-linux ./cmd/app
 
       - name: Package Linux
-        shell: bash
         run: |
-          set -e
-
           mkdir -p dist-linux
-
           cp aloh-linux dist-linux/
+          tar -czvf aloh-linux.tar.gz -C dist-linux .
 
-          # RNNoise
-          find "$HOME/local_libs/lib" \
-            -maxdepth 1 \
-            -type f \
-            -name "*.so*" \
-            -exec cp -d {} dist-linux/ \;
-
-          # OpenCV
-          find "$HOME/opencv_install/lib" \
-            -maxdepth 1 \
-            -type f \
-            -name "*.so*" \
-            -exec cp -d {} dist-linux/ \;
-
-          echo "========== Linux package =========="
-          ls -lah dist-linux
-          echo "==================================="
-
-          tar -czvf \
-            aloh-linux.tar.gz \
-            -C dist-linux .
-
-      - name: Upload Linux
+      - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
         with:
           name: aloh-linux
           path: aloh-linux.tar.gz
 
-
-  # ============================================================
-  # WINDOWS
-  # ============================================================
-
   build-windows:
     runs-on: windows-latest
-
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -261,319 +58,41 @@ jobs:
         with:
           go-version: "1.26"
           cache: true
-
-      # ----------------------------------------------------------
-      # MSYS2
-      # ----------------------------------------------------------
 
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
-          path-type: inherit
-
           install: >-
-            git
-            make
-            autoconf
-            automake
-            libtool
-            pkgconf
             mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-libogg
-            mingw-w64-x86_64-opus
-            mingw-w64-x86_64-opusfile
-            mingw-w64-x86_64-speexdsp
+            mingw-w64-x86_64-libwebp
+            pkg-config
 
-      # ----------------------------------------------------------
-      # RNNoise
-      # ----------------------------------------------------------
-
-      - name: Build RNNoise
-        shell: msys2 {0}
-        run: |
-          set -e
-
-          PREFIX="/mingw64"
-
-          git clone \
-            --depth 1 \
-            https://github.com/xiph/rnnoise.git
-
-          cd rnnoise
-
-          ./autogen.sh
-
-          ./configure \
-            --prefix="$PREFIX" \
-            --enable-shared \
-            --disable-static
-
-          make -j"$(nproc)"
-          make install
-
-          cd ..
-
-      # ----------------------------------------------------------
-      # OpenCV 4.10.0
-      # ----------------------------------------------------------
-
-      - name: Build OpenCV 4.10.0
-        shell: msys2 {0}
-        run: |
-          set -e
-
-          OCV="/opt/opencv"
-
-          rm -rf opencv
-
-          git clone \
-            --depth 1 \
-            --branch 4.10.0 \
-            https://github.com/opencv/opencv.git
-
-          cmake \
-            -S opencv \
-            -B opencv/build \
-            -G Ninja \
-            -D CMAKE_BUILD_TYPE=Release \
-            -D CMAKE_INSTALL_PREFIX="$OCV" \
-            -D BUILD_SHARED_LIBS=ON \
-            -D BUILD_opencv_world=ON \
-            -D OPENCV_GENERATE_PKGCONFIG=OFF \
-            -D BUILD_LIST=core,videoio,imgproc,imgcodecs,highgui,video,calib3d,features2d,objdetect,dnn,photo \
-            -D BUILD_EXAMPLES=OFF \
-            -D BUILD_TESTS=OFF \
-            -D BUILD_PERF_TESTS=OFF \
-            -D BUILD_DOCS=OFF \
-            -D BUILD_JAVA=OFF \
-            -D BUILD_opencv_python3=OFF
-
-          cmake \
-            --build opencv/build \
-            --parallel
-
-          cmake \
-            --install opencv/build
-
-          echo "========================================"
-          echo "OpenCV installation:"
-          echo "========================================"
-
-          find "$OCV" \
-            -maxdepth 4 \
-            -type f \
-            \( \
-              -name "opencv.hpp" \
-              -o -name "opencv_world*.dll" \
-              -o -name "opencv_world*.dll.a" \
-            \) \
-            -print
-
-          echo "========================================"
-
-          HEADER="$OCV/include/opencv2/opencv.hpp"
-
-          if [ ! -f "$HEADER" ]; then
-            echo "ERROR: OpenCV header not found!"
-            echo "$HEADER"
-            exit 1
-          fi
-
-          echo "OpenCV header OK:"
-          echo "$HEADER"
-
-      # ----------------------------------------------------------
-      # Build Go application
-      # ----------------------------------------------------------
-
-      - name: Build Go application
+      - name: Build Windows
         shell: msys2 {0}
         env:
           CGO_ENABLED: "1"
           GOOS: windows
           GOARCH: amd64
         run: |
-          set -e
-
-          OCV="/opt/opencv"
-
           export PATH="/mingw64/bin:$PATH"
-
-          # ------------------------------------------------------
-          # OpenCV 4.10.0
-          # ------------------------------------------------------
-
-          export CGO_CFLAGS="\
-          -I$OCV/include"
-
-          export CGO_CPPFLAGS="\
-          -I$OCV/include"
-
-          export CGO_CXXFLAGS="\
-          -I$OCV/include \
-          -std=c++11"
-
-          export CGO_LDFLAGS="\
-          -L$OCV/x64/mingw/lib \
-          -L$OCV/lib \
-          -lopencv_world4100 \
-          -L/mingw64/lib \
-          -lopusfile \
-          -lopus \
-          -logg \
-          -lspeexdsp \
-          -lrnnoise"
-
-          echo "========================================"
-          echo "OpenCV header:"
-          echo "$OCV/include/opencv2/opencv.hpp"
-          echo "========================================"
-
-          test -f \
-            "$OCV/include/opencv2/opencv.hpp"
-
-          echo "OpenCV header OK"
-
-          echo "========================================"
-          echo "OpenCV libraries:"
-          echo "========================================"
-
-          find "$OCV" \
-            -type f \
-            \( \
-              -name "libopencv_world*.dll.a" \
-              -o -name "libopencv_world*.a" \
-              -o -name "opencv_world*.dll" \
-            \) \
-            -print
-
-          echo "========================================"
-
-          echo "========================================"
-          echo "CGO_CFLAGS:"
-          echo "$CGO_CFLAGS"
-          echo "========================================"
-
-          echo "========================================"
-          echo "CGO_LDFLAGS:"
-          echo "$CGO_LDFLAGS"
-          echo "========================================"
-
-          echo "========================================"
-          echo "Go environment:"
-          go env GOOS
-          go env GOARCH
-          go env CGO_ENABLED
-          echo "========================================"
-
-          # ------------------------------------------------------
-          # IMPORTANT:
-          #
-          # gocv needs customenv when OpenCV is installed
-          # outside its standard location.
-          # ------------------------------------------------------
-
-          go build \
-            -v \
-            -tags customenv \
-            -o aloh.exe \
-            ./cmd/app
-
-      # ----------------------------------------------------------
-      # Package Windows
-      # ----------------------------------------------------------
+          go build -v -ldflags="-H windowsgui" -o aloh.exe ./cmd/app
 
       - name: Package Windows
         shell: msys2 {0}
         run: |
-          set -e
-
-          OCV="/opt/opencv"
-
           mkdir -p dist-win
-
           cp aloh.exe dist-win/
 
-          # ------------------------------------------------------
-          # OpenCV DLL
-          # ------------------------------------------------------
+          cp /mingw64/bin/libwebp-*.dll dist-win/ || true
+          cp /mingw64/bin/libwinpthread-1.dll dist-win/ || true
+          cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/ || true
+          cp /mingw64/bin/libstdc++-6.dll dist-win/ || true
 
-          find "$OCV" \
-            -type f \
-            -name "*.dll" \
-            -exec cp {} dist-win/ \;
+          tar -czvf aloh-windows.tar.gz -C dist-win .
 
-          # ------------------------------------------------------
-          # Audio DLL
-          # ------------------------------------------------------
-
-          cp /mingw64/bin/libopus*.dll \
-            dist-win/ \
-            2>/dev/null || true
-
-          cp /mingw64/bin/libogg*.dll \
-            dist-win/ \
-            2>/dev/null || true
-
-          cp /mingw64/bin/libspeex*.dll \
-            dist-win/ \
-            2>/dev/null || true
-
-          cp /mingw64/bin/librnnoise*.dll \
-            dist-win/ \
-            2>/dev/null || true
-
-          # ------------------------------------------------------
-          # MinGW runtime
-          # ------------------------------------------------------
-
-          cp /mingw64/bin/libwinpthread-1.dll \
-            dist-win/ \
-            2>/dev/null || true
-
-          cp /mingw64/bin/libstdc++-6.dll \
-            dist-win/ \
-            2>/dev/null || true
-
-          cp /mingw64/bin/libgcc_s_seh-1.dll \
-            dist-win/ \
-            2>/dev/null || true
-
-          # ------------------------------------------------------
-          # Check DLL dependencies
-          # ------------------------------------------------------
-
-          echo "========================================"
-          echo "Windows package:"
-          echo "========================================"
-
-          ls -lah dist-win
-
-          echo "========================================"
-          echo "OpenCV DLL:"
-          echo "========================================"
-
-          find dist-win \
-            -maxdepth 1 \
-            -type f \
-            -iname "*opencv*.dll" \
-            -print
-
-          echo "========================================"
-
-          # ------------------------------------------------------
-          # Archive
-          # ------------------------------------------------------
-
-          tar -czvf \
-            aloh-windows.tar.gz \
-            -C dist-win .
-
-      - name: Upload Windows
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: aloh-windows

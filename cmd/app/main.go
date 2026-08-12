@@ -4,6 +4,9 @@ import (
 	"aloh-tui/internal/app"
 	"aloh-tui/pkg/logger"
 	_ "net/http/pprof"
+	"os"
+
+	gapp "gioui.org/app"
 )
 
 var (
@@ -12,5 +15,10 @@ var (
 )
 
 func main() {
-	app.Run(logger.DevEnv, version)
+	go func() {
+		app.Run(logger.DevEnv, version)
+		os.Exit(1)
+	}()
+
+	gapp.Main()
 }
