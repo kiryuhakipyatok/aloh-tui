@@ -219,6 +219,7 @@ jobs:
           ls -lh /mingw64/lib/libogg*
           ls -lh /mingw64/lib/libspeex*
           ls -lh /mingw64/lib/librnnoise*
+          ls -lh /mingw64/lib/libwebp*
 
       - name: Build Windows application
         shell: msys2 {0}
@@ -245,6 +246,7 @@ jobs:
             -lspeexdsp \
             -lopusfile \
             -lopus \
+            -lwebp \
             -logg \
           "
 
@@ -253,6 +255,7 @@ jobs:
           pkg-config --modversion ogg || true
           pkg-config --modversion speexdsp || true
           pkg-config --modversion rnnoise || true
+          pkg-config --modversion webp || true
 
           go build \
             -v \
@@ -282,6 +285,8 @@ jobs:
           cp /mingw64/bin/libwinpthread-1.dll dist-win/ || true
           cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/ || true
           cp /mingw64/bin/libstdc++-6.dll dist-win/ || true
+
+          cp /mingw64/bin/libwebp*.dll dist-win/ || true
 
 
           tar -czvf aloh-windows.tar.gz \
