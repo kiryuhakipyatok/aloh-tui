@@ -23,7 +23,6 @@ jobs:
           go-version: "1.26"
           cache: true
 
-
       - name: Install Linux dependencies
         run: |
           set -e
@@ -41,6 +40,7 @@ jobs:
             autoconf \
             automake \
             libtool \
+            pax-utils \
             \
             libwayland-dev \
             libx11-dev \
@@ -97,9 +97,7 @@ jobs:
 
           export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
 
-          export CGO_CFLAGS="\
-            -I$PREFIX/include \
-          "
+          export CGO_CFLAGS="-I$PREFIX/include"
 
           export CGO_LDFLAGS="\
             -L$PREFIX/lib \
@@ -110,11 +108,6 @@ jobs:
             -logg \
             -Wl,-rpath,'\$ORIGIN' \
           "
-
-          pkg-config --modversion opus || true
-          pkg-config --modversion opusfile || true
-          pkg-config --modversion speexdsp || true
-          pkg-config --modversion libwebp || true
 
           go build \
             -v \
@@ -128,6 +121,7 @@ jobs:
         run: |
           set -e
 
+          rm -rf dist-linux
           mkdir -p dist-linux
 
           cp aloh-linux dist-linux/
@@ -135,8 +129,55 @@ jobs:
           find "$HOME/local_libs/lib" \
             -maxdepth 1 \
             -type f \
-            -name "*.so*" \
+            \( -name "*.so" -o -name "*.so.*" \) \
             -exec cp -d {} dist-linux/ \;
+
+          lddtree -l aloh-linux \
+            | grep '^/' \
+            | while read -r lib; do
+                case "$lib" in
+                  /lib/x86_64-linux-gnu/libc.so.*)
+                    ;;
+                  /lib/x86_64-linux-gnu/libm.so.*)
+                    ;;
+                  /lib/x86_64-linux-gnu/libpthread.so.*)
+                    ;;
+                  /lib/x86_64-linux-gnu/libdl.so.*)
+                    ;;
+                  /lib/x86_64-linux-gnu/librt.so.*)
+                    ;;
+                  /lib64/ld-linux-x86-64.so.*)
+                    ;;
+                  /usr/lib/x86_64-linux-gnu/libc.so.*)
+                    ;;
+                  /usr/lib/x86_64-linux-gnu/libm.so.*)
+                    ;;
+                  /usr/lib/x86_64-linux-gnu/libpthread.so.*)
+                    ;;
+                  /usr/lib/x86_64-linux-gnu/libdl.so.*)
+                    ;;
+                  /usr/lib/x86_64-linux-gnu/librt.so.*)
+                    ;;
+                  /usr/lib/x86_64-linux-gnu/libnss_*.so*)
+                    ;;
+                  *)
+                    if [ -f "$lib" ]; then
+                      cp -L "$lib" dist-linux/
+                    fi
+                    ;;
+                esac
+              done
+
+          find dist-linux -type f -name "*.so" -o -name "*.so.*" \
+            | sort -u \
+            | while read -r lib; do
+                base="$(basename "$lib")"
+                target="dist-linux/$base"
+
+                if [ "$lib" != "$target" ] && [ -f "$lib" ]; then
+                  cp -L "$lib" "$target"
+                fi
+              done
 
           tar -czvf aloh-linux.tar.gz \
             -C dist-linux .
@@ -146,6 +187,7 @@ jobs:
         with:
           name: aloh-linux
           path: aloh-linux.tar.gz
+
 
   build-windows:
     runs-on: windows-latest
@@ -201,26 +243,6 @@ jobs:
           make -j"$(nproc)"
           make install
 
-      - name: Verify Windows libraries
-        shell: msys2 {0}
-        run: |
-          set -e
-
-          test -f /mingw64/include/opus/opus.h
-          test -f /mingw64/include/ogg/ogg.h
-          test -f /mingw64/include/speex/speex_preprocess.h
-
-          echo "Opus headers: OK"
-          echo "Ogg headers: OK"
-          echo "SpeexDSP headers: OK"
-
-
-          ls -lh /mingw64/lib/libopus*
-          ls -lh /mingw64/lib/libogg*
-          ls -lh /mingw64/lib/libspeex*
-          ls -lh /mingw64/lib/librnnoise*
-          ls -lh /mingw64/lib/libwebp*
-
       - name: Build Windows application
         shell: msys2 {0}
         env:
@@ -232,13 +254,9 @@ jobs:
 
           export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
 
-          export CGO_CFLAGS="\
-            -I/mingw64/include \
-          "
+          export CGO_CFLAGS="-I/mingw64/include"
 
-          export CGO_CXXFLAGS="\
-            -I/mingw64/include \
-          "
+          export CGO_CXXFLAGS="-I/mingw64/include"
 
           export CGO_LDFLAGS="\
             -L/mingw64/lib \
@@ -249,13 +267,6 @@ jobs:
             -logg \
           "
 
-          pkg-config --modversion opus || true
-          pkg-config --modversion opusfile || true
-          pkg-config --modversion ogg || true
-          pkg-config --modversion speexdsp || true
-          pkg-config --modversion rnnoise || true
-          pkg-config --modversion libwebp || true
-
           go build \
             -v \
             -trimpath \
@@ -263,30 +274,42 @@ jobs:
             -o aloh.exe \
             ./cmd/app
 
-
       - name: Package Windows
         shell: msys2 {0}
         run: |
           set -e
 
+          rm -rf dist-win
           mkdir -p dist-win
 
           cp aloh.exe dist-win/
 
-          cp /mingw64/bin/librnnoise*.dll dist-win/ || true
+          ntldd aloh.exe \
+            | sed -n 's/.*=>[[:space:]]*\([^[:space:]]*\.dll\).*/\1/p' \
+            | sort -u \
+            | while read -r dll; do
+                if [ -f "$dll" ]; then
+                  cp "$dll" dist-win/
+                elif [ -f "/mingw64/bin/$dll" ]; then
+                  cp "/mingw64/bin/$dll" dist-win/
+                fi
+              done
 
-          cp /mingw64/bin/libspeex*.dll dist-win/ || true
-
-          cp /mingw64/bin/libopus*.dll dist-win/ || true
-
-          cp /mingw64/bin/libogg*.dll dist-win/ || true
+          find /mingw64/bin \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name "librnnoise*.dll" \
+              -o -name "libopus*.dll" \
+              -o -name "libogg*.dll" \
+              -o -name "libspeex*.dll" \
+              -o -name "libwebp*.dll" \
+            \) \
+            -exec cp {} dist-win/ \;
 
           cp /mingw64/bin/libwinpthread-1.dll dist-win/ || true
           cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/ || true
           cp /mingw64/bin/libstdc++-6.dll dist-win/ || true
-
-          cp /mingw64/bin/libwebp*.dll dist-win/ || true
-
 
           tar -czvf aloh-windows.tar.gz \
             -C dist-win .
