@@ -246,7 +246,6 @@ jobs:
             -lspeexdsp \
             -lopusfile \
             -lopus \
-            -lwebp \
             -logg \
           "
 
@@ -255,7 +254,7 @@ jobs:
           pkg-config --modversion ogg || true
           pkg-config --modversion speexdsp || true
           pkg-config --modversion rnnoise || true
-          pkg-config --modversion webp || true
+          pkg-config --modversion libwebp || true
 
           go build \
             -v \
