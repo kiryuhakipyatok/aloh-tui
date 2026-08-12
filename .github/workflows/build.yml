@@ -179,6 +179,7 @@ jobs:
             mingw-w64-x86_64-opus
             mingw-w64-x86_64-opusfile
             mingw-w64-x86_64-speexdsp
+            mingw-w64-x86_64-libwebp
 
       - name: Build RNNoise
         shell: msys2 {0}
