@@ -9,8 +9,10 @@ on:
         default: "1.0.0"
 
 jobs:
+
   build-linux:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,27 +23,125 @@ jobs:
           go-version: "1.26"
           cache: true
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwayland-dev libx11-dev libxkbcommon-x11-dev \
-            libgles2-mesa-dev libegl1-mesa-dev libffi-dev \
-            libv4l-dev libasound2-dev \
-            libwebp-dev pkg-config
 
-      - name: Build
+      - name: Install Linux dependencies
         run: |
-          export CGO_ENABLED=1
-          go build -v -o aloh-linux ./cmd/app
+          set -e
+
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            gcc \
+            g++ \
+            make \
+            pkg-config \
+            cmake \
+            ninja-build \
+            git \
+            autoconf \
+            automake \
+            libtool \
+            \
+            libwayland-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxkbcommon-x11-dev \
+            libgles2-mesa-dev \
+            libegl1-mesa-dev \
+            libffi-dev \
+            libxcursor-dev \
+            libvulkan-dev \
+            \
+            libasound2-dev \
+            libpulse-dev \
+            \
+            libogg-dev \
+            libopus-dev \
+            libopusfile-dev \
+            libspeexdsp-dev \
+            \
+            libwebp-dev
+
+      - name: Build RNNoise
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p "$HOME/local_libs"
+
+          git clone --depth 1 \
+            https://github.com/xiph/rnnoise.git
+
+          cd rnnoise
+
+          ./autogen.sh
+
+          ./configure \
+            --prefix="$HOME/local_libs" \
+            --enable-shared \
+            --disable-static
+
+          make -j"$(nproc)"
+          make install
+
+      - name: Build Linux application
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          set -e
+
+          PREFIX="$HOME/local_libs"
+
+          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
+
+          export CGO_CFLAGS="\
+            -I$PREFIX/include \
+          "
+
+          export CGO_LDFLAGS="\
+            -L$PREFIX/lib \
+            -lrnnoise \
+            -lspeexdsp \
+            -lopusfile \
+            -lopus \
+            -logg \
+            -Wl,-rpath,'\$ORIGIN' \
+          "
+
+          pkg-config --modversion opus || true
+          pkg-config --modversion opusfile || true
+          pkg-config --modversion speexdsp || true
+          pkg-config --modversion libwebp || true
+
+          go build \
+            -v \
+            -trimpath \
+            -ldflags="-s -w -X main.version=${{ inputs.version }}" \
+            -o aloh-linux \
+            ./cmd/app
 
       - name: Package Linux
+        shell: bash
         run: |
-          mkdir -p dist-linux
-          cp aloh-linux dist-linux/
-          tar -czvf aloh-linux.tar.gz -C dist-linux .
+          set -e
 
-      - name: Upload Linux Artifact
+          mkdir -p dist-linux
+
+          cp aloh-linux dist-linux/
+
+          find "$HOME/local_libs/lib" \
+            -maxdepth 1 \
+            -type f \
+            -name "*.so*" \
+            -exec cp -d {} dist-linux/ \;
+
+          tar -czvf aloh-linux.tar.gz \
+            -C dist-linux .
+
+      - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: aloh-linux
@@ -49,6 +149,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,7 +157,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.26"
           cache: true
 
       - name: Install MSYS2
@@ -64,42 +165,128 @@ jobs:
         with:
           msystem: MINGW64
           update: true
+          path-type: inherit
           install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-libwebp
+            git
+            make
+            autoconf
+            automake
+            libtool
             pkgconf
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-libogg
+            mingw-w64-x86_64-opus
+            mingw-w64-x86_64-opusfile
+            mingw-w64-x86_64-speexdsp
 
-      - name: Build Windows
-        shell: bash
+      - name: Build RNNoise
+        shell: msys2 {0}
+        run: |
+          set -e
+
+          git clone --depth 1 \
+            https://github.com/xiph/rnnoise.git
+
+          cd rnnoise
+
+          ./autogen.sh
+
+          ./configure \
+            --prefix=/mingw64 \
+            --enable-shared \
+            --disable-static
+
+          make -j"$(nproc)"
+          make install
+
+      - name: Verify Windows libraries
+        shell: msys2 {0}
+        run: |
+          set -e
+
+          test -f /mingw64/include/opus/opus.h
+          test -f /mingw64/include/ogg/ogg.h
+          test -f /mingw64/include/speex/speex_preprocess.h
+
+          echo "Opus headers: OK"
+          echo "Ogg headers: OK"
+          echo "SpeexDSP headers: OK"
+
+
+          ls -lh /mingw64/lib/libopus*
+          ls -lh /mingw64/lib/libogg*
+          ls -lh /mingw64/lib/libspeex*
+          ls -lh /mingw64/lib/librnnoise*
+
+      - name: Build Windows application
+        shell: msys2 {0}
         env:
           CGO_ENABLED: "1"
           GOOS: windows
           GOARCH: amd64
         run: |
-          export PATH="/c/msys64/mingw64/bin:$PATH"
-          
-          go version
-          gcc --version
-          pkg-config --libs libwebp
+          set -e
 
-          # -ldflags="-H windowsgui" убирает консольное окно при запуске
-          go build -v -ldflags="-H windowsgui" -o aloh.exe ./cmd/app
+          export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
+
+          export CGO_CFLAGS="\
+            -I/mingw64/include \
+          "
+
+          export CGO_CXXFLAGS="\
+            -I/mingw64/include \
+          "
+
+          export CGO_LDFLAGS="\
+            -L/mingw64/lib \
+            -lrnnoise \
+            -lspeexdsp \
+            -lopusfile \
+            -lopus \
+            -logg \
+          "
+
+          pkg-config --modversion opus || true
+          pkg-config --modversion opusfile || true
+          pkg-config --modversion ogg || true
+          pkg-config --modversion speexdsp || true
+          pkg-config --modversion rnnoise || true
+
+          go build \
+            -v \
+            -trimpath \
+            -ldflags="-s -w -H=windowsgui -X main.version=${{ inputs.version }}" \
+            -o aloh.exe \
+            ./cmd/app
+
 
       - name: Package Windows
-        shell: bash
+        shell: msys2 {0}
         run: |
+          set -e
+
           mkdir -p dist-win
+
           cp aloh.exe dist-win/
-          
-          MSYS_BIN="/c/msys64/mingw64/bin"
-          cp $MSYS_BIN/libwebp-*.dll dist-win/ || true
-          cp $MSYS_BIN/libwinpthread-1.dll dist-win/ || true
-          cp $MSYS_BIN/libgcc_s_seh-1.dll dist-win/ || true
-          cp $MSYS_BIN/libstdc++-6.dll dist-win/ || true
 
-          tar -czvf aloh-windows.tar.gz -C dist-win .
+          cp /mingw64/bin/librnnoise*.dll dist-win/ || true
 
-      - name: Upload Windows Artifact
+          cp /mingw64/bin/libspeex*.dll dist-win/ || true
+
+          cp /mingw64/bin/libopus*.dll dist-win/ || true
+
+          cp /mingw64/bin/libogg*.dll dist-win/ || true
+
+          cp /mingw64/bin/libwinpthread-1.dll dist-win/ || true
+          cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/ || true
+          cp /mingw64/bin/libstdc++-6.dll dist-win/ || true
+
+
+          tar -czvf aloh-windows.tar.gz \
+            -C dist-win .
+
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: aloh-windows
