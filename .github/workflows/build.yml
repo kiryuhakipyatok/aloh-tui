@@ -215,6 +215,7 @@ jobs:
             automake
             libtool
             pkgconf
+            mingw-w64-x86_64-ntldd  <-- Add this line
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-libogg
@@ -223,6 +224,7 @@ jobs:
             mingw-w64-x86_64-speexdsp
             mingw-w64-x86_64-libwebp
 
+            
       - name: Build RNNoise
         shell: msys2 {0}
         run: |
