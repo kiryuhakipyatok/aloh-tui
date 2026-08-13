@@ -24,7 +24,6 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-
           sudo apt-get install -y \
             gcc g++ make pkg-config cmake git autoconf automake libtool pax-utils \
             libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev \
@@ -46,6 +45,9 @@ jobs:
         run: |
           PREFIX="$HOME/local_libs"
           export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$(pkg-config --variable=pc_path pkg-config)"
+
+          export CGO_CFLAGS="-I$PREFIX/include"
+          export CGO_LDFLAGS="-L$PREFIX/lib"
           
           go build \
             -v -trimpath \
@@ -57,6 +59,7 @@ jobs:
         run: |
           mkdir -p dist-linux
           cp aloh-linux dist-linux/
+          
           lddtree -l aloh-linux | grep '^/' | while read -r lib; do
             libname=$(basename "$lib")
             case "$libname" in
@@ -99,6 +102,7 @@ jobs:
             mingw-w64-x86_64-opusfile
             mingw-w64-x86_64-speexdsp
             mingw-w64-x86_64-libwebp
+            mingw-w64-x86_64-libsharpyuv
 
       - name: Build RNNoise (Static)
         shell: msys2 {0}
@@ -116,9 +120,10 @@ jobs:
           GOOS: windows
           GOARCH: amd64
         run: |
+
           go build \
             -v -trimpath \
-            -ldflags="-s -w -H=windowsgui -X main.version=${{ inputs.version }} -extldflags '-static'" \
+            -ldflags="-s -w -H=windowsgui -X main.version=${{ inputs.version }} -extldflags '-static -lsharpyuv -logg'" \
             -o aloh.exe \
             ./cmd/app
 
