@@ -9,10 +9,8 @@ on:
         default: "1.0.0"
 
 jobs:
-
   build-linux:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,173 +23,58 @@ jobs:
 
       - name: Install Linux dependencies
         run: |
-          set -e
-
           sudo apt-get update
-
           sudo apt-get install -y \
-            gcc \
-            g++ \
-            make \
-            pkg-config \
-            cmake \
-            ninja-build \
-            git \
-            autoconf \
-            automake \
-            libtool \
-            pax-utils \
-            \
-            libwayland-dev \
-            libx11-dev \
-            libx11-xcb-dev \
-            libxkbcommon-x11-dev \
-            libgles2-mesa-dev \
-            libegl1-mesa-dev \
-            libffi-dev \
-            libxcursor-dev \
-            libvulkan-dev \
-            \
-            libasound2-dev \
-            libpulse-dev \
-            \
-            libogg-dev \
-            libopus-dev \
-            libopusfile-dev \
-            libspeexdsp-dev \
-            \
-            libwebp-dev
+            gcc g++ make pkg-config cmake git autoconf automake libtool pax-utils \
+            libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev \
+            libasound2-dev libpulse-dev \
+            libogg-dev libopus-dev libspeexdsp-dev libwebp-dev
 
-      - name: Build RNNoise
-        shell: bash
+      - name: Build RNNoise (Shared)
         run: |
-          set -e
-
-          mkdir -p "$HOME/local_libs"
-
-          git clone --depth 1 \
-            https://github.com/xiph/rnnoise.git
-
+          git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise
-
           ./autogen.sh
-
-          ./configure \
-            --prefix="$HOME/local_libs" \
-            --enable-shared \
-            --disable-static
-
-          make -j"$(nproc)"
-          make install
+          ./configure --prefix=$HOME/local_libs --enable-shared --disable-static
+          make -j$(nproc) install
 
       - name: Build Linux application
-        shell: bash
         env:
           CGO_ENABLED: "1"
-          GOOS: linux
-          GOARCH: amd64
         run: |
-          set -e
-
           PREFIX="$HOME/local_libs"
-
-          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
-
-          export CGO_CFLAGS="-I$PREFIX/include"
-
-          export CGO_LDFLAGS="\
-            -L$PREFIX/lib \
-            -lrnnoise \
-            -lspeexdsp \
-            -lopusfile \
-            -lopus \
-            -logg \
-            -Wl,-rpath,'\$ORIGIN' \
-          "
-
+          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$(pkg-config --variable=pc_path pkg-config)"
+          
           go build \
-            -v \
-            -trimpath \
-            -ldflags="-s -w -X main.version=${{ inputs.version }}" \
+            -v -trimpath \
+            -ldflags="-s -w -X main.version=${{ inputs.version }} -linkmode external -extldflags '-Wl,-rpath,\$ORIGIN'" \
             -o aloh-linux \
             ./cmd/app
 
       - name: Package Linux
-        shell: bash
         run: |
-          set -e
-
-          rm -rf dist-linux
           mkdir -p dist-linux
-
           cp aloh-linux dist-linux/
-
-          find "$HOME/local_libs/lib" \
-            -maxdepth 1 \
-            -type f \
-            \( -name "*.so" -o -name "*.so.*" \) \
-            -exec cp -d {} dist-linux/ \;
-
-          lddtree -l aloh-linux \
-            | grep '^/' \
-            | while read -r lib; do
-                case "$lib" in
-                  /lib/x86_64-linux-gnu/libc.so.*)
-                    ;;
-                  /lib/x86_64-linux-gnu/libm.so.*)
-                    ;;
-                  /lib/x86_64-linux-gnu/libpthread.so.*)
-                    ;;
-                  /lib/x86_64-linux-gnu/libdl.so.*)
-                    ;;
-                  /lib/x86_64-linux-gnu/librt.so.*)
-                    ;;
-                  /lib64/ld-linux-x86-64.so.*)
-                    ;;
-                  /usr/lib/x86_64-linux-gnu/libc.so.*)
-                    ;;
-                  /usr/lib/x86_64-linux-gnu/libm.so.*)
-                    ;;
-                  /usr/lib/x86_64-linux-gnu/libpthread.so.*)
-                    ;;
-                  /usr/lib/x86_64-linux-gnu/libdl.so.*)
-                    ;;
-                  /usr/lib/x86_64-linux-gnu/librt.so.*)
-                    ;;
-                  /usr/lib/x86_64-linux-gnu/libnss_*.so*)
-                    ;;
-                  *)
-                    if [ -f "$lib" ]; then
-                      cp -L "$lib" dist-linux/
-                    fi
-                    ;;
-                esac
-              done
-
-          find dist-linux -type f -name "*.so" -o -name "*.so.*" \
-            | sort -u \
-            | while read -r lib; do
-                base="$(basename "$lib")"
-                target="dist-linux/$base"
-
-                if [ "$lib" != "$target" ] && [ -f "$lib" ]; then
-                  cp -L "$lib" "$target"
-                fi
-              done
-
-          tar -czvf aloh-linux.tar.gz \
-            -C dist-linux .
+          
+          lddtree -l aloh-linux | grep '^/' | while read -r lib; do
+            libname=$(basename "$lib")
+            case "$libname" in
+              libopus*|libogg*|librnnoise*|libspeexdsp*|libwebp*)
+                cp -L -v "$lib" dist-linux/
+                ;;
+            esac
+          done
+          cp -d $HOME/local_libs/lib/librnnoise.so* dist-linux/
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: aloh-linux
-          path: aloh-linux.tar.gz
-
+          path: dist-linux/
 
   build-windows:
     runs-on: windows-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -207,43 +90,22 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          path-type: inherit
           install: >-
-            git
-            make
-            autoconf
-            automake
-            libtool
-            pkgconf
-            mingw-w64-x86_64-ntldd
+            git make autoconf automake libtool pkgconf
             mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-libogg
             mingw-w64-x86_64-opus
-            mingw-w64-x86_64-opusfile
             mingw-w64-x86_64-speexdsp
             mingw-w64-x86_64-libwebp
 
-
-      - name: Build RNNoise
+      - name: Build RNNoise (Static)
         shell: msys2 {0}
         run: |
-          set -e
-
-          git clone --depth 1 \
-            https://github.com/xiph/rnnoise.git
-
+          git clone --depth 1 https://github.com/xiph/rnnoise.git
           cd rnnoise
-
           ./autogen.sh
-
-          ./configure \
-            --prefix=/mingw64 \
-            --enable-shared \
-            --disable-static
-
-          make -j"$(nproc)"
-          make install
+          ./configure --prefix=/mingw64 --enable-static --disable-shared
+          make -j$(nproc) install
 
       - name: Build Windows application
         shell: msys2 {0}
@@ -252,72 +114,14 @@ jobs:
           GOOS: windows
           GOARCH: amd64
         run: |
-          set -e
-
-          export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
-
-          export CGO_CFLAGS="-I/mingw64/include"
-
-          export CGO_CXXFLAGS="-I/mingw64/include"
-
-          export CGO_LDFLAGS="\
-            -L/mingw64/lib \
-            -lrnnoise \
-            -lspeexdsp \
-            -lopusfile \
-            -lopus \
-            -logg \
-          "
-
           go build \
-            -v \
-            -trimpath \
-            -ldflags="-s -w -H=windowsgui -X main.version=${{ inputs.version }}" \
+            -v -trimpath \
+            -ldflags="-s -w -H=windowsgui -X main.version=${{ inputs.version }} -extldflags '-static'" \
             -o aloh.exe \
             ./cmd/app
-
-      - name: Package Windows
-        shell: msys2 {0}
-        run: |
-          set -e
-
-          rm -rf dist-win
-          mkdir -p dist-win
-
-          cp aloh.exe dist-win/
-
-          ntldd aloh.exe \
-            | sed -n 's/.*=>[[:space:]]*\([^[:space:]]*\.dll\).*/\1/p' \
-            | sort -u \
-            | while read -r dll; do
-                if [ -f "$dll" ]; then
-                  cp "$dll" dist-win/
-                elif [ -f "/mingw64/bin/$dll" ]; then
-                  cp "/mingw64/bin/$dll" dist-win/
-                fi
-              done
-
-          find /mingw64/bin \
-            -maxdepth 1 \
-            -type f \
-            \( \
-              -name "librnnoise*.dll" \
-              -o -name "libopus*.dll" \
-              -o -name "libogg*.dll" \
-              -o -name "libspeex*.dll" \
-              -o -name "libwebp*.dll" \
-            \) \
-            -exec cp {} dist-win/ \;
-
-          cp /mingw64/bin/libwinpthread-1.dll dist-win/ || true
-          cp /mingw64/bin/libgcc_s_seh-1.dll dist-win/ || true
-          cp /mingw64/bin/libstdc++-6.dll dist-win/ || true
-
-          tar -czvf aloh-windows.tar.gz \
-            -C dist-win .
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: aloh-windows
-          path: aloh-windows.tar.gz
+          path: aloh.exe
