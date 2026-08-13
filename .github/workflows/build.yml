@@ -123,7 +123,7 @@ jobs:
 
           go build \
             -v -trimpath \
-            -ldflags="-s -w -H=windowsgui -X main.version=${{ inputs.version }} -extldflags '-static -lsharpyuv -logg'" \
+            -ldflags="-s -w -X main.version=${{ inputs.version }} -extldflags '-static -lsharpyuv -logg'" \
             -o aloh.exe \
             ./cmd/app
 
