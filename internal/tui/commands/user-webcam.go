@@ -7,13 +7,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type UserWebcam struct {
+type UserVideo struct {
 	Err error
 }
 
 func OnOffWebcamCmd(user *users.User) tea.Cmd {
 	return func() tea.Msg {
-		msg := UserWebcam{}
+		msg := UserVideo{}
 		ve := user.Engines.VideoEngine
 		if ve != nil {
 			res, err := ve.OnOffWebcam()
@@ -32,6 +32,33 @@ func OnOffWebcamCmd(user *users.User) tea.Cmd {
 					msg.Err = err
 				}
 			}
+		}
+
+		return msg
+	}
+}
+
+func OnOffScreenCmd(user *users.User) tea.Cmd {
+	return func() tea.Msg {
+		msg := UserVideo{}
+		ve := user.Engines.VideoEngine
+		if ve != nil {
+			_, err := ve.OnOffScreen()
+			if err != nil {
+				msg.Err = err
+				return msg
+			}
+			// netw := user.Networking
+			// if netw != nil {
+			// 	webcamEvent, err := networking.WebcamEvent(res)
+			// 	if err != nil {
+			// 		msg.Err = err
+			// 		return msg
+			// 	}
+			// 	if err := netw.NewEvent(webcamEvent); err != nil {
+			// 		msg.Err = err
+			// 	}
+			// }
 		}
 
 		return msg

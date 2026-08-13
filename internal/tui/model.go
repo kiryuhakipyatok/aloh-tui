@@ -62,7 +62,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		},
 
 		tabs: tabs{
-			defTabs:           []string{freindsTab, chatTab, voiceTab, webcamTab, profileTab, settingsTab},
+			defTabs:           []string{freindsTab, chatTab, voiceTab, webcamTab, screenTab, profileTab, settingsTab},
 			regTabs:           []string{regTab, logTab},
 			tabsNotifications: make(map[string]struct{}, 6),
 		},

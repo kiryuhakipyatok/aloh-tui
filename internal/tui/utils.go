@@ -335,7 +335,7 @@ func (m Model) onUsersWebcam(msg tea.MouseMsg) (users.Identity, bool) {
 		return userIden, true
 	}
 
-	userFrames := m.user.Engines.VideoEngine.GetUsersFramesTerminal()
+	userFrames := m.user.Engines.VideoEngine.GetUsersWebcamFramesTerminal()
 
 	for i := range userFrames {
 

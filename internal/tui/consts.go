@@ -5,6 +5,7 @@ const (
 	chatTab     = "chat"
 	voiceTab    = "voice"
 	webcamTab   = "webcam"
+	screenTab   = "screen"
 	profileTab  = "profile"
 	settingsTab = "settings"
 

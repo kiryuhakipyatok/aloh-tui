@@ -149,8 +149,10 @@ func (m Model) View() string {
 			case 3:
 				mark = "webcamT"
 			case 4:
-				mark = "profileT"
+				mark = "screenT"
 			case 5:
+				mark = "profileT"
+			case 6:
 				mark = "settingsT"
 			}
 		}
@@ -187,8 +189,10 @@ func (m Model) View() string {
 			case 3:
 				uiContent = m.renderWebcamTab(windowInnerW, windowInnerH)
 			case 4:
-				uiContent = m.renderProfileView(windowInnerW, windowInnerH, styles.CText)
+				uiContent = m.rendeScreenTab(windowInnerW, windowInnerH)
 			case 5:
+				uiContent = m.renderProfileView(windowInnerW, windowInnerH, styles.CText)
+			case 6:
 				uiContent = m.renderSettingsView(windowInnerW, windowInnerH)
 			}
 		}
@@ -338,7 +342,7 @@ func (m Model) renderWebcamTab(w, h int) string {
 			textStyle,
 		)
 	} else {
-		usersFrames := m.user.Engines.VideoEngine.GetUsersFramesTerminal()
+		usersFrames := m.user.Engines.VideoEngine.GetUsersWebcamFramesTerminal()
 
 		userStarted := m.user.Engines.VideoEngine.IsStarted()
 
@@ -357,7 +361,7 @@ func (m Model) renderWebcamTab(w, h int) string {
 		if lUFrames > 0 && userStarted {
 			frames := make([]string, 0, lenFrames)
 			var zoneId string
-			uf := m.user.Engines.VideoEngine.GetUserFrame()
+			uf := m.user.Engines.VideoEngine.GetUserWebcamFrame()
 			iden := m.user.GetUserIdentity()
 			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
 
@@ -421,7 +425,7 @@ func (m Model) renderWebcamTab(w, h int) string {
 			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
 
 		} else if userStarted && lUFrames <= 0 {
-			uf := m.user.Engines.VideoEngine.GetUserFrame()
+			uf := m.user.Engines.VideoEngine.GetUserWebcamFrame()
 			iden := m.user.GetUserIdentity()
 			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
 			zoneId := fmt.Sprintf("webcam-%s", iden.ID)
@@ -447,6 +451,12 @@ func (m Model) renderWebcamTab(w, h int) string {
 	}
 
 	return m.zone.Mark("webcamW", lipgloss.JoinVertical(lipgloss.Top, lbl, content))
+}
+
+func (m Model) rendeScreenTab(w, h int) string {
+	lbl := m.headerActiveStyle.Render("► active screen demonstrations")
+	content := "in the future"
+	return m.zone.Mark("screenW", lipgloss.JoinVertical(lipgloss.Top, lbl, content))
 }
 
 func (m Model) renderFriendsTab(w, h int) string {
