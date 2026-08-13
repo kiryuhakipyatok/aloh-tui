@@ -207,7 +207,6 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 		}
 
 	}
-	m.log.Info("4", m.state)
 	//m.focusInputs()
 	return m, tea.Batch(cmds...)
 }
@@ -232,10 +231,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = states.LOAD_STATE
 					m.curWindow = windows.DEF_WINDOW
 					if m.user.Data.Identity.ID != uuid.Nil && m.user.Networking == nil {
-						m.log.Info("1")
 						cmds = append(cmds, commands.AuthCmd(m.user, m.sshEventsChan, m.log))
 					} else {
-						m.log.Info("2")
 						m, cmd = m.syncTabState()
 					}
 					return m, cmd
