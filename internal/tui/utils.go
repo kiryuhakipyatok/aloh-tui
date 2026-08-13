@@ -329,22 +329,18 @@ func (m Model) onUsersWebcam(msg tea.MouseMsg) (users.Identity, bool) {
 		zoneId string
 	)
 
-	userFrames := m.user.Engines.VideoEngine.GetUsersFramesTerminal()
+	userIden := m.user.GetUserIdentity()
+	zoneId = fmt.Sprintf("webcam-%s", userIden.ID.String())
+	if m.zone.Get(zoneId).InBounds(msg) {
+		return userIden, true
+	}
 
-	// for i, us := range m.usersStates {
-	// 	if us.webcam {
-	// 		zoneId = fmt.Sprintf("webcam-%s", i.String())
-	// 		m.log.Info(zoneId)
-	// 		if m.zone.Get(zoneId).InBounds(msg) {
-	// 			id = i
-	// 		}
-	// 	}
-	// }
+	userFrames := m.user.Engines.VideoEngine.GetUsersFramesTerminal()
 
 	for i := range userFrames {
 
 		zoneId = fmt.Sprintf("webcam-%s", i.String())
-		m.log.Info(zoneId)
+
 		if m.zone.Get(zoneId).InBounds(msg) {
 			id = i
 		}

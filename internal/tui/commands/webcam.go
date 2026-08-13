@@ -21,3 +21,14 @@ func OnOffWindowWebcamCmd(ve video.VideoEngine, iden users.Identity) tea.Cmd {
 		return msg
 	}
 }
+
+func OnOffUserWindowWebcamCmd(ve video.VideoEngine) tea.Cmd {
+	return func() tea.Msg {
+		msg := OnOffWindowWebcamMsg{}
+		_, err := ve.OnOffWindow()
+		if err != nil {
+			msg.Err = err
+		}
+		return msg
+	}
+}

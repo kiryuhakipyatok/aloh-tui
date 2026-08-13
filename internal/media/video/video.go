@@ -5,6 +5,7 @@ import (
 	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
 	"bytes"
+	"fmt"
 	"image"
 	"os"
 	"sync"
@@ -37,6 +38,7 @@ type VideoEngine interface {
 	OnOffUsersWindow(id uuid.UUID, nickname string) (bool, error)
 	GetUsersFramesTerminal() map[uuid.UUID]string
 	RemoveUserFromUsersVideo(id uuid.UUID)
+	OnOffWindow() (bool, error)
 	OnOffWebcam() (bool, error)
 	GetUserFrame() string
 	IsStarted() bool
@@ -62,7 +64,7 @@ type videoEngine struct {
 
 	usersVideo map[uuid.UUID]*userVideo
 
-	userFrame atomic.Value
+	userVideo *userVideo
 
 	mu sync.RWMutex
 
@@ -73,7 +75,7 @@ type VideoSetup struct {
 }
 
 type userVideo struct {
-	frame    string
+	frame    atomic.Value
 	img      image.Image
 	mu       sync.RWMutex
 	window   *app.Window
@@ -90,6 +92,7 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		stopSendVideoChan:     make(chan struct{}, 1),
 		stopProcessWebcamChan: make(chan struct{}, 1),
 		usersVideo:            make(map[uuid.UUID]*userVideo, 3),
+		userVideo:             &userVideo{},
 		bytesBuffersPool: sync.Pool{
 			New: func() any {
 				buf := make([]byte, 1350)
@@ -119,16 +122,40 @@ func (ve *videoEngine) IsStarted() bool {
 }
 
 func (ve *videoEngine) GetUserFrame() string {
-	f, ok := ve.userFrame.Load().(string)
+	f, ok := ve.userVideo.frame.Load().(string)
 	if !ok {
 		return ""
 	}
 	return f
 }
 
+func (ve *videoEngine) OnOffWindow() (bool, error) {
+	ve.mu.Lock()
+	defer ve.mu.Unlock()
+
+	if !ve.userVideo.windowed.Load() {
+		window := new(app.Window)
+		window.Option(app.Title("your webcam"))
+		ve.userVideo.mu.Lock()
+		ve.userVideo.window = window
+		ve.userVideo.windowed.Store(true)
+		ve.userVideo.mu.Unlock()
+		go ve.userVideo.proccessUsersWindowWebcam()
+		return true, nil
+	}
+	ve.userVideo.mu.Lock()
+	if ve.userVideo.window != nil {
+		ve.userVideo.window.Perform(system.ActionClose)
+	}
+	ve.userVideo.mu.Unlock()
+	ve.userVideo.img = nil
+	return false, nil
+}
+
 func (ve *videoEngine) OnOffUsersWindow(id uuid.UUID, nickname string) (bool, error) {
 	ve.mu.Lock()
 	defer ve.mu.Unlock()
+
 	uv, ok := ve.usersVideo[id]
 	if !ok {
 		return false, errs.ErrNotFound()
@@ -136,7 +163,7 @@ func (ve *videoEngine) OnOffUsersWindow(id uuid.UUID, nickname string) (bool, er
 
 	if !uv.windowed.Load() {
 		window := new(app.Window)
-		window.Option(app.Title(nickname))
+		window.Option(app.Title(fmt.Sprintf("%s's webcam", nickname)))
 		uv.mu.Lock()
 		uv.window = window
 		uv.windowed.Store(true)
@@ -161,7 +188,7 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 
 		stream, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
 			Video: func(mtc *mediadevices.MediaTrackConstraints) {
-				mtc.Width = prop.Int(320)
+				mtc.Width = prop.Int(360)
 				mtc.Height = prop.Int(160)
 			},
 		})
@@ -185,6 +212,11 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 		<-waitChan
 
 	} else {
+		ve.userVideo.mu.Lock()
+		if ve.userVideo.windowed.Load() && ve.userVideo.window != nil {
+			ve.userVideo.window.Perform(system.ActionClose)
+		}
+		ve.userVideo.mu.Unlock()
 		close(ve.stopProcessWebcamChan)
 		ve.stopProcessWebcamChan = nil
 		if ve.webcamTrack != nil {
@@ -197,7 +229,7 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 
 	}
 
-	ve.userFrame.Store("")
+	ve.userVideo.frame.Store("")
 	ve.started.Store(!s)
 	return !s, nil
 }
@@ -205,8 +237,15 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 func (ve *videoEngine) SetDisconnected() {
 	ve.connected.Store(false)
 	ve.started.Store(false)
-	ve.userFrame.Store("")
+	ve.userVideo.frame.Store("")
 	ve.mu.Lock()
+
+	ve.userVideo.mu.Lock()
+	if ve.userVideo.windowed.Load() && ve.userVideo.window != nil {
+		ve.userVideo.window.Perform(system.ActionClose)
+	}
+	ve.userVideo.mu.Unlock()
+
 	for _, uv := range ve.usersVideo {
 		uv.mu.Lock()
 		if uv.window != nil {
@@ -287,8 +326,15 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 					ve.log.Error("failed to render img", logger.Err(err))
 					f = o
 				}
+
 				closeWaitChan()
-				ve.userFrame.Store(f)
+				ve.userVideo.frame.Store(f)
+				ve.userVideo.mu.Lock()
+				if ve.userVideo.windowed.Load() && ve.userVideo.window != nil {
+					ve.userVideo.img = frame
+					ve.userVideo.window.Invalidate()
+				}
+				ve.userVideo.mu.Unlock()
 			default:
 				ve.bytesBuffersPool.Put(buffer[:1350])
 			}
@@ -299,6 +345,7 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 
 func (uv *userVideo) proccessUsersWindowWebcam() {
 	var ops op.Ops
+
 	for {
 		w := uv.window
 		switch e := w.Event().(type) {
@@ -362,7 +409,7 @@ func (ve *videoEngine) RenderUsersWebcam(id uuid.UUID, data []byte) {
 	}
 	ve.mu.Lock()
 	defer ve.mu.Unlock()
-	uv.frame = frame
+	uv.frame.Store(frame)
 
 	uv.mu.Lock()
 	if uv.windowed.Load() && uv.window != nil {
@@ -379,7 +426,7 @@ func (ve *videoEngine) RemoveUserFromUsersVideo(id uuid.UUID) {
 	uv, ok := ve.usersVideo[id]
 	if ok {
 		uv.mu.Lock()
-		if uv.window != nil {
+		if uv.windowed.Load() && uv.window != nil {
 			uv.window.Perform(system.ActionClose)
 		}
 		uv.mu.Unlock()
@@ -392,7 +439,7 @@ func (ve *videoEngine) GetUsersFramesTerminal() map[uuid.UUID]string {
 	defer ve.mu.RUnlock()
 	frames := make(map[uuid.UUID]string, len(ve.usersVideo))
 	for i, uv := range ve.usersVideo {
-		frames[i] = uv.frame
+		frames[i] = uv.frame.Load().(string)
 	}
 
 	return frames
@@ -411,7 +458,7 @@ func renderTerminalImg(n int, img image.Image) (string, error) {
 		termW, termH = 80, 24
 	}
 
-	imageWidget.SetSizeWithCorrection(int(float64(termW)/(float64(n)*1.25)), int(float64(termH)/(float64(n)*1.25)))
+	imageWidget.SetSizeWithCorrection(int(float64(termW)/(float64(n)*1.15)), int(float64(termH)/(float64(n))))
 	textMsg, err := imageWidget.Render()
 	if err != nil {
 		return "", err
@@ -433,7 +480,7 @@ func renderLocalImg(n int, img image.Image) (string, error) {
 		termW, termH = 80, 24
 	}
 
-	imageWidget.SetSizeWithCorrection(int(float64(termW)/(float64(n)*1.25)), int(float64(termH)/(float64(n)*1.25)))
+	imageWidget.SetSizeWithCorrection(int(float64(termW)/(float64(n)*1.15)), int(float64(termH)/(float64(n))))
 
 	textMsg, err := imageWidget.Render()
 	if err != nil {

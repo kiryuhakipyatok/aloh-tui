@@ -101,6 +101,9 @@ func (m Model) View() string {
 		if _, ok := m.tabsNotifications[t]; ok && m.user.GetAppNotificationsState() {
 			t += fmt.Sprintf(" %s", m.user.GetNotificationTag())
 		}
+		if m.user.Engines.VideoEngine.IsStarted() && t == webcamTab {
+			t = "🔴 " + t
+		}
 		isFirst, isLast, isActive := i == 0, i == len(tabs)-1, i == m.activeTab
 		style := inactiveTabStyle
 		if isActive {
@@ -349,14 +352,19 @@ func (m Model) renderWebcamTab(w, h int) string {
 			lenFrames += lUFrames/2 + 3
 		}
 
+		gap := "    "
+
 		if lUFrames > 0 && userStarted {
 			frames := make([]string, 0, lenFrames)
-
+			var zoneId string
 			uf := m.user.Engines.VideoEngine.GetUserFrame()
 			iden := m.user.GetUserIdentity()
 			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+
 			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf)
-			frames = append(frames, ufStr, "   ")
+			zoneId = fmt.Sprintf("webcam-%s", iden.ID)
+			userFrame := m.zone.Mark(zoneId, ufStr)
+			frames = append(frames, userFrame, gap)
 
 			for i, c := range m.connections {
 				f, ok := usersFrames[c.ID]
@@ -364,11 +372,11 @@ func (m Model) renderWebcamTab(w, h int) string {
 
 					usersColor := m.usersColors[c.ID]
 					coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
-					zoneId := fmt.Sprintf("webcam-%s", c.ID.String())
+					zoneId = fmt.Sprintf("webcam-%s", c.ID.String())
 					frame := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredNick, f))
 					frames = append(frames, frame)
 					if i != len(m.connections)-1 {
-						frames = append(frames, "   ")
+						frames = append(frames, gap)
 					}
 
 				}
@@ -389,7 +397,7 @@ func (m Model) renderWebcamTab(w, h int) string {
 				coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
 				ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, "", loadWebcam)
 				//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
-				frames = append(frames, ufStr, "   ")
+				frames = append(frames, ufStr, gap)
 
 			}
 
@@ -403,7 +411,7 @@ func (m Model) renderWebcamTab(w, h int) string {
 					frame := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredNick, f))
 					frames = append(frames, frame)
 					if i != len(m.connections)-1 {
-						frames = append(frames, "   ")
+						frames = append(frames, gap)
 					}
 
 				}
@@ -412,11 +420,12 @@ func (m Model) renderWebcamTab(w, h int) string {
 			joinedFrames := renderWebcamsFrames(frames)
 			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
 
-		} else if userStarted && lUFrames == 0 {
+		} else if userStarted && lUFrames <= 0 {
 			uf := m.user.Engines.VideoEngine.GetUserFrame()
 			iden := m.user.GetUserIdentity()
 			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
-			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf)
+			zoneId := fmt.Sprintf("webcam-%s", iden.ID)
+			ufStr := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf))
 			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, ufStr)
 		} else if !userStarted && m.state == states.LOAD_STATE && m.prState == states.WEBCAM_STATE {
 			loadWebcam := styles.CGrayStyle.Render(m.spinner.View(), "loading webcam...")
@@ -1217,6 +1226,9 @@ func (m Model) renderHelpView(w, h int) string {
 		renderShortcut("ALT+UP/DN", "- increase / decrease user's volume"), "",
 		styles.PaddingLeftCGrayStyle.Render("chat controls:"),
 		renderShortcut("CTRL+P", "- paste smth"), "",
+		styles.PaddingLeftCGrayStyle.Render("webcam controls:"),
+		renderShortcut("ENTER", "- toggle webcam"), "",
+		renderShortcut("LMB ON WEBCAM", "- toggle webcam window"), "",
 		styles.PaddingLeftCGrayStyle.Render("friends contols:"),
 		renderShortcut("ALT+X", "- deny friendship request"),
 		renderShortcut("ENTER", "- accept friendship request"),
