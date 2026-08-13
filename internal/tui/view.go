@@ -101,7 +101,7 @@ func (m Model) View() string {
 		if _, ok := m.tabsNotifications[t]; ok && m.user.GetAppNotificationsState() {
 			t += fmt.Sprintf(" %s", m.user.GetNotificationTag())
 		}
-		if m.user.Engines.VideoEngine.IsStarted() && t == webcamTab {
+		if m.user.Engines.VideoEngine != nil && m.user.Engines.VideoEngine.IsStarted() && t == webcamTab {
 			t = "🔴 " + t
 		}
 		isFirst, isLast, isActive := i == 0, i == len(tabs)-1, i == m.activeTab
