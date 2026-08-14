@@ -17,11 +17,11 @@ import (
 )
 
 type CallbacksSetup struct {
-	User             *users.User
-	RawMsgChan       chan commands.RawChatMessage
-	PeerConnChan     chan commands.PeerConnectedMsg
-	PeerDisconnChan  chan commands.PeerDisconnectedMsg
-	NetwEventChan    chan commands.NetworkEventMsg
+	User            *users.User
+	RawMsgChan      chan commands.RawChatMessage
+	PeerConnChan    chan commands.PeerConnectedMsg
+	PeerDisconnChan chan commands.PeerDisconnectedMsg
+	NetwEventChan   chan commands.NetworkEventMsg
 }
 
 func SetupCallbacks(cs CallbacksSetup) {
@@ -38,6 +38,13 @@ func SetupCallbacks(cs CallbacksSetup) {
 		// default:
 		// }
 		cs.User.Engines.VideoEngine.RenderUsersWebcam(id, data)
+	})
+	cs.User.Networking.ScreenCallback(func(id uuid.UUID, data []byte) {
+		// select {
+		// case cs.RawWebcamMsgChan <- commands.RawWebcamMsg{Id: id, Data: data}:
+		// default:
+		// }
+		cs.User.Engines.VideoEngine.RenderUsersScreen(id, data)
 	})
 	cs.User.Networking.PeerConnectedCallback(func(id uuid.UUID) {
 		t := time.Now().Format("15:04:05")

@@ -9,7 +9,8 @@ const (
 	MIC_MUTE     = alohnetwork.MIC_MUTE
 	HARD_DENOISE = alohnetwork.HARD_DENOISE
 	SOFT_DENOISE = alohnetwork.SOFT_DENOISE
-	WEBCAM       = alohnetwork.WEBCAM_STATE
+	WEBCAM_STATE = alohnetwork.WEBCAM_STATE
+	SCREEN_STATE = alohnetwork.SCREEN_STATE
 	GENERAL      = alohnetwork.GENERAL
 )
 
@@ -31,6 +32,10 @@ func SoftDenoiseEvent(state bool) (alohnetwork.Event, error) {
 
 func WebcamEvent(state bool) (alohnetwork.Event, error) {
 	return alohnetwork.WebcamEvent(state)
+}
+
+func ScreenEvent(state bool) (alohnetwork.Event, error) {
+	return alohnetwork.ScreenEvent(state)
 }
 
 func GeneralEvent(fm, mm, hd, sd bool) (alohnetwork.Event, error) {

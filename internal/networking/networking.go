@@ -12,6 +12,7 @@ type Networking interface {
 
 	ChatCallback(cb func(id uuid.UUID, data []byte))
 	WebcamCallback(cb func(id uuid.UUID, data []byte))
+	ScreenCallback(cb func(id uuid.UUID, data []byte))
 	VoiceCallback(cb func(id uuid.UUID, data []byte))
 	PeerConnectedCallback(cb func(id uuid.UUID))
 	PeerDisconnectedCallback(cb func(id uuid.UUID))
@@ -20,6 +21,8 @@ type Networking interface {
 	SendMessageInChat(msg []byte) error
 	SendVoiceData(data []byte) error
 	SendWebcamData(data []byte) error
+	SendScreenData(data []byte) error
+
 
 	NewEvent(e alohnetwork.Event) error
 
@@ -86,6 +89,10 @@ func (n *networking) WebcamCallback(cb func(id uuid.UUID, data []byte)) {
 	n.RegisterOnWebcam(cb)
 }
 
+func (n *networking) ScreenCallback(cb func(id uuid.UUID, data []byte)) {
+	n.RegisterOnScreen(cb)
+}
+
 func (n *networking) VoiceCallback(cb func(id uuid.UUID, data []byte)) {
 	n.RegisterOnVoice(cb)
 }
@@ -125,6 +132,13 @@ func (n *networking) SendVoiceData(data []byte) error {
 
 func (n *networking) SendWebcamData(data []byte) error {
 	if err := n.SendWebcam(data); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *networking) SendScreenData(data []byte) error {
+	if err := n.SendScreen(data); err != nil {
 		return err
 	}
 	return nil

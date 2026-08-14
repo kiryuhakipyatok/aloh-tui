@@ -21,6 +21,7 @@ type userState struct {
 	hardDenoised bool
 	softDenoised bool
 	webcam       bool
+	screen       bool
 }
 
 type sizes struct {
@@ -133,7 +134,7 @@ type other struct {
 	zone *bz.Manager
 
 	//webcamUsersFrames map[uuid.UUID]userVideoFrame
-	userWebcamFrame   string
+	userWebcamFrame string
 }
 
 type datas struct {

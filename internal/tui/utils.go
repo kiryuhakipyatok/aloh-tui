@@ -335,7 +335,7 @@ func (m Model) onUsersWebcam(msg tea.MouseMsg) (users.Identity, bool) {
 		return userIden, true
 	}
 
-	userFrames := m.user.Engines.VideoEngine.GetUsersFramesTerminal()
+	userFrames := m.user.Engines.VideoEngine.GetUsersWebcamFramesTerminal()
 
 	for i := range userFrames {
 
@@ -355,14 +355,44 @@ func (m Model) onUsersWebcam(msg tea.MouseMsg) (users.Identity, bool) {
 	return iden, true
 }
 
-func (m Model) renderWebcamsFrames(frames []string) string {
+func (m Model) onUsersScreen(msg tea.MouseMsg) (users.Identity, bool) {
+	var (
+		id     uuid.UUID
+		zoneId string
+	)
+
+	userIden := m.user.GetUserIdentity()
+	zoneId = fmt.Sprintf("screen-%s", userIden.ID.String())
+	if m.zone.Get(zoneId).InBounds(msg) {
+		return userIden, true
+	}
+
+	userFrames := m.user.Engines.VideoEngine.GetUsersScreenFramesTerminal()
+
+	for i := range userFrames {
+
+		zoneId = fmt.Sprintf("screen-%s", i.String())
+
+		if m.zone.Get(zoneId).InBounds(msg) {
+			id = i
+		}
+
+	}
+
+	iden, err := m.user.GetFriendIdentityById(id)
+	if err != nil {
+		return iden, false
+	}
+
+	return iden, true
+}
+
+func (m Model) renderVideoFrames(frames []string) string {
 	lenF := len(frames)
-	m.log.Info("lenF", lenF)
+
 	if lenF <= 0 {
 		return ""
 	}
-
-	m.log.Info("frames", lenF)
 
 	div := lenF / 2
 
@@ -387,15 +417,6 @@ func (m Model) renderWebcamsFrames(frames []string) string {
 
 		}
 	}
-
-	// if lenF > 2 {
-	// 	upFrames = frames[:lenF/2]
-	// 	downFrames = frames[len(upFrames):]
-	// } else {
-	// 	upFrames = frames
-	// }
-	m.log.Info("up frames", len(upFrames))
-	m.log.Info("down frames", len(downFrames))
 
 	upJoined := lipgloss.JoinHorizontal(lipgloss.Center, upFrames...)
 	downJoined := lipgloss.JoinHorizontal(lipgloss.Center, downFrames...)

@@ -101,7 +101,10 @@ func (m Model) View() string {
 		if _, ok := m.tabsNotifications[t]; ok && m.user.GetAppNotificationsState() {
 			t += fmt.Sprintf(" %s", m.user.GetNotificationTag())
 		}
-		if m.user.Engines.VideoEngine != nil && m.user.Engines.VideoEngine.IsStarted() && t == webcamTab {
+		if m.user.Engines.VideoEngine != nil && m.user.Engines.VideoEngine.IsWebcamStarted() && t == webcamTab {
+			t = "🔴 " + t
+		}
+		if m.user.Engines.VideoEngine != nil && m.user.Engines.VideoEngine.IsScreenStarted() && t == screenTab {
 			t = "🔴 " + t
 		}
 		isFirst, isLast, isActive := i == 0, i == len(tabs)-1, i == m.activeTab
@@ -149,8 +152,10 @@ func (m Model) View() string {
 			case 3:
 				mark = "webcamT"
 			case 4:
-				mark = "profileT"
+				mark = "screenT"
 			case 5:
+				mark = "profileT"
+			case 6:
 				mark = "settingsT"
 			}
 		}
@@ -187,8 +192,10 @@ func (m Model) View() string {
 			case 3:
 				uiContent = m.renderWebcamTab(windowInnerW, windowInnerH)
 			case 4:
-				uiContent = m.renderProfileView(windowInnerW, windowInnerH, styles.CText)
+				uiContent = m.rendeScreenTab(windowInnerW, windowInnerH)
 			case 5:
+				uiContent = m.renderProfileView(windowInnerW, windowInnerH, styles.CText)
+			case 6:
 				uiContent = m.renderSettingsView(windowInnerW, windowInnerH)
 			}
 		}
@@ -338,9 +345,9 @@ func (m Model) renderWebcamTab(w, h int) string {
 			textStyle,
 		)
 	} else {
-		usersFrames := m.user.Engines.VideoEngine.GetUsersFramesTerminal()
+		usersFrames := m.user.Engines.VideoEngine.GetUsersWebcamFramesTerminal()
 
-		userStarted := m.user.Engines.VideoEngine.IsStarted()
+		userStarted := m.user.Engines.VideoEngine.IsWebcamStarted()
 
 		lUFrames := len(usersFrames)
 
@@ -357,7 +364,7 @@ func (m Model) renderWebcamTab(w, h int) string {
 		if lUFrames > 0 && userStarted {
 			frames := make([]string, 0, lenFrames)
 			var zoneId string
-			uf := m.user.Engines.VideoEngine.GetUserFrame()
+			uf := m.user.Engines.VideoEngine.GetUserWebcamFrame()
 			iden := m.user.GetUserIdentity()
 			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
 
@@ -384,7 +391,7 @@ func (m Model) renderWebcamTab(w, h int) string {
 
 			//framesStr := strings.Join(frames, "    ")
 
-			joinedFrames := m.renderWebcamsFrames(frames)
+			joinedFrames := m.renderVideoFrames(frames)
 			//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
 			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
 
@@ -417,11 +424,11 @@ func (m Model) renderWebcamTab(w, h int) string {
 				}
 			}
 
-			joinedFrames := m.renderWebcamsFrames(frames)
+			joinedFrames := m.renderVideoFrames(frames)
 			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
 
 		} else if userStarted && lUFrames <= 0 {
-			uf := m.user.Engines.VideoEngine.GetUserFrame()
+			uf := m.user.Engines.VideoEngine.GetUserWebcamFrame()
 			iden := m.user.GetUserIdentity()
 			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
 			zoneId := fmt.Sprintf("webcam-%s", iden.ID)
@@ -447,6 +454,132 @@ func (m Model) renderWebcamTab(w, h int) string {
 	}
 
 	return m.zone.Mark("webcamW", lipgloss.JoinVertical(lipgloss.Top, lbl, content))
+}
+
+func (m Model) rendeScreenTab(w, h int) string {
+	lbl := m.headerActiveStyle.Render("► active screen demonstrations")
+	var content string
+	if !m.connected {
+
+		textStyle := styles.CGrayBold.Render(titles.ALONE1)
+
+		content = lipgloss.Place(
+			w,
+			h-2,
+			lipgloss.Center,
+			lipgloss.Center,
+			textStyle,
+		)
+	} else {
+		usersFrames := m.user.Engines.VideoEngine.GetUsersScreenFramesTerminal()
+
+		userStarted := m.user.Engines.VideoEngine.IsScreenStarted()
+
+		lUFrames := len(usersFrames)
+
+		lenFrames := lUFrames
+
+		if lUFrames%2 == 0 {
+			lenFrames += lUFrames/2 + 2
+		} else {
+			lenFrames += lUFrames/2 + 3
+		}
+
+		gap := "    "
+
+		if lUFrames > 0 && userStarted {
+			frames := make([]string, 0, lenFrames)
+			var zoneId string
+			uf := m.user.Engines.VideoEngine.GetUserScreenFrame()
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+
+			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf)
+			zoneId = fmt.Sprintf("screen-%s", iden.ID)
+			userFrame := m.zone.Mark(zoneId, ufStr)
+			frames = append(frames, userFrame, gap)
+
+			for i, c := range m.connections {
+				f, ok := usersFrames[c.ID]
+				if ok && f != "" {
+
+					usersColor := m.usersColors[c.ID]
+					coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
+					zoneId = fmt.Sprintf("screen-%s", c.ID.String())
+					frame := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredNick, f))
+					frames = append(frames, frame)
+					if i != len(m.connections)-1 {
+						frames = append(frames, gap)
+					}
+
+				}
+			}
+
+			//framesStr := strings.Join(frames, "    ")
+
+			joinedFrames := m.renderVideoFrames(frames)
+			//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
+
+		} else if lUFrames > 0 && !userStarted {
+			frames := make([]string, 0, lenFrames)
+
+			if m.state == states.LOAD_STATE && m.prState == states.SCREEN_STATE {
+				loadScreen := styles.CGrayStyle.Render(m.spinner.View(), "loading screen...")
+				iden := m.user.GetUserIdentity()
+				coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+				ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, "", loadScreen)
+				//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
+				frames = append(frames, ufStr, gap)
+
+			}
+
+			for i, c := range m.connections {
+				f, ok := usersFrames[c.ID]
+				if ok && f != "" {
+
+					usersColor := m.usersColors[c.ID]
+					coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
+					zoneId := fmt.Sprintf("screen-%s", c.ID.String())
+					frame := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredNick, f))
+					frames = append(frames, frame)
+					if i != len(m.connections)-1 {
+						frames = append(frames, gap)
+					}
+
+				}
+			}
+
+			joinedFrames := m.renderVideoFrames(frames)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
+
+		} else if userStarted && lUFrames <= 0 {
+			uf := m.user.Engines.VideoEngine.GetUserScreenFrame()
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+			zoneId := fmt.Sprintf("screen-%s", iden.ID)
+			ufStr := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf))
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, ufStr)
+		} else if !userStarted && m.state == states.LOAD_STATE && m.prState == states.SCREEN_STATE {
+			loadScreen := styles.CGrayStyle.Render(m.spinner.View(), "loading screen...")
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, "", loadScreen)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, ufStr)
+		} else {
+			textStyle := styles.CGrayBold.Render(titles.NO_WEBCAMS)
+
+			content = lipgloss.Place(
+				w,
+				h-2,
+				lipgloss.Center,
+				lipgloss.Center,
+				textStyle,
+			)
+		}
+	}
+
+	return m.zone.Mark("screenW", lipgloss.JoinVertical(lipgloss.Top, lbl, content))
 }
 
 func (m Model) renderFriendsTab(w, h int) string {
