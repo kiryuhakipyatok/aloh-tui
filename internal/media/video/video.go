@@ -75,7 +75,7 @@ type videoEngine struct {
 	waitProcessScreenChan chan struct{}
 
 	webcamBytesBuffersPool sync.Pool
-	screenBytesBuffersPool sync.Pool
+	//	screenBytesBuffersPool sync.Pool
 
 	connected atomic.Bool
 
@@ -124,12 +124,12 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 				return buf
 			},
 		},
-		screenBytesBuffersPool: sync.Pool{
-			New: func() any {
-				buf := make([]byte, 4500)
-				return buf
-			},
-		},
+		// screenBytesBuffersPool: sync.Pool{
+		// 	New: func() any {
+		// 		buf := make([]byte, 4500)
+		// 		return buf
+		// 	},
+		// },
 	}
 
 	go ve.sendWebcam()
@@ -642,10 +642,12 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 
 				buf := ve.screenBuffer.Bytes()
 
-				buffer := ve.screenBytesBuffersPool.Get().([]byte)
-				copy(buffer, buf)
-
 				n := len(buf)
+
+				buffer := make([]byte, n)
+
+				//buffer := ve.screenBytesBuffersPool.Get().([]byte)
+				copy(buffer, buf)
 
 				select {
 				case ve.screenFrameChan <- buffer[:n]:
@@ -670,7 +672,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 					}
 					ve.userVideo.mu.Unlock()
 				default:
-					ve.screenBytesBuffersPool.Put(buffer[:4500])
+					//ve.screenBytesBuffersPool.Put(buffer[:4500])
 				}
 			}
 			proccessFrame()
@@ -1006,7 +1008,7 @@ func (ve *videoEngine) sendScreen() {
 					ve.log.Error("failed to send screen data", logger.Err(err))
 				}
 			}
-			ve.screenBytesBuffersPool.Put(screenFrame[:4500])
+			//ve.screenBytesBuffersPool.Put(screenFrame[:4500])
 		}
 	}
 }
