@@ -3,7 +3,9 @@ package sshclient
 import (
 	"aloh-tui/pkg/errs"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 
 	"aloh-tui/pkg/logger"
 
@@ -155,7 +157,9 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 func (sc *sshClient) Close() {
 	sc.log.Info("closing ssh client")
 	if err := sc.eventSSHChannel.Close(); err != nil {
-		sc.log.Error("failed to close event channel", logger.Err(err))
+		if !errors.Is(err, io.EOF) {
+			sc.log.Error("failed to close event channel", logger.Err(err))
+		}
 	}
 	if err := sc.client.Close(); err != nil {
 		sc.log.Error("failed to close ssh client", logger.Err(err))

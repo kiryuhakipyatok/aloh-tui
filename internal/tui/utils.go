@@ -355,47 +355,50 @@ func (m Model) onUsersWebcam(msg tea.MouseMsg) (users.Identity, bool) {
 	return iden, true
 }
 
-func renderWebcamsFrames(frames []string) string {
+func (m Model) renderWebcamsFrames(frames []string) string {
 	lenF := len(frames)
+	m.log.Info("lenF", lenF)
 	if lenF <= 0 {
 		return ""
 	}
-	if lenF%2 == 0 {
-		lenF -= lenF / 2
-	} else {
-		lenF -= lenF/2 + 1
-	}
-	// var strBuilder strings.Builder
 
-	// rows := 1
+	m.log.Info("frames", lenF)
+
+	div := lenF / 2
+
+	if !((lenF-div)%2 == 0) {
+		div--
+	}
+
+	upFrames := make([]string, 0, lenF/2)
+	downFrames := make([]string, 0, (lenF/2)+1)
+
+	if div < 2 {
+		return lipgloss.JoinHorizontal(lipgloss.Center, frames...)
+	} else {
+		for i, f := range frames {
+			if i < div {
+				upFrames = append(upFrames, f)
+				continue
+			}
+			if i > div {
+				downFrames = append(downFrames, f)
+			}
+
+		}
+	}
+
 	// if lenF > 2 {
-	// 	rows = 2
-	// }
-
-	// cols := 1
-
-	// if lenF == 2 {
-	// 	cols = 2
-	// } else if lenF%2 == 0 {
-	// 	cols = lenF / 2
+	// 	upFrames = frames[:lenF/2]
+	// 	downFrames = frames[len(upFrames):]
 	// } else {
-	// 	cols = lenF/2 + 1
+	// 	upFrames = frames
 	// }
+	m.log.Info("up frames", len(upFrames))
+	m.log.Info("down frames", len(downFrames))
 
-	var (
-		upFrames   []string
-		downFrames []string
-	)
-
-	if lenF > 2 {
-		upFrames = frames[:lenF/2]
-		downFrames = frames[len(upFrames):]
-	} else {
-		upFrames = frames
-	}
-
-	upJoined := lipgloss.JoinHorizontal(lipgloss.Top, upFrames...)
-	downJoined := lipgloss.JoinHorizontal(lipgloss.Top, downFrames...)
+	upJoined := lipgloss.JoinHorizontal(lipgloss.Center, upFrames...)
+	downJoined := lipgloss.JoinHorizontal(lipgloss.Center, downFrames...)
 
 	full := lipgloss.JoinVertical(lipgloss.Center, upJoined, downJoined)
 

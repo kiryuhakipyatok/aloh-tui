@@ -384,7 +384,7 @@ func (m Model) renderWebcamTab(w, h int) string {
 
 			//framesStr := strings.Join(frames, "    ")
 
-			joinedFrames := renderWebcamsFrames(frames)
+			joinedFrames := m.renderWebcamsFrames(frames)
 			//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
 			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
 
@@ -417,7 +417,7 @@ func (m Model) renderWebcamTab(w, h int) string {
 				}
 			}
 
-			joinedFrames := renderWebcamsFrames(frames)
+			joinedFrames := m.renderWebcamsFrames(frames)
 			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
 
 		} else if userStarted && lUFrames <= 0 {

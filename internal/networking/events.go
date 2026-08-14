@@ -9,7 +9,7 @@ const (
 	MIC_MUTE     = alohnetwork.MIC_MUTE
 	HARD_DENOISE = alohnetwork.HARD_DENOISE
 	SOFT_DENOISE = alohnetwork.SOFT_DENOISE
-	WEBCAM       = alohnetwork.WEBCAM
+	WEBCAM       = alohnetwork.WEBCAM_STATE
 	GENERAL      = alohnetwork.GENERAL
 )
 

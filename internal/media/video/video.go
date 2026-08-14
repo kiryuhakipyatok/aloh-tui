@@ -101,7 +101,7 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		},
 	}
 
-	go ve.sendVideo()
+	go ve.sendWebcam()
 
 	return ve, nil
 }
@@ -279,7 +279,7 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 		close(wc)
 	})
 
-	eOpt, err := encoder.NewLossyEncoderOptions(encoder.PresetPicture, 1)
+	eOpt, err := encoder.NewLossyEncoderOptions(encoder.PresetPicture, 90)
 	if err != nil {
 		panic(err)
 	}
@@ -320,8 +320,9 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 				o := ve.GetUserFrame()
 				ve.mu.RLock()
 				n := len(ve.usersVideo)
+
 				ve.mu.RUnlock()
-				f, err = renderLocalImg(n, frame)
+				f, err = renderLocalImg(float64(n+1), frame)
 				if err != nil {
 					ve.log.Error("failed to render img", logger.Err(err))
 					f = o
@@ -402,7 +403,11 @@ func (ve *videoEngine) RenderUsersWebcam(id uuid.UUID, data []byte) {
 		ve.log.Error("failed to decode img", logger.Err(err))
 		return
 	}
-	frame, err := renderTerminalImg(n, img)
+
+	if ve.started.Load() {
+		n++
+	}
+	frame, err := renderTerminalImg(float64(n), img)
 	if err != nil {
 		ve.log.Error("failed to render img", logger.Err(err))
 		return
@@ -437,15 +442,34 @@ func (ve *videoEngine) RemoveUserFromUsersVideo(id uuid.UUID) {
 func (ve *videoEngine) GetUsersFramesTerminal() map[uuid.UUID]string {
 	ve.mu.RLock()
 	defer ve.mu.RUnlock()
+	var (
+		f  string
+		ok bool
+	)
 	frames := make(map[uuid.UUID]string, len(ve.usersVideo))
 	for i, uv := range ve.usersVideo {
-		frames[i] = uv.frame.Load().(string)
+		f, ok = uv.frame.Load().(string)
+		if ok {
+			frames[i] = f
+		}
 	}
 
 	return frames
 }
 
-func renderTerminalImg(n int, img image.Image) (string, error) {
+func calculateGrid(n float64) (rows, cols int) {
+	total := int(n)
+	if total <= 3 {
+		return 1, total
+	}
+
+	rows = 2
+
+	cols = (total + 1) / 2
+	return rows, cols
+}
+
+func renderTerminalImg(n float64, img image.Image) (string, error) {
 	imageWidget := termimg.NewImageWidgetFromImage(img)
 	defer imageWidget.Clear()
 	imageWidget.SetProtocol(termimg.Halfblocks)
@@ -458,7 +482,11 @@ func renderTerminalImg(n int, img image.Image) (string, error) {
 		termW, termH = 80, 24
 	}
 
-	imageWidget.SetSizeWithCorrection(int(float64(termW)/(float64(n)*1.15)), int(float64(termH)/(float64(n))))
+	r, c := calculateGrid(n)
+	availableW := float64(termW/c) * 1.6
+	availableH := float64(termH / r)
+
+	imageWidget.SetSize(int(availableW), int(availableH))
 	textMsg, err := imageWidget.Render()
 	if err != nil {
 		return "", err
@@ -467,7 +495,7 @@ func renderTerminalImg(n int, img image.Image) (string, error) {
 	return textMsg, nil
 }
 
-func renderLocalImg(n int, img image.Image) (string, error) {
+func renderLocalImg(n float64, img image.Image) (string, error) {
 	imageWidget := termimg.NewImageWidgetFromImage(img)
 	defer imageWidget.Clear()
 	imageWidget.SetProtocol(termimg.Halfblocks)
@@ -475,12 +503,18 @@ func renderLocalImg(n int, img image.Image) (string, error) {
 	if n <= 0 {
 		n = 1
 	}
+
 	termW, termH, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		termW, termH = 80, 24
 	}
 
-	imageWidget.SetSizeWithCorrection(int(float64(termW)/(float64(n)*1.15)), int(float64(termH)/(float64(n))))
+	r, c := calculateGrid(n)
+
+	availableW := float64(termW/c) * 1.6
+	availableH := float64(termH / r)
+
+	imageWidget.SetSize(int(availableW), int(availableH))
 
 	textMsg, err := imageWidget.Render()
 	if err != nil {
@@ -490,7 +524,7 @@ func renderLocalImg(n int, img image.Image) (string, error) {
 	return textMsg, nil
 }
 
-func (ve *videoEngine) sendVideo() {
+func (ve *videoEngine) sendWebcam() {
 	ve.log.Info("sending webcam")
 	for {
 		select {
@@ -499,7 +533,7 @@ func (ve *videoEngine) sendVideo() {
 			return
 		case frame := <-ve.videoFrameChan:
 			if ve.connected.Load() && ve.started.Load() && ve.netw != nil {
-				if err := ve.netw.SendVideoData(frame); err != nil {
+				if err := ve.netw.SendWebcamData(frame); err != nil {
 					ve.log.Error("failed to send video data", logger.Err(err))
 				}
 			}

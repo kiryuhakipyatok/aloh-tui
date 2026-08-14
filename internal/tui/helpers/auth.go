@@ -6,11 +6,9 @@ import (
 	"aloh-tui/internal/media/video"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
-	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,9 +33,9 @@ func SetupAuth(as AuthSetup) error {
 		Password:   as.Password,
 	})
 	if err != nil {
-		if !errors.Is(err, errs.ErrAuth()) {
-			return err
-		}
+		//	if !errors.Is(err, errs.ErrAuth()) {
+		return err
+		//}
 	} else {
 		var pd struct {
 			Identity     users.Identity    `json:"identity"`

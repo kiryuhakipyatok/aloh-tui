@@ -32,7 +32,7 @@ func SetupCallbacks(cs CallbacksSetup) {
 	cs.User.Networking.VoiceCallback(func(id uuid.UUID, data []byte) {
 		cs.User.Engines.AudioEngine.PlayUserVoice(id, data)
 	})
-	cs.User.Networking.VideoCallback(func(id uuid.UUID, data []byte) {
+	cs.User.Networking.WebcamCallback(func(id uuid.UUID, data []byte) {
 		// select {
 		// case cs.RawWebcamMsgChan <- commands.RawWebcamMsg{Id: id, Data: data}:
 		// default:

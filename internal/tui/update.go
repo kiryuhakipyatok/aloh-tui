@@ -256,7 +256,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if ok {
 							m.prState = m.state
 							m.state = states.LOAD_STATE
-							if m.user.GetUserIdentity() == iden{
+							if m.user.GetUserIdentity() == iden {
 								return m, commands.OnOffUserWindowWebcamCmd(m.user.Engines.VideoEngine)
 							}
 							return m, commands.OnOffWindowWebcamCmd(m.user.Engines.VideoEngine, iden)
@@ -875,12 +875,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.user.Engines.VideoEngine != nil {
 				m.user.Engines.VideoEngine.Stop()
 			}
-			m.err = msg.Err
-			m.state = states.ERR_STATE
-			// if msg.Typee != sshclient.DEFAULT {
-			// 	m.user.Data.Personal = users.Personal{}
-			// }
+
+			m.user.Data.Identity = users.Identity{}
+			if m.prState == states.START_STATE && m.state == states.LOAD_STATE {
+				m.prState = m.state
+				m.state = states.REG_STATE
+				return m, nil
+			}
+	
+			//if m.curWindow != windows.START_WINDOW{
+			return m.Err(msg.Err)
+			//	}
+
 		} else {
+
 			switch msg.Typee {
 			case sshclient.REGISTER:
 				m.state = states.DEF_STATE
@@ -1711,9 +1719,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			if m.state == states.ERR_STATE {
+				m.log.Info("enter err")
 				return m, nil
 			}
 			if m.state == states.LOAD_STATE {
+				m.log.Info("enter load")
 				return m, nil
 			}
 			if m.curWindow == windows.START_WINDOW {
@@ -1723,16 +1733,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusInputs()
 				return m, cmd
 			}
-
-			// if m.state == states.ERR_STATE {
-			// 	m.err = nil
-			// 	m.curWindow = windows.DEF_WINDOW
-			// 	if m.prState == states.LOAD_STATE {
-			// 		m = m.syncTabState()
-			// 	} else {
-			// 		m.state = m.prState
-			// 	}
-			// }
 
 			if !m.isLoggedIn() {
 				switch m.activeTab {
