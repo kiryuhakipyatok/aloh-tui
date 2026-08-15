@@ -567,7 +567,7 @@ func (m Model) rendeScreenTab(w, h int) string {
 			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, "", loadScreen)
 			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, ufStr)
 		} else {
-			textStyle := styles.CGrayBold.Render(titles.NO_WEBCAMS)
+			textStyle := styles.CGrayBold.Render(titles.NO_SCREENS)
 
 			content = lipgloss.Place(
 				w,
@@ -1309,7 +1309,7 @@ func (m Model) renderHelpView(w, h int) string {
 	rightW := w - leftW - 3
 
 	lblLeft := m.headerActiveStyle.Render("► general & navigation")
-	lblRight := m.headerActiveStyle.Render("► audio & voice controls")
+	lblRight := m.headerActiveStyle.Render("► audio & video controls")
 
 	renderShortcut := func(keys, desc string) string {
 		k := lipgloss.NewStyle().Foreground(m.themeColor).Width(22).Render(keys)
@@ -1339,10 +1339,13 @@ func (m Model) renderHelpView(w, h int) string {
 		renderShortcut("ALT+F", "- go to friends tab"),
 		renderShortcut("ALT+C", "- go to chat tab"),
 		renderShortcut("ALT+G", "- go to voice tab"),
-		renderShortcut("ALT+D", "- go to video tab"),
+		renderShortcut("ALT+D", "- go to webcam tab"),
 		renderShortcut("ALT+E", "- go to profile tab"),
 		renderShortcut("ALT+S", "- go to settings tab"),
-		renderShortcut("ALT+H", "- go to / close help menu"),
+		renderShortcut("ALT+H", "- go to / close help menu"), "",
+		styles.PaddingLeftCGrayStyle.Render("friends contols:"),
+		renderShortcut("ALT+X", "- deny friendship request"),
+		renderShortcut("ENTER", "- accept friendship request"),
 	}
 
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, leftRows...)
@@ -1360,11 +1363,11 @@ func (m Model) renderHelpView(w, h int) string {
 		styles.PaddingLeftCGrayStyle.Render("chat controls:"),
 		renderShortcut("CTRL+P", "- paste smth"), "",
 		styles.PaddingLeftCGrayStyle.Render("webcam controls:"),
-		renderShortcut("ENTER", "- toggle webcam"), "",
+		renderShortcut("ENTER", "- toggle webcam"),
 		renderShortcut("LMB ON WEBCAM", "- toggle webcam window"), "",
-		styles.PaddingLeftCGrayStyle.Render("friends contols:"),
-		renderShortcut("ALT+X", "- deny friendship request"),
-		renderShortcut("ENTER", "- accept friendship request"),
+		styles.PaddingLeftCGrayStyle.Render("screen controls:"),
+		renderShortcut("ENTER", "- toggle screen"),
+		renderShortcut("LMB ON SCREEN", "- toggle screen window"),
 	}
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightRows...)

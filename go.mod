@@ -15,7 +15,7 @@ require (
 	github.com/gen2brain/malgo v0.11.24
 	github.com/google/uuid v1.6.0
 	github.com/kechako/go-speexdsp v0.2.2
-	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260814173358-75c6bd3ad005
+	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260815131654-d3c3453e2d70
 	github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260726211718-ebaf500ab11e
 	github.com/kiryuhakipyatok/aloh-ssh v0.0.0-20260726171110-30dc3a8c5b15
 	github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e

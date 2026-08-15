@@ -55,12 +55,17 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 		//}
 		m.focusInputs()
 	} else {
-
+		if m.activeTab != 3 && m.prState == states.WEBCAM_STATE {
+			m.user.Engines.VideoEngine.SwitchOnWebcamTab(false)
+		} else if m.activeTab != 4 && m.prState == states.SCREEN_STATE {
+			m.user.Engines.VideoEngine.SwitchOnScreenTab(false)
+		}
 		switch m.activeTab {
 		case 0:
 			// if m.connected {
 			// 	m.state = states.DEF_STATE
 			// } else {
+
 			switch m.sideState {
 			case states.LEFT_STATE:
 				m.state = states.CONN_STATE
@@ -92,9 +97,11 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 			delete(m.tabsNotifications, "voice")
 		case 3:
 			m.state = states.WEBCAM_STATE
+			m.user.Engines.VideoEngine.SwitchOnWebcamTab(true)
 			delete(m.tabsNotifications, "webcam")
 		case 4:
 			m.state = states.SCREEN_STATE
+			m.user.Engines.VideoEngine.SwitchOnScreenTab(true)
 			delete(m.tabsNotifications, "screen")
 		case 5:
 			m.state = states.PROFILE_STATE
@@ -257,8 +264,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.activeTab = 3
 						iden, ok := m.onUsersWebcam(msg)
 						if ok {
-							m.prState = m.state
-							m.state = states.LOAD_STATE
+							// m.prState = m.state
+							// m.state = states.LOAD_STATE
 							if m.user.GetUserIdentity() == iden {
 								return m, commands.OnOffUserWindowWebcamCmd(m.user.Engines.VideoEngine)
 							}
@@ -268,8 +275,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.activeTab = 4
 						iden, ok := m.onUsersScreen(msg)
 						if ok {
-							m.prState = m.state
-							m.state = states.LOAD_STATE
+							// m.prState = m.state
+							// m.state = states.LOAD_STATE
 							if m.user.GetUserIdentity() == iden {
 								return m, commands.OnOffUserWindowScreenCmd(m.user.Engines.VideoEngine)
 							}
@@ -393,21 +400,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.Err(err)
 				}
 				us.webcam = state
-				if !state {
-					m.user.Engines.VideoEngine.RemoveUserFromUsersWebcam(id)
-				}
+				m.log.Info("webcam event", state)
+				m.user.Engines.VideoEngine.OnOffUsersWebcam(state, id)
 
 				if m.activeTab != 3 {
 					m.tabsNotifications["webcam"] = struct{}{}
 				}
-
-				// if state {
-				// 	m.webcamUsersFrames[id] = userVideoFrame{
-				// 		nickname: nick,
-				// 	}
-				// } else {
-				// 	delete(m.webcamUsersFrames, id)
-				// }
 
 			case networking.SCREEN_STATE:
 				state, err := networking.DataToState(msg.Event.Data)
@@ -415,21 +413,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.Err(err)
 				}
 				us.screen = state
-				if !state {
-					m.user.Engines.VideoEngine.RemoveUserFromUsersScreen(id)
-				}
-
+				m.log.Info("screen event", state)
+				m.user.Engines.VideoEngine.OnOffUsersScreen(state, id)
 				if m.activeTab != 4 {
 					m.tabsNotifications["screen"] = struct{}{}
 				}
-
-				// if state {
-				// 	m.webcamUsersFrames[id] = userVideoFrame{
-				// 		nickname: nick,
-				// 	}
-				// } else {
-				// 	delete(m.webcamUsersFrames, id)
-				// }
 
 			case networking.GENERAL:
 				generalData, err := networking.DataToGeneral(msg.Event.Data)
@@ -1253,8 +1241,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = err
 			m.state = states.ERR_STATE
 		}
-		m.user.Engines.VideoEngine.RemoveUserFromUsersWebcam(id)
-		m.user.Engines.VideoEngine.RemoveUserFromUsersScreen(id)
+		m.user.Engines.VideoEngine.OnOffUsersScreen(false, id)
+		m.user.Engines.VideoEngine.OnOffUsersWebcam(false, id)
 		m.messages = append(m.messages, commands.ChatMessage{
 			Identity: users.Identity{
 				Nickname: "system",

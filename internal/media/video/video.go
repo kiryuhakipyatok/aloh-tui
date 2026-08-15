@@ -41,10 +41,12 @@ type VideoEngine interface {
 	OnOffUsersScreenWindow(id uuid.UUID, nickname string) (bool, error)
 	GetUsersWebcamFramesTerminal() map[uuid.UUID]string
 	GetUsersScreenFramesTerminal() map[uuid.UUID]string
-	RemoveUserFromUsersWebcam(id uuid.UUID)
-	RemoveUserFromUsersScreen(id uuid.UUID)
+	OnOffUsersScreen(res bool, id uuid.UUID)
+	OnOffUsersWebcam(res bool, id uuid.UUID)
 	OnOffWebcamWindow() (bool, error)
 	OnOffScreenWindow() (bool, error)
+	SwitchOnWebcamTab(res bool)
+	SwitchOnScreenTab(res bool)
 	OnOffWebcam() (bool, error)
 	OnOffScreen() (bool, error)
 	GetUserWebcamFrame() string
@@ -75,12 +77,12 @@ type videoEngine struct {
 	waitProcessScreenChan chan struct{}
 
 	webcamBytesBuffersPool sync.Pool
-	//	screenBytesBuffersPool sync.Pool
+	screenBytesBuffersPool sync.Pool
 
 	connected atomic.Bool
 
-	webcamStarted atomic.Bool
-	screenStarted atomic.Bool
+	onWebcamTab atomic.Bool
+	onScreenTab atomic.Bool
 
 	usersVideo map[uuid.UUID]*userVideo
 
@@ -95,6 +97,8 @@ type VideoSetup struct {
 }
 
 type userVideo struct {
+	webcamStarted  atomic.Bool
+	screenStarted  atomic.Bool
 	webcamFrame    atomic.Value
 	webcamImg      image.Image
 	mu             sync.RWMutex
@@ -124,12 +128,12 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 				return buf
 			},
 		},
-		// screenBytesBuffersPool: sync.Pool{
-		// 	New: func() any {
-		// 		buf := make([]byte, 4500)
-		// 		return buf
-		// 	},
-		// },
+		screenBytesBuffersPool: sync.Pool{
+			New: func() any {
+				buf := make([]byte, 40000)
+				return buf
+			},
+		},
 	}
 
 	go ve.sendWebcam()
@@ -149,11 +153,11 @@ func (ve *videoEngine) SetConnected() {
 }
 
 func (ve *videoEngine) IsWebcamStarted() bool {
-	return ve.webcamStarted.Load()
+	return ve.userVideo.webcamStarted.Load()
 }
 
 func (ve *videoEngine) IsScreenStarted() bool {
-	return ve.screenStarted.Load()
+	return ve.userVideo.screenStarted.Load()
 }
 
 func (ve *videoEngine) GetUserWebcamFrame() string {
@@ -170,6 +174,14 @@ func (ve *videoEngine) GetUserScreenFrame() string {
 		return ""
 	}
 	return f
+}
+
+func (ve *videoEngine) SwitchOnWebcamTab(res bool) {
+	ve.onWebcamTab.Store(res)
+}
+
+func (ve *videoEngine) SwitchOnScreenTab(res bool) {
+	ve.onScreenTab.Store(res)
 }
 
 func (ve *videoEngine) OnOffWebcamWindow() (bool, error) {
@@ -277,7 +289,7 @@ func (ve *videoEngine) OnOffUsersScreenWindow(id uuid.UUID, nickname string) (bo
 }
 
 func (ve *videoEngine) OnOffWebcam() (bool, error) {
-	s := ve.webcamStarted.Load()
+	s := ve.userVideo.webcamStarted.Load()
 
 	if !s == true {
 
@@ -336,6 +348,7 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 			if err := ve.webcamTrack.Close(); err != nil {
 				ve.log.Error("failed to close webcam track", logger.Err(err))
 			}
+			ve.webcamTrack = nil
 		}
 
 		ve.webcamReader = nil
@@ -343,12 +356,12 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 	}
 
 	ve.userVideo.webcamFrame.Store("")
-	ve.webcamStarted.Store(!s)
+	ve.userVideo.webcamStarted.Store(!s)
 	return !s, nil
 }
 
 func (ve *videoEngine) OnOffScreen() (bool, error) {
-	s := ve.screenStarted.Load()
+	s := ve.userVideo.screenStarted.Load()
 
 	if !s == true {
 
@@ -374,6 +387,12 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 
 		ve.stopProcessScreenChan = make(chan struct{}, 1)
 		ve.waitProcessScreenChan = make(chan struct{}, 1)
+		if ve.stopProcessScreenChan != nil {
+			ve.log.Info("stop screen chan not nil")
+		}
+		if ve.waitProcessScreenChan != nil {
+			ve.log.Info("wait screen chan not nil")
+		}
 		waitChan := make(chan struct{}, 1)
 		go ve.processScreen(waitChan)
 		<-waitChan
@@ -387,24 +406,29 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 		var waitScreen chan struct{}
 		ve.mu.Lock()
 		if ve.stopProcessScreenChan != nil {
+			ve.log.Info("close stop process sreen chan")
 			close(ve.stopProcessScreenChan)
 			if ve.waitProcessScreenChan != nil {
+				ve.log.Info("get wait process screen chan")
 				waitScreen = ve.waitProcessScreenChan
 			}
 		}
 		ve.mu.Unlock()
 
 		if waitScreen != nil {
+			ve.log.Info("wait screen")
 			<-waitScreen
 		}
-
+		ve.log.Info("wait screen done")
 		ve.mu.Lock()
 		ve.waitProcessScreenChan = nil
 		ve.stopProcessScreenChan = nil
 		if ve.screenTrack != nil {
+			ve.log.Info("closing screen track")
 			if err := ve.screenTrack.Close(); err != nil {
 				ve.log.Error("failed to close screen track", logger.Err(err))
 			}
+			ve.screenTrack = nil
 		}
 
 		ve.screenReader = nil
@@ -413,7 +437,7 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 	}
 
 	ve.userVideo.screenFrame.Store("")
-	ve.screenStarted.Store(!s)
+	ve.userVideo.screenStarted.Store(!s)
 	return !s, nil
 }
 
@@ -446,8 +470,8 @@ func (ve *videoEngine) SetDisconnected() {
 
 	ve.connected.Store(false)
 
-	if ve.webcamStarted.Load() {
-		ve.webcamStarted.Store(false)
+	if ve.userVideo.webcamStarted.Load() {
+		ve.userVideo.webcamStarted.Store(false)
 		if ve.stopProcessWebcamChan != nil {
 			close(ve.stopProcessWebcamChan)
 			waitWebcam = ve.waitProcessWebcamChan
@@ -455,9 +479,10 @@ func (ve *videoEngine) SetDisconnected() {
 		}
 	}
 
-	if ve.screenStarted.Load() {
-		ve.screenStarted.Store(false)
+	if ve.userVideo.screenStarted.Load() {
+		ve.userVideo.screenStarted.Store(false)
 		if ve.stopProcessScreenChan != nil {
+			ve.log.Info("close stop process screen when disc")
 			close(ve.stopProcessScreenChan)
 			waitScreen = ve.waitProcessScreenChan
 
@@ -470,6 +495,7 @@ func (ve *videoEngine) SetDisconnected() {
 		<-waitWebcam
 	}
 	if waitScreen != nil {
+		ve.log.Info("wait wait screen when disc")
 		<-waitScreen
 	}
 
@@ -481,17 +507,17 @@ func (ve *videoEngine) SetDisconnected() {
 			ve.log.Error("failed to close webcam track", logger.Err(err))
 		}
 		ve.webcamTrack = nil
-		ve.webcamReader = nil
 	}
+	ve.webcamReader = nil
 	ve.stopProcessScreenChan = nil
 	if ve.screenTrack != nil {
+		ve.log.Info("close screen track when disc")
 		if err := ve.screenTrack.Close(); err != nil {
 			ve.log.Error("failed to close screen track", logger.Err(err))
 		}
 		ve.screenTrack = nil
-		ve.screenReader = nil
 	}
-
+	ve.screenReader = nil
 }
 
 func (ve *videoEngine) processWebcam(wc chan struct{}) {
@@ -591,6 +617,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 
 	defer func() {
 		if ve.waitProcessScreenChan != nil {
+			ve.log.Debug("wait process screen")
 			close(ve.waitProcessScreenChan)
 		}
 	}()
@@ -609,11 +636,12 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 	for {
 		select {
 		case <-ve.stopProcessScreenChan:
-
+			ve.log.Debug("stop process screen 1")
 			return
 		case <-timer.C:
 			select {
 			case <-ve.stopProcessScreenChan:
+				ve.log.Debug("stop process screen 2")
 				return
 			default:
 			}
@@ -644,9 +672,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 
 				n := len(buf)
 
-				buffer := make([]byte, n)
-
-				//buffer := ve.screenBytesBuffersPool.Get().([]byte)
+				buffer := ve.screenBytesBuffersPool.Get().([]byte)
 				copy(buffer, buf)
 
 				select {
@@ -672,9 +698,10 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 					}
 					ve.userVideo.mu.Unlock()
 				default:
-					//ve.screenBytesBuffersPool.Put(buffer[:4500])
+					ve.screenBytesBuffersPool.Put(buffer[:40000])
 				}
 			}
+
 			proccessFrame()
 		}
 
@@ -772,38 +799,51 @@ func (uv *userVideo) proccessUsersWindowScreen() {
 }
 
 func (ve *videoEngine) RenderUsersWebcam(id uuid.UUID, data []byte) {
+
 	ve.mu.Lock()
 	uv, ok := ve.usersVideo[id]
 	if !ok {
 		uv = &userVideo{}
 		ve.usersVideo[id] = uv
 	}
-	n := len(ve.usersVideo)
 	ve.mu.Unlock()
-	img, err := webp.Decode(bytes.NewReader(data), &decoder.Options{})
-	if err != nil {
-		ve.log.Error("failed to decode img", logger.Err(err))
-		return
-	}
+	if uv.webcamStarted.Load() {
+		ve.mu.RLock()
+		n := len(ve.usersVideo)
+		ve.mu.RUnlock()
+		img, err := webp.Decode(bytes.NewReader(data), &decoder.Options{})
+		if err != nil {
+			ve.log.Error("failed to decode img", logger.Err(err))
+			return
+		}
 
-	if ve.webcamStarted.Load() {
-		n++
-	}
-	webcamFrame, err := renderTerminalImg(float64(n), img)
-	if err != nil {
-		ve.log.Error("failed to render img", logger.Err(err))
-		return
-	}
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
-	uv.webcamFrame.Store(webcamFrame)
+		if ve.onWebcamTab.Load() {
 
-	uv.mu.Lock()
-	if uv.windowedWebcam.Load() && uv.webcamWindow != nil {
-		uv.webcamImg = img
-		uv.webcamWindow.Invalidate()
+			if ve.userVideo.webcamStarted.Load() {
+				n++
+			}
+
+			webcamFrame, err := renderTerminalImg(float64(n), img)
+			if err != nil {
+				ve.log.Error("failed to render img", logger.Err(err))
+				return
+			}
+			if uv.webcamStarted.Load() {
+				uv.webcamFrame.Store(webcamFrame)
+			}
+
+		}
+
+		ve.mu.Lock()
+		defer ve.mu.Unlock()
+
+		uv.mu.Lock()
+		if uv.windowedWebcam.Load() && uv.webcamWindow != nil {
+			uv.webcamImg = img
+			uv.webcamWindow.Invalidate()
+		}
+		uv.mu.Unlock()
 	}
-	uv.mu.Unlock()
 
 }
 
@@ -814,62 +854,83 @@ func (ve *videoEngine) RenderUsersScreen(id uuid.UUID, data []byte) {
 		uv = &userVideo{}
 		ve.usersVideo[id] = uv
 	}
-	n := len(ve.usersVideo)
 	ve.mu.Unlock()
-	img, err := webp.Decode(bytes.NewReader(data), &decoder.Options{})
-	if err != nil {
-		ve.log.Error("failed to decode img", logger.Err(err))
-		return
-	}
+	if uv.screenStarted.Load() {
+		ve.mu.RLock()
+		n := len(ve.usersVideo)
+		ve.mu.RUnlock()
 
-	if ve.screenStarted.Load() {
-		n++
-	}
-	screenFrame, err := renderTerminalImg(float64(n), img)
-	if err != nil {
-		ve.log.Error("failed to render img", logger.Err(err))
-		return
-	}
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
-	uv.screenFrame.Store(screenFrame)
-
-	uv.mu.Lock()
-	if uv.windowedScreen.Load() && uv.screenWindow != nil {
-		uv.screenImg = img
-		uv.screenWindow.Invalidate()
-	}
-	uv.mu.Unlock()
-
-}
-
-func (ve *videoEngine) RemoveUserFromUsersWebcam(id uuid.UUID) {
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
-	uv, ok := ve.usersVideo[id]
-	if ok {
-		uv.mu.Lock()
-		if uv.windowedWebcam.Load() && uv.webcamWindow != nil {
-			uv.webcamWindow.Perform(system.ActionClose)
+		img, err := webp.Decode(bytes.NewReader(data), &decoder.Options{})
+		if err != nil {
+			ve.log.Error("failed to decode img", logger.Err(err))
+			return
 		}
-		uv.webcamImg = nil
-		uv.webcamFrame.Store("")
-		uv.mu.Unlock()
-	}
-}
 
-func (ve *videoEngine) RemoveUserFromUsersScreen(id uuid.UUID) {
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
-	uv, ok := ve.usersVideo[id]
-	if ok {
+		if ve.onScreenTab.Load() {
+
+			if ve.userVideo.screenStarted.Load() {
+				n++
+			}
+			screenFrame, err := renderTerminalImg(float64(n), img)
+			if err != nil {
+				ve.log.Error("failed to render img", logger.Err(err))
+				return
+			}
+			if uv.screenStarted.Load() {
+				uv.screenFrame.Store(screenFrame)
+			}
+		}
+
+		ve.mu.Lock()
+		defer ve.mu.Unlock()
+
 		uv.mu.Lock()
 		if uv.windowedScreen.Load() && uv.screenWindow != nil {
-			uv.screenWindow.Perform(system.ActionClose)
+			uv.screenImg = img
+			uv.screenWindow.Invalidate()
 		}
-		uv.screenImg = nil
-		uv.screenFrame.Store("")
 		uv.mu.Unlock()
+
+	}
+
+}
+
+func (ve *videoEngine) OnOffUsersWebcam(res bool, id uuid.UUID) {
+	ve.mu.Lock()
+	defer ve.mu.Unlock()
+	uv, ok := ve.usersVideo[id]
+	if ok {
+		uv.webcamStarted.Store(res)
+		if !res {
+			uv.mu.Lock()
+			if uv.windowedWebcam.Load() && uv.webcamWindow != nil {
+				uv.webcamWindow.Perform(system.ActionClose)
+			}
+			uv.webcamImg = nil
+			uv.webcamFrame.Store("")
+			uv.mu.Unlock()
+		}
+
+	}
+}
+
+func (ve *videoEngine) OnOffUsersScreen(res bool, id uuid.UUID) {
+	ve.mu.Lock()
+	defer ve.mu.Unlock()
+	uv, ok := ve.usersVideo[id]
+	if ok {
+		uv.screenStarted.Store(res)
+		if !res {
+
+			uv.mu.Lock()
+			if uv.windowedScreen.Load() && uv.screenWindow != nil {
+				uv.screenWindow.Perform(system.ActionClose)
+			}
+			uv.screenImg = nil
+			uv.screenFrame.Store("")
+			uv.mu.Unlock()
+		}
+
 	}
 }
 
@@ -903,10 +964,11 @@ func (ve *videoEngine) GetUsersScreenFramesTerminal() map[uuid.UUID]string {
 
 		f, ok = uv.screenFrame.Load().(string)
 		if ok && f != "" {
+			ve.log.Info("screen f len", len(f))
 			frames[i] = f
 		}
 	}
-
+	ve.log.Info("len screen frames", len(frames))
 	return frames
 }
 
@@ -985,7 +1047,7 @@ func (ve *videoEngine) sendWebcam() {
 			ve.log.Info("webcam sending stopped")
 			return
 		case webcamFrame := <-ve.webcamFrameChan:
-			if ve.connected.Load() && ve.webcamStarted.Load() && ve.netw != nil {
+			if ve.connected.Load() && ve.userVideo.webcamStarted.Load() && ve.netw != nil {
 				if err := ve.netw.SendWebcamData(webcamFrame); err != nil {
 					ve.log.Error("failed to send webcam data", logger.Err(err))
 				}
@@ -1003,12 +1065,12 @@ func (ve *videoEngine) sendScreen() {
 			ve.log.Info("screen sending stopped")
 			return
 		case screenFrame := <-ve.screenFrameChan:
-			if ve.connected.Load() && ve.screenStarted.Load() && ve.netw != nil {
+			if ve.connected.Load() && ve.userVideo.screenStarted.Load() && ve.netw != nil {
 				if err := ve.netw.SendScreenData(screenFrame); err != nil {
 					ve.log.Error("failed to send screen data", logger.Err(err))
 				}
 			}
-			//ve.screenBytesBuffersPool.Put(screenFrame[:4500])
+			ve.screenBytesBuffersPool.Put(screenFrame[:40000])
 		}
 	}
 }
@@ -1024,5 +1086,13 @@ func (ve *videoEngine) Stop() {
 	}
 
 	ve.webcamReader = nil
+
+	if ve.screenTrack != nil {
+		if err := ve.screenTrack.Close(); err != nil {
+			ve.log.Error("failed to close screenTrack", logger.Err(err))
+		}
+	}
+
+	ve.screenReader = nil
 
 }

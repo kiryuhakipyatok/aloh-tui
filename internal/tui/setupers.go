@@ -33,17 +33,9 @@ func SetupCallbacks(cs CallbacksSetup) {
 		cs.User.Engines.AudioEngine.PlayUserVoice(id, data)
 	})
 	cs.User.Networking.WebcamCallback(func(id uuid.UUID, data []byte) {
-		// select {
-		// case cs.RawWebcamMsgChan <- commands.RawWebcamMsg{Id: id, Data: data}:
-		// default:
-		// }
 		cs.User.Engines.VideoEngine.RenderUsersWebcam(id, data)
 	})
 	cs.User.Networking.ScreenCallback(func(id uuid.UUID, data []byte) {
-		// select {
-		// case cs.RawWebcamMsgChan <- commands.RawWebcamMsg{Id: id, Data: data}:
-		// default:
-		// }
 		cs.User.Engines.VideoEngine.RenderUsersScreen(id, data)
 	})
 	cs.User.Networking.PeerConnectedCallback(func(id uuid.UUID) {
@@ -177,15 +169,11 @@ func (m *Model) setupInputs() {
 		case 1:
 			ti.Placeholder = "new best friend tag, d to default"
 		case 2:
+			ti.CharLimit = 1
 			ti.Placeholder = "new notification tag, d to default"
 		case 3:
+			ti.CharLimit = 1
 			ti.Placeholder = "new ban tag, d to default"
-			// case 4:
-			// 	ti.CharLimit = 28
-			// 	ti.Placeholder = "new tagline"
-			// case 5:
-			// 	ti.CharLimit = 24
-			// 	ti.Placeholder = "new nickname"
 		}
 		m.appereanceInputs[i] = ti
 	}
