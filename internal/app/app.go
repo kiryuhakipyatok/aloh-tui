@@ -7,6 +7,7 @@ import (
 	"io"
 	l "log"
 	"os"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.design/x/clipboard"
@@ -15,7 +16,7 @@ import (
 func Run(env, version string) {
 	null, _ := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	os.Stderr = null
-
+	syscall.Dup2(int(null.Fd()), 2)
 	l.SetOutput(io.Discard)
 
 	netwLogFilePath, appLogFilePath, nickFilePath, keysPath, err := utils.SetupFiles()

@@ -131,7 +131,7 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		},
 		screenBytesBuffersPool: sync.Pool{
 			New: func() any {
-				buf := make([]byte, 40000)
+				buf := make([]byte, 20000)
 				return buf
 			},
 		},
@@ -530,13 +530,13 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 		}
 	}()
 
-	timer := time.NewTicker(50 * time.Millisecond)
+	timer := time.NewTicker(70 * time.Millisecond)
 
 	closeWaitChan := sync.OnceFunc(func() {
 		close(wc)
 	})
 
-	eOpt, err := encoder.NewLossyEncoderOptions(encoder.PresetPicture, 1)
+	eOpt, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 1)
 	if err != nil {
 		panic(err)
 	}
@@ -565,12 +565,12 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 
 			resizedWebcamFrame := image.NewNRGBA(image.Rect(0, 0, 360, 160))
 
-			draw.ApproxBiLinear.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, webcamFrame, webcamFrame.Bounds(), draw.Over, nil)
+			draw.NearestNeighbor.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, webcamFrame, webcamFrame.Bounds(), draw.Over, nil)
 			realese()
 
 			ve.webcamBuffer.Reset()
 
-			if err := webp.Encode(ve.webcamBuffer, webcamFrame, eOpt); err != nil {
+			if err := webp.Encode(ve.webcamBuffer, resizedWebcamFrame, eOpt); err != nil {
 				ve.log.Error("failed to encode webcamFrame", logger.Err(err))
 				return
 			}
@@ -589,7 +589,7 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 				ve.mu.RLock()
 				n := len(ve.usersVideo)
 				ve.mu.RUnlock()
-				f, err = renderLocalImg(float64(n+1), webcamFrame)
+				f, err = renderLocalImg(float64(n+1), resizedWebcamFrame)
 				if err != nil {
 					ve.log.Error("failed to render img", logger.Err(err))
 					f = o
@@ -621,13 +621,13 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 		}
 	}()
 
-	timer := time.NewTicker(50 * time.Millisecond)
+	timer := time.NewTicker(70 * time.Millisecond)
 
 	closeWaitChan := sync.OnceFunc(func() {
 		close(wc)
 	})
 
-	eOpt, err := encoder.NewLossyEncoderOptions(encoder.PresetPicture, 1)
+	eOpt, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 1)
 	if err != nil {
 		panic(err)
 	}
@@ -658,7 +658,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 
 			resizedScreenFrame := image.NewNRGBA(image.Rect(0, 0, 360, 160))
 
-			draw.ApproxBiLinear.Scale(resizedScreenFrame, resizedScreenFrame.Rect, screenFrame, screenFrame.Bounds(), draw.Over, nil)
+			draw.NearestNeighbor.Scale(resizedScreenFrame, resizedScreenFrame.Rect, screenFrame, screenFrame.Bounds(), draw.Over, nil)
 			realese()
 
 			ve.screenBuffer.Reset()
@@ -698,7 +698,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 				}
 				ve.userVideo.mu.Unlock()
 			default:
-				ve.screenBytesBuffersPool.Put(buffer[:40000])
+				ve.screenBytesBuffersPool.Put(buffer[:20000])
 			}
 
 		}
@@ -1067,7 +1067,7 @@ func (ve *videoEngine) sendScreen() {
 					ve.log.Error("failed to send screen data", logger.Err(err))
 				}
 			}
-			ve.screenBytesBuffersPool.Put(screenFrame[:40000])
+			ve.screenBytesBuffersPool.Put(screenFrame[:20000])
 		}
 	}
 }

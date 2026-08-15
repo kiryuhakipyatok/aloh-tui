@@ -94,6 +94,7 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 			} else {
 				m.state = states.DEF_STATE
 			}
+			lists.SetListVisible(&m.connectionsList.DefList, true)
 			delete(m.tabsNotifications, "voice")
 		case 3:
 			m.state = states.WEBCAM_STATE
