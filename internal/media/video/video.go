@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/image/draw"
 	"golang.org/x/term"
 
 	"gioui.org/app"
@@ -367,8 +368,8 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 
 		stream, err := mediadevices.GetDisplayMedia(mediadevices.MediaStreamConstraints{
 			Video: func(mtc *mediadevices.MediaTrackConstraints) {
-				mtc.Width = prop.Int(360)
-				mtc.Height = prop.Int(160)
+				mtc.Width = prop.Int(1280)
+				mtc.Height = prop.Int(720)
 			},
 		})
 		if err != nil {
@@ -562,51 +563,49 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 				continue
 			}
 
-			processFrame := func() {
-				defer realese()
-				ve.webcamBuffer.Reset()
+			resizedWebcamFrame := image.NewNRGBA(image.Rect(0, 0, 360, 160))
 
-				if err := webp.Encode(ve.webcamBuffer, webcamFrame, eOpt); err != nil {
-					ve.log.Error("failed to encode webcamFrame", logger.Err(err))
-					return
-				}
+			draw.ApproxBiLinear.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, webcamFrame, webcamFrame.Bounds(), draw.Over, nil)
+			realese()
 
-				realese()
+			ve.webcamBuffer.Reset()
 
-				buf := ve.webcamBuffer.Bytes()
-
-				buffer := ve.webcamBytesBuffersPool.Get().([]byte)
-				copy(buffer, buf)
-
-				n := len(buf)
-
-				select {
-				case ve.webcamFrameChan <- buffer[:n]:
-					var f string
-					o := ve.GetUserWebcamFrame()
-					ve.mu.RLock()
-					n := len(ve.usersVideo)
-					ve.mu.RUnlock()
-					f, err = renderLocalImg(float64(n+1), webcamFrame)
-					if err != nil {
-						ve.log.Error("failed to render img", logger.Err(err))
-						f = o
-					}
-
-					closeWaitChan()
-					ve.userVideo.webcamFrame.Store(f)
-					ve.userVideo.mu.Lock()
-					if ve.userVideo.windowedWebcam.Load() && ve.userVideo.webcamWindow != nil {
-						ve.userVideo.webcamImg = webcamFrame
-						ve.userVideo.webcamWindow.Invalidate()
-					}
-					ve.userVideo.mu.Unlock()
-				default:
-					ve.webcamBytesBuffersPool.Put(buffer[:1500])
-				}
+			if err := webp.Encode(ve.webcamBuffer, webcamFrame, eOpt); err != nil {
+				ve.log.Error("failed to encode webcamFrame", logger.Err(err))
+				return
 			}
 
-			processFrame()
+			buf := ve.webcamBuffer.Bytes()
+
+			buffer := ve.webcamBytesBuffersPool.Get().([]byte)
+			copy(buffer, buf)
+
+			n := len(buf)
+
+			select {
+			case ve.webcamFrameChan <- buffer[:n]:
+				var f string
+				o := ve.GetUserWebcamFrame()
+				ve.mu.RLock()
+				n := len(ve.usersVideo)
+				ve.mu.RUnlock()
+				f, err = renderLocalImg(float64(n+1), webcamFrame)
+				if err != nil {
+					ve.log.Error("failed to render img", logger.Err(err))
+					f = o
+				}
+
+				closeWaitChan()
+				ve.userVideo.webcamFrame.Store(f)
+				ve.userVideo.mu.Lock()
+				if ve.userVideo.windowedWebcam.Load() && ve.userVideo.webcamWindow != nil {
+					ve.userVideo.webcamImg = webcamFrame
+					ve.userVideo.webcamWindow.Invalidate()
+				}
+				ve.userVideo.mu.Unlock()
+			default:
+				ve.webcamBytesBuffersPool.Put(buffer[:1500])
+			}
 		}
 
 	}
@@ -657,52 +656,51 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 				continue
 			}
 
-			proccessFrame := func() {
-				defer realese()
-				ve.screenBuffer.Reset()
+			resizedScreenFrame := image.NewNRGBA(image.Rect(0, 0, 360, 160))
 
-				if err := webp.Encode(ve.screenBuffer, screenFrame, eOpt); err != nil {
-					ve.log.Error("failed to encode screenFrame", logger.Err(err))
-					return
-				}
+			draw.ApproxBiLinear.Scale(resizedScreenFrame, resizedScreenFrame.Rect, screenFrame, screenFrame.Bounds(), draw.Over, nil)
+			realese()
 
-				realese()
+			ve.screenBuffer.Reset()
 
-				buf := ve.screenBuffer.Bytes()
-
-				n := len(buf)
-
-				buffer := ve.screenBytesBuffersPool.Get().([]byte)
-				copy(buffer, buf)
-
-				select {
-				case ve.screenFrameChan <- buffer[:n]:
-					var f string
-					o := ve.GetUserScreenFrame()
-					ve.mu.RLock()
-					n := len(ve.usersVideo)
-
-					ve.mu.RUnlock()
-					f, err = renderLocalImg(float64(n+1), screenFrame)
-					if err != nil {
-						ve.log.Error("failed to render img", logger.Err(err))
-						f = o
-					}
-
-					closeWaitChan()
-					ve.userVideo.screenFrame.Store(f)
-					ve.userVideo.mu.Lock()
-					if ve.userVideo.windowedScreen.Load() && ve.userVideo.screenWindow != nil {
-						ve.userVideo.screenImg = screenFrame
-						ve.userVideo.screenWindow.Invalidate()
-					}
-					ve.userVideo.mu.Unlock()
-				default:
-					ve.screenBytesBuffersPool.Put(buffer[:40000])
-				}
+			if err := webp.Encode(ve.screenBuffer, resizedScreenFrame, eOpt); err != nil {
+				ve.log.Error("failed to encode screenFrame", logger.Err(err))
+				return
 			}
 
-			proccessFrame()
+			buf := ve.screenBuffer.Bytes()
+
+			n := len(buf)
+
+			buffer := ve.screenBytesBuffersPool.Get().([]byte)
+			copy(buffer, buf)
+
+			select {
+			case ve.screenFrameChan <- buffer[:n]:
+				var f string
+				o := ve.GetUserScreenFrame()
+				ve.mu.RLock()
+				n := len(ve.usersVideo)
+
+				ve.mu.RUnlock()
+				f, err = renderLocalImg(float64(n+1), resizedScreenFrame)
+				if err != nil {
+					ve.log.Error("failed to render img", logger.Err(err))
+					f = o
+				}
+
+				closeWaitChan()
+				ve.userVideo.screenFrame.Store(f)
+				ve.userVideo.mu.Lock()
+				if ve.userVideo.windowedScreen.Load() && ve.userVideo.screenWindow != nil {
+					ve.userVideo.screenImg = screenFrame
+					ve.userVideo.screenWindow.Invalidate()
+				}
+				ve.userVideo.mu.Unlock()
+			default:
+				ve.screenBytesBuffersPool.Put(buffer[:40000])
+			}
+
 		}
 
 	}
@@ -964,11 +962,10 @@ func (ve *videoEngine) GetUsersScreenFramesTerminal() map[uuid.UUID]string {
 
 		f, ok = uv.screenFrame.Load().(string)
 		if ok && f != "" {
-			ve.log.Info("screen f len", len(f))
 			frames[i] = f
 		}
 	}
-	ve.log.Info("len screen frames", len(frames))
+
 	return frames
 }
 
