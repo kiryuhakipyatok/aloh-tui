@@ -29,7 +29,6 @@ import (
 	_ "github.com/pion/mediadevices/pkg/driver/camera"
 	_ "github.com/pion/mediadevices/pkg/driver/screen"
 	"github.com/pion/mediadevices/pkg/io/video"
-	"github.com/pion/mediadevices/pkg/prop"
 )
 
 type VideoEngine interface {
@@ -116,8 +115,8 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 
 	ve := &videoEngine{
 		log:               log,
-		webcamBuffer:      bytes.NewBuffer(make([]byte, 0, 2000)),
-		screenBuffer:      bytes.NewBuffer(make([]byte, 0, 2000)),
+		webcamBuffer:      bytes.NewBuffer(make([]byte, 0, 20000)),
+		screenBuffer:      bytes.NewBuffer(make([]byte, 0, 100000)),
 		webcamFrameChan:   make(chan []byte, 1),
 		screenFrameChan:   make(chan []byte, 1),
 		stopSendVideoChan: make(chan struct{}, 1),
@@ -125,13 +124,13 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		userVideo:         &userVideo{},
 		webcamBytesBuffersPool: sync.Pool{
 			New: func() any {
-				buf := make([]byte, 1500)
+				buf := make([]byte, 20000)
 				return buf
 			},
 		},
 		screenBytesBuffersPool: sync.Pool{
 			New: func() any {
-				buf := make([]byte, 20000)
+				buf := make([]byte, 100000)
 				return buf
 			},
 		},
@@ -295,10 +294,7 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 	if !s == true {
 
 		stream, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
-			Video: func(mtc *mediadevices.MediaTrackConstraints) {
-				mtc.Width = prop.Int(360)
-				mtc.Height = prop.Int(160)
-			},
+			Video: func(mtc *mediadevices.MediaTrackConstraints) {},
 		})
 		if err != nil {
 			ve.log.Error("failed to get stream webcam", logger.Err(err))
@@ -367,10 +363,7 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 	if !s == true {
 
 		stream, err := mediadevices.GetDisplayMedia(mediadevices.MediaStreamConstraints{
-			Video: func(mtc *mediadevices.MediaTrackConstraints) {
-				mtc.Width = prop.Int(1280)
-				mtc.Height = prop.Int(720)
-			},
+			Video: func(mtc *mediadevices.MediaTrackConstraints) {},
 		})
 		if err != nil {
 			ve.log.Error("failed to get stream screen", logger.Err(err))
@@ -530,13 +523,13 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 		}
 	}()
 
-	timer := time.NewTicker(70 * time.Millisecond)
+	timer := time.NewTicker(66 * time.Millisecond)
 
 	closeWaitChan := sync.OnceFunc(func() {
 		close(wc)
 	})
 
-	eOpt, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 1)
+	eOpt, err := encoder.NewLossyEncoderOptions(encoder.PresetPicture, 90)
 	if err != nil {
 		panic(err)
 	}
@@ -581,7 +574,6 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 			copy(buffer, buf)
 
 			n := len(buf)
-
 			select {
 			case ve.webcamFrameChan <- buffer[:n]:
 				var f string
@@ -604,7 +596,7 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 				}
 				ve.userVideo.mu.Unlock()
 			default:
-				ve.webcamBytesBuffersPool.Put(buffer[:1500])
+				ve.webcamBytesBuffersPool.Put(buffer[:20000])
 			}
 		}
 
@@ -621,13 +613,13 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 		}
 	}()
 
-	timer := time.NewTicker(70 * time.Millisecond)
+	timer := time.NewTicker(66 * time.Millisecond)
 
 	closeWaitChan := sync.OnceFunc(func() {
 		close(wc)
 	})
 
-	eOpt, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 1)
+	eOpt, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 90)
 	if err != nil {
 		panic(err)
 	}
@@ -698,7 +690,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 				}
 				ve.userVideo.mu.Unlock()
 			default:
-				ve.screenBytesBuffersPool.Put(buffer[:20000])
+				ve.screenBytesBuffersPool.Put(buffer[:40000])
 			}
 
 		}
@@ -897,39 +889,45 @@ func (ve *videoEngine) OnOffUsersWebcam(res bool, id uuid.UUID) {
 	ve.mu.Lock()
 	defer ve.mu.Unlock()
 	uv, ok := ve.usersVideo[id]
-	if ok {
-		uv.webcamStarted.Store(res)
-		if !res {
-			uv.mu.Lock()
-			if uv.windowedWebcam.Load() && uv.webcamWindow != nil {
-				uv.webcamWindow.Perform(system.ActionClose)
-			}
-			uv.webcamImg = nil
-			uv.webcamFrame.Store("")
-			uv.mu.Unlock()
-		}
-
+	if !ok {
+		uv = &userVideo{}
+		ve.usersVideo[id] = uv
 	}
+
+	uv.webcamStarted.Store(res)
+	if !res {
+		uv.mu.Lock()
+		if uv.windowedWebcam.Load() && uv.webcamWindow != nil {
+			uv.webcamWindow.Perform(system.ActionClose)
+		}
+		uv.webcamImg = nil
+		uv.webcamFrame.Store("")
+		uv.mu.Unlock()
+	}
+
 }
 
 func (ve *videoEngine) OnOffUsersScreen(res bool, id uuid.UUID) {
 	ve.mu.Lock()
 	defer ve.mu.Unlock()
 	uv, ok := ve.usersVideo[id]
-	if ok {
-		uv.screenStarted.Store(res)
-		if !res {
-
-			uv.mu.Lock()
-			if uv.windowedScreen.Load() && uv.screenWindow != nil {
-				uv.screenWindow.Perform(system.ActionClose)
-			}
-			uv.screenImg = nil
-			uv.screenFrame.Store("")
-			uv.mu.Unlock()
-		}
-
+	if !ok {
+		uv = &userVideo{}
+		ve.usersVideo[id] = uv
 	}
+
+	uv.screenStarted.Store(res)
+	if !res {
+
+		uv.mu.Lock()
+		if uv.windowedScreen.Load() && uv.screenWindow != nil {
+			uv.screenWindow.Perform(system.ActionClose)
+		}
+		uv.screenImg = nil
+		uv.screenFrame.Store("")
+		uv.mu.Unlock()
+	}
+
 }
 
 func (ve *videoEngine) GetUsersWebcamFramesTerminal() map[uuid.UUID]string {
@@ -1049,7 +1047,7 @@ func (ve *videoEngine) sendWebcam() {
 					ve.log.Error("failed to send webcam data", logger.Err(err))
 				}
 			}
-			ve.webcamBytesBuffersPool.Put(webcamFrame[:1500])
+			ve.webcamBytesBuffersPool.Put(webcamFrame[:20000])
 		}
 	}
 }
@@ -1067,7 +1065,7 @@ func (ve *videoEngine) sendScreen() {
 					ve.log.Error("failed to send screen data", logger.Err(err))
 				}
 			}
-			ve.screenBytesBuffersPool.Put(screenFrame[:20000])
+			ve.screenBytesBuffersPool.Put(screenFrame[:40000])
 		}
 	}
 }

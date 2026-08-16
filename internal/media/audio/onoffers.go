@@ -87,6 +87,7 @@ func (ae *audioEngine) OnOffSoftDenoice() bool {
 func (ae *audioEngine) OnOffAEC() bool {
 	s := ae.aec.Load()
 	ae.aec.Store(!s)
+	ae.aecDiff.Store(0)
 	ae.mu.Lock()
 	if s {
 		ae.preprocessor.SetEchoCanceller(nil)

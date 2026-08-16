@@ -91,17 +91,26 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 				copy(ae.pcmBuffer, chunk)
 
 				ae.mu.Lock()
-				if ae.aec.Load() {
-					if ae.playbackReady.Load() {
-						ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
-						ae.preprocessor.Run(ae.echolessBufferInt16s)
-						copy(ae.pcmBuffer, ae.echolessBufferInt16s)
-					} else {
-						ae.preprocessor.Run(ae.pcmBuffer)
-					}
+				if ae.isAECActive() {
+					ae.aecDiff.Add(-1)
+					ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
+					ae.preprocessor.Run(ae.echolessBufferInt16s)
+					copy(ae.pcmBuffer, ae.echolessBufferInt16s)
 				} else if ae.softDenoiced.Load() {
 					ae.preprocessor.Run(ae.pcmBuffer)
 				}
+				// if ae.aec.Load() {
+				// 	if ae.playbackReady.Load() {
+				// 		ae.log.Info(0, "aec capture len", len(ae.pcmBuffer))
+				// 		ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
+				// 		ae.preprocessor.Run(ae.echolessBufferInt16s)
+				// 		copy(ae.pcmBuffer, ae.echolessBufferInt16s)
+				// 	} else {
+				// 		ae.preprocessor.Run(ae.pcmBuffer)
+				// 	}
+				// } else if ae.softDenoiced.Load() {
+				// 	ae.preprocessor.Run(ae.pcmBuffer)
+				// }
 
 				ae.mu.Unlock()
 
@@ -306,8 +315,14 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 					}
 				}
 
-				if ae.aec.Load() && ae.captureReady.Load() {
-					ae.echoCanceller.Playback(ae.workMix[:frameLen])
+				if ae.isAECActive() {
+
+					if ae.aecDiff.Load() < 4 {
+
+						ae.echoCanceller.Playback(ae.workMix[:frameLen])
+						ae.aecDiff.Add(1)
+					}
+
 				}
 				ae.mu.Unlock()
 
@@ -340,4 +355,13 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 	return malgo.DeviceCallbacks{
 		Data: data,
 	}
+}
+
+func (ae *audioEngine) isAECActive() bool {
+	return ae.aec.Load() &&
+		ae.connected.Load() &&
+		!ae.mutedMicro.Load() &&
+		!ae.muted.Load() &&
+		ae.captureReady.Load() &&
+		ae.playbackReady.Load()
 }

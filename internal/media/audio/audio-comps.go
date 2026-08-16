@@ -83,6 +83,8 @@ type speexdspComps struct {
 	preprocessor      *speexdsp.Preprocessor
 	captureResampler  *speexdsp.Resampler
 	playbackResampler *speexdsp.Resampler
+
+	aecDiff atomic.Int32
 }
 
 type callbacks struct {

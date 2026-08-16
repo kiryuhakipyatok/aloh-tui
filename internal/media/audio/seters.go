@@ -86,7 +86,9 @@ func (ae *audioEngine) SetDisconnected() error {
 	ae.connected.Store(false)
 	ae.voiceHolder.Store(0)
 	ae.userIsSpeaking.Store(false)
-
+	ae.playbackReady.Store(false)
+	ae.captureReady.Store(false)
+	ae.aecDiff.Store(0)
 	ae.mu.Lock()
 	for len(ae.micDataChan) > 0 {
 		unusedVoice := <-ae.micDataChan
