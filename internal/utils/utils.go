@@ -8,10 +8,18 @@ import (
 	"strings"
 )
 
-func SetupFiles() (nlP, alP, nP, kP string, err error) {
+type FilesPaths struct {
+	NetworkingLog string
+	AppLog        string
+	KeysDir       string
+	UserdataFile  string
+	CrashLog      string
+}
+
+func SetupFiles() (FilesPaths, error) {
 	binPath, err := os.Executable()
 	if err != nil {
-		return "", "", "", "", err
+		return FilesPaths{}, err
 	}
 
 	binDir := filepath.Dir(binPath)
@@ -19,14 +27,15 @@ func SetupFiles() (nlP, alP, nP, kP string, err error) {
 	netwLogPath := filepath.Join(binDir, "networking-logs")
 	appLogPath := filepath.Join(binDir, "app-logs")
 	keysPath := filepath.Join(binDir, "keys")
-	nickFilePath := filepath.Join(binDir, "userdata.json")
+	userdataFilePath := filepath.Join(binDir, "userdata.json")
+	crashLogFilePath := filepath.Join(binDir, "crash.log")
 
 	if err := os.MkdirAll(netwLogPath, 0755); err != nil {
-		return "", "", "", "", err
+		return FilesPaths{}, err
 	}
 
 	if err := os.MkdirAll(appLogPath, 0755); err != nil {
-		return "", "", "", "", err
+		return FilesPaths{}, err
 	}
 
 	netwLogFilePath := filepath.Join(netwLogPath, "log.log")
@@ -34,34 +43,40 @@ func SetupFiles() (nlP, alP, nP, kP string, err error) {
 
 	newtLogFile, err := os.OpenFile(netwLogFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_TRUNC, 0644)
 	if err != nil {
-		return "", "", "", "", err
+		return FilesPaths{}, err
 	}
 	if err := newtLogFile.Close(); err != nil {
-		return "", "", "", "", err
+		return FilesPaths{}, err
 	}
 
 	appLogFile, err := os.OpenFile(appLogFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_TRUNC, 0644)
 	if err != nil {
-		return "", "", "", "", err
+		return FilesPaths{}, err
 	}
 	if err := appLogFile.Close(); err != nil {
-		return "", "", "", "", err
+		return FilesPaths{}, err
 	}
 
 	if err := os.MkdirAll(keysPath, 0700); err != nil {
-		return "", "", "", "", err
+		return FilesPaths{}, err
 	}
 
-	nickFile, err := os.OpenFile(nickFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	nickFile, err := os.OpenFile(userdataFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		return "", "", "", "", err
+		return FilesPaths{}, err
 	}
 
 	if err := nickFile.Close(); err != nil {
-		return "", "", "", "", err
+		return FilesPaths{}, err
 	}
 
-	return netwLogFilePath, appLogFilePath, nickFilePath, keysPath, nil
+	return FilesPaths{
+		NetworkingLog: netwLogFilePath,
+		AppLog:        appLogFilePath,
+		UserdataFile:  userdataFilePath,
+		KeysDir:       keysPath,
+		CrashLog:      crashLogFilePath,
+	}, nil
 }
 
 func DarkenHex(hex string, factor float64) string {
