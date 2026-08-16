@@ -576,19 +576,22 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 			n := len(buf)
 			select {
 			case ve.webcamFrameChan <- buffer[:n]:
-				var f string
-				o := ve.GetUserWebcamFrame()
-				ve.mu.RLock()
-				n := len(ve.usersVideo)
-				ve.mu.RUnlock()
-				f, err = renderLocalImg(float64(n+1), resizedWebcamFrame)
-				if err != nil {
-					ve.log.Error("failed to render img", logger.Err(err))
-					f = o
+				if ve.onWebcamTab.Load() {
+					var f string
+					o := ve.GetUserWebcamFrame()
+					ve.mu.RLock()
+					n := len(ve.usersVideo)
+					ve.mu.RUnlock()
+					f, err = renderLocalImg(float64(n+1), resizedWebcamFrame)
+					if err != nil {
+						ve.log.Error("failed to render img", logger.Err(err))
+						f = o
+					}
+					ve.userVideo.webcamFrame.Store(f)
 				}
 
 				closeWaitChan()
-				ve.userVideo.webcamFrame.Store(f)
+
 				ve.userVideo.mu.Lock()
 				if ve.userVideo.windowedWebcam.Load() && ve.userVideo.webcamWindow != nil {
 					ve.userVideo.webcamImg = webcamFrame
@@ -669,20 +672,22 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 
 			select {
 			case ve.screenFrameChan <- buffer[:n]:
-				var f string
-				o := ve.GetUserScreenFrame()
-				ve.mu.RLock()
-				n := len(ve.usersVideo)
-
-				ve.mu.RUnlock()
-				f, err = renderLocalImg(float64(n+1), resizedScreenFrame)
-				if err != nil {
-					ve.log.Error("failed to render img", logger.Err(err))
-					f = o
+				if ve.onScreenTab.Load() {
+					var f string
+					o := ve.GetUserScreenFrame()
+					ve.mu.RLock()
+					n := len(ve.usersVideo)
+					ve.mu.RUnlock()
+					f, err = renderLocalImg(float64(n+1), resizedScreenFrame)
+					if err != nil {
+						ve.log.Error("failed to render img", logger.Err(err))
+						f = o
+					}
+					ve.userVideo.screenFrame.Store(f)
 				}
 
 				closeWaitChan()
-				ve.userVideo.screenFrame.Store(f)
+
 				ve.userVideo.mu.Lock()
 				if ve.userVideo.windowedScreen.Load() && ve.userVideo.screenWindow != nil {
 					ve.userVideo.screenImg = screenFrame
