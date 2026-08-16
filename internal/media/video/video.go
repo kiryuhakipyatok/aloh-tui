@@ -116,7 +116,7 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 	ve := &videoEngine{
 		log:               log,
 		webcamBuffer:      bytes.NewBuffer(make([]byte, 0, 40000)),
-		screenBuffer:      bytes.NewBuffer(make([]byte, 0, 120000)),
+		screenBuffer:      bytes.NewBuffer(make([]byte, 0, 150000)),
 		webcamFrameChan:   make(chan []byte, 1),
 		screenFrameChan:   make(chan []byte, 1),
 		stopSendVideoChan: make(chan struct{}, 1),
@@ -130,7 +130,7 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		},
 		screenBytesBuffersPool: sync.Pool{
 			New: func() any {
-				buf := make([]byte, 120000)
+				buf := make([]byte, 150000)
 				return buf
 			},
 		},
@@ -695,7 +695,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 				}
 				ve.userVideo.mu.Unlock()
 			default:
-				ve.screenBytesBuffersPool.Put(buffer[:120000])
+				ve.screenBytesBuffersPool.Put(buffer[:150000])
 			}
 
 		}
@@ -1070,7 +1070,7 @@ func (ve *videoEngine) sendScreen() {
 					ve.log.Error("failed to send screen data", logger.Err(err))
 				}
 			}
-			ve.screenBytesBuffersPool.Put(screenFrame[:120000])
+			ve.screenBytesBuffersPool.Put(screenFrame[:150000])
 		}
 	}
 }
