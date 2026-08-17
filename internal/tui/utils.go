@@ -195,7 +195,6 @@ func (m Model) selectSetting() (Model, tea.Cmd) {
 func (m Model) selectAccountSetting() (Model, tea.Cmd) {
 	if i, ok := m.accountList.LipList.SelectedItem().(lists.AccountItem); ok {
 		m.prState = m.state
-		m.state = states.LOAD_STATE
 		switch i.Id {
 		case lists.NICKNAME_SETTINGS:
 			m.state = states.NICKNAME_STATE

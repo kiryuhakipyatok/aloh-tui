@@ -43,7 +43,7 @@ const (
 func (m Model) syncTabState() (Model, tea.Cmd) {
 	cmds := []tea.Cmd{textinput.Blink}
 	m.curWindow = windows.DEF_WINDOW
-	m.prState = m.state
+	//m.prState = m.state
 	if !m.isLoggedIn() {
 		//if m.state != states.LOAD_STATE {
 		switch m.activeTab {
@@ -1653,9 +1653,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "esc":
+			m.log.Info("states before esc", m.state, m.prState)
 			switch m.state {
 			case states.ERR_STATE:
-				m.log.Info("states before esc", m.state, m.prState)
+
 				m.err = nil
 				m.curWindow = windows.DEF_WINDOW
 				if m.prState == states.LOAD_STATE {
@@ -1674,10 +1675,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 				if m.activeTab != 6 {
 					m.state = m.prState
-				} else if m.prState == states.ACCOUNT_STATE {
+				} else if m.prState == states.ACCOUNT_STATE || m.prState == states.DEVICES_STATE {
 					m.state = m.prState
 					m.prState = states.SETTINGS_STATE
-				} else {
+				} else if m.activeTab == 6 {
 					m.state = states.SETTINGS_STATE
 				}
 				m, cmd = m.syncTabState()

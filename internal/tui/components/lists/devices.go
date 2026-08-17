@@ -315,7 +315,7 @@ func (l *DeviceList) UpdateDevicesList(user *users.User, deviceType uint) tea.Cm
 		})
 	}
 
-	newItems := make([]list.Item, 0, len(devicesNames))
+	newItems := make([]list.Item, len(devicesNames))
 
 	var currFind bool
 	switch deviceType {
