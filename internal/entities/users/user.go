@@ -53,7 +53,8 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 					FriendsTab:  "ALT+F",
 					ChatTab:     "ALT+C",
 					VoiceTab:    "ALT+G",
-					VideoTab:    "ALT+D",
+					WebcamTab:   "ALT+D",
+					ScreenTab:   "ALT+A",
 					ProfileTab:  "ALT+E",
 					SettingsTab: "ALT+S",
 					MicMute:     "ALT+V",
@@ -132,7 +133,8 @@ type Binds struct {
 	FriendsTab  string `json:"friends-tab"`
 	ChatTab     string `json:"chat-tab"`
 	VoiceTab    string `json:"voice-tab"`
-	VideoTab    string `json:"video-tab"`
+	WebcamTab   string `json:"webcam-tab"`
+	ScreenTab   string `json:"screen-tab"`
 	ProfileTab  string `json:"profile-tab"`
 	SettingsTab string `json:"settings-tab"`
 	MicMute     string `json:"mic-mute"`

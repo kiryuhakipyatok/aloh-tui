@@ -35,7 +35,7 @@ func (m Model) View() string {
 	usableW := m.width - (padW * 2)
 	usableH := m.height - (padH * 2)
 
-	if usableW < 76 || usableH < 24 {
+	if usableW < minW || usableH < minH {
 		return "terminal too small"
 	}
 
@@ -725,19 +725,27 @@ func (m Model) renderSettingsView(w, h int) string {
 		notifications := m.user.GetNotifications()
 		devices := m.user.GetDevices()
 
-		leftRight := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("binds"),
+		leftRightRows := []string{styles.PaddingLeftCGrayStyle.Render("binds"),
 			renderSetup("friends tab", binds.FriendsTab, colW),
 			renderSetup("chat tab", binds.ChatTab, colW),
 			renderSetup("voice tab", binds.VoiceTab, colW),
-			renderSetup("video tab", binds.VideoTab, colW),
+			renderSetup("webcam tab", binds.WebcamTab, colW),
+			renderSetup("screen tab", binds.ScreenTab, colW),
 			renderSetup("profile tab", binds.ProfileTab, colW),
 			renderSetup("settings tab", binds.SettingsTab, colW),
 			renderSetup("mute mic", binds.MicMute, colW),
-			renderSetup("full mute", binds.FullMute, colW),
-			renderSetup("user's mute", binds.UserMute, colW),
-		)
+		}
 
-		leftLeft := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("audio"),
+		if h > minH+2 {
+			leftRightRows = append(leftRightRows,
+				renderSetup("full mute", binds.FullMute, colW),
+				renderSetup("user's mute", binds.UserMute, colW))
+		}
+
+		leftRight := lipgloss.JoinVertical(lipgloss.Left, leftRightRows...)
+
+		leftLeftRows := []string{
+			styles.PaddingLeftCGrayStyle.Render("audio"),
 			renderSetup("hard denoise", fmt.Sprintf("%t", audio.Denoises.HardDenoise), colW),
 			renderSetup("soft denoise", fmt.Sprintf("%t", audio.Denoises.SoftDenoise), colW),
 			renderSetup("echocanceller", fmt.Sprintf("%t", audio.AEC), colW),
@@ -745,8 +753,14 @@ func (m Model) renderSettingsView(w, h int) string {
 			"", styles.PaddingLeftCGrayStyle.Render("notifications"),
 			renderSetup("app notifications", fmt.Sprintf("%t", notifications.AppNotifications), colW),
 			renderSetup("desktop notifications", fmt.Sprintf("%t", notifications.DesktopNotifications), colW),
-			renderSetup("audio notifications", fmt.Sprintf("%t", notifications.AudioNotifications), colW),
-		)
+		}
+
+		if h > minH+2 {
+			leftLeftRows = append(leftLeftRows,
+				renderSetup("audio notifications", fmt.Sprintf("%t", notifications.AudioNotifications), colW))
+		}
+
+		leftLeft := lipgloss.JoinVertical(lipgloss.Left, leftLeftRows...)
 
 		leftTop := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("devices"),
 			renderSetup("headphones", devices.Headphones, rightW),
@@ -1345,8 +1359,8 @@ func (m Model) renderHelpView(w, h int) string {
 		return safeTruncate(styles.PaddingLeftStyle.Render(k+d), leftW)
 	}
 
-	quote := styles.PaddingLeftCGrayStyle.
-		Render("hint - phd: personal hard denoise, psd: personal soft denoise")
+	quote := safeTruncate(styles.PaddingLeftCGrayStyle.
+		Render("hint - phd: personal hard denoise, psd: personal soft denoise"), rightW)
 
 	leftRows := []string{
 		lblLeft, "",
@@ -1364,20 +1378,7 @@ func (m Model) renderHelpView(w, h int) string {
 		renderShortcut("UP / DN", "- move cursor in lists/inputs"),
 		"",
 		styles.PaddingLeftCGrayStyle.Render("quick jump:"),
-		renderShortcut("ALT+F", "- go to friends tab"),
-		renderShortcut("ALT+C", "- go to chat tab"),
-		renderShortcut("ALT+G", "- go to voice tab"),
-		renderShortcut("ALT+D", "- go to webcam tab"),
-		renderShortcut("ALT+E", "- go to profile tab"),
-		renderShortcut("ALT+S", "- go to settings tab"),
-		renderShortcut("ALT+H", "- go to / close help menu"), "",
-		styles.PaddingLeftCGrayStyle.Render("friends contols:"),
-		renderShortcut("ALT+X", "- deny friendship request"),
-		renderShortcut("ENTER", "- accept friendship request"),
 	}
-
-	leftBox := lipgloss.JoinVertical(lipgloss.Left, leftRows...)
-	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	rightRows := []string{
 		lblRight, "", quote, "",
@@ -1391,16 +1392,38 @@ func (m Model) renderHelpView(w, h int) string {
 		styles.PaddingLeftCGrayStyle.Render("chat controls:"),
 		renderShortcut("CTRL+P", "- paste smth"), "",
 		styles.PaddingLeftCGrayStyle.Render("webcam controls:"),
-		renderShortcut("ENTER", "- toggle webcam"),
-		renderShortcut("LMB ON WEBCAM", "- toggle webcam window"), "",
-		styles.PaddingLeftCGrayStyle.Render("screen controls:"),
-		renderShortcut("ENTER", "- toggle screen"),
-		renderShortcut("LMB ON SCREEN", "- toggle screen window"),
 	}
+
+	if h > minH+2 {
+		leftRows = append(leftRows,
+			renderShortcut("ALT+F", "- go to friends tab"),
+			renderShortcut("ALT+C", "- go to chat tab"),
+			renderShortcut("ALT+G", "- go to voice tab"),
+			renderShortcut("ALT+D", "- go to webcam tab"),
+			renderShortcut("ALT+A", "- go to screen tab"),
+			renderShortcut("ALT+E", "- go to profile tab"),
+			renderShortcut("ALT+S", "- go to settings tab"),
+			renderShortcut("ALT+H", "- go to / close help menu"), "",
+			styles.PaddingLeftCGrayStyle.Render("friends contols:"),
+			renderShortcut("ALT+X", "- deny friendship request"),
+			renderShortcut("ENTER", "- accept friendship request"),
+		)
+
+		rightRows = append(rightRows,
+			renderShortcut("ENTER", "- toggle webcam"),
+			renderShortcut("LMB ON WEBCAM", "- toggle webcam window"), "",
+			styles.PaddingLeftCGrayStyle.Render("screen controls:"),
+			renderShortcut("ENTER", "- toggle screen"),
+			renderShortcut("LMB ON SCREEN", "- toggle screen window"),
+		)
+	}
+
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, leftRows...)
+	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightRows...)
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
 	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, styles.CDimStyle.Render(vertLine(h)))
-	return m.zone.Mark("profileW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane)
 }

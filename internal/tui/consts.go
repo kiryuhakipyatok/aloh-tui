@@ -11,4 +11,7 @@ const (
 
 	regTab = "registration"
 	logTab = "login"
+
+	minW = 76
+	minH = 24
 )

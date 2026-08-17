@@ -276,7 +276,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m, cmd = m.syncTabState()
 					}
 					return m, cmd
-				} else if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
+				} else if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE && m.state != states.HELP_STATE {
 					if !m.inCurrentWindow(msg) {
 						m.cursor = 0
 					}
@@ -1430,6 +1430,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "alt+у", "alt+У", "alt+e", "alt+E":
 			if m.isLoggedIn() {
 				m.activeTab = 5
+				m, cmd = m.syncTabState()
+			}
+
+		case "alt+ф", "alt+Ф", "alt+a", "alt+A":
+			if m.isLoggedIn() {
+				m.activeTab = 4
 				m, cmd = m.syncTabState()
 			}
 
