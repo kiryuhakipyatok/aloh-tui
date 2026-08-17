@@ -51,6 +51,7 @@ jobs:
           export CGO_LDFLAGS="-L$PREFIX/lib"
           
           go build \
+            -tags nomicrophone \
             -v -trimpath \
             -ldflags="-s -w -X main.version=${{ inputs.version }} -linkmode external -extldflags '-Wl,-rpath,\$ORIGIN'" \
             -o aloh-linux \
@@ -124,6 +125,7 @@ jobs:
 
           go build \
             -v -trimpath \
+            -tags nomicrophone \
             -ldflags="-s -w -X main.version=${{ inputs.version }} -extldflags '-static -lsharpyuv -logg'" \
             -o aloh.exe \
             ./cmd/app

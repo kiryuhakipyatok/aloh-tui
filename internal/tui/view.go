@@ -751,6 +751,7 @@ func (m Model) renderSettingsView(w, h int) string {
 		leftTop := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("devices"),
 			renderSetup("headphones", devices.Headphones, rightW),
 			renderSetup("microphone", devices.Microphone, rightW),
+			renderSetup("webcam", devices.Webcam, rightW),
 		)
 
 		styledLeftLeft := lipgloss.NewStyle().Width(colW).Render(leftLeft)
@@ -782,13 +783,40 @@ func (m Model) renderSettingsView(w, h int) string {
 		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
 
 	case states.DEVICES_STATE:
-		lblLeft = m.headerActiveStyle.Render("► headphones")
-		m.headphonesList.LipList.SetSize(leftW-2, h-2)
-		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.headphonesList.LipList.View())
+		lblRight = m.headerActiveStyle.Render("► devices settings")
+		m.devicesList.LipList.SetSize(rightW-2, h-2)
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.devicesList.LipList.View())
 
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+
+	case states.MICROPHONE_SET_STATE:
 		lblRight = m.headerActiveStyle.Render("► microphones")
 		m.microphonesList.LipList.SetSize(rightW-2, h-2)
 		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.microphonesList.LipList.View())
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+
+	case states.HEADPHONES_SET_STATE:
+		lblRight = m.headerActiveStyle.Render("► headphones")
+		m.headphonesList.LipList.SetSize(rightW-2, h-2)
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.headphonesList.LipList.View())
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+
+	case states.WEBCAM_SET_STATE:
+		lblRight = m.headerActiveStyle.Render("► webcams")
+		m.webcamsList.LipList.SetSize(rightW-2, h-2)
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.webcamsList.LipList.View())
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
 
 	case states.BINDS_STATE:
 		lblRight = m.headerActiveStyle.Render("► audio binds")

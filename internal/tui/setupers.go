@@ -202,9 +202,13 @@ func (m *Model) setupUsersLists() {
 	}
 
 	if m.user.Engines.AudioEngine != nil {
-		m.microphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.MICROPHONE, ls)
+		m.microphonesList = lists.SetupDevicesList(m.user.Engines, lists.MICROPHONE, ls)
 
-		m.headphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.HEADPHONES, ls)
+		m.headphonesList = lists.SetupDevicesList(m.user.Engines, lists.HEADPHONES, ls)
+	}
+
+	if m.user.Engines.VideoEngine != nil {
+		m.webcamsList = lists.SetupDevicesList(m.user.Engines, lists.WEBCAMS, ls)
 	}
 
 	m.friendsList = lists.SetupFriendsList(m.user, ls)
@@ -222,6 +226,7 @@ func (m *Model) setupUsersLists() {
 
 	m.audioList = lists.SetupSwitcherList(m.user, lists.AUDIO, ls)
 	m.accountList = lists.SetupAccountList(m.user, ls)
+	m.devicesList = lists.SetupDevicesTypeList(m.user, ls)
 }
 
 func (m *Model) setupFriendsColors() {

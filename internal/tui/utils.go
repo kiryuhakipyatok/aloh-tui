@@ -214,6 +214,26 @@ func (m Model) selectAccountSetting() (Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) selectDevicesSetting() (Model, tea.Cmd) {
+	if i, ok := m.devicesList.LipList.SelectedItem().(lists.DeviceTypeItem); ok {
+		m.prState = m.state
+		m.state = states.LOAD_STATE
+		switch i.Id {
+		case lists.HEADPHONES_SETTINGS:
+			m.state = states.HEADPHONES_SET_STATE
+		case lists.WEBCAM_SETTINGS:
+			m.state = states.WEBCAM_SET_STATE
+		case lists.MICROPHONE_SETTINGS:
+			m.state = states.MICROPHONE_SET_STATE
+		default:
+			return m, nil
+		}
+		m.log.Info("states", m.prState, m.state)
+		return m.syncTabState()
+	}
+	return m, nil
+}
+
 func cloneMap(original map[uuid.UUID][]users.Identity) map[uuid.UUID][]users.Identity {
 	cp := make(map[uuid.UUID][]users.Identity, len(original))
 	for k, v := range original {

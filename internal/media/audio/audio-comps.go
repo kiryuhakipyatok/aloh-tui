@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"aloh-tui/internal/media"
 	"aloh-tui/internal/media/audio/filter"
 	"aloh-tui/pkg/logger"
 	"sync"
@@ -71,11 +72,11 @@ type devices struct {
 	captureDevice  *malgo.Device
 	playbackDevice *malgo.Device
 
-	Microphones map[string]DeviceInfo
-	Headphones  map[string]DeviceInfo
+	Microphones map[string]media.Device
+	Headphones  map[string]media.Device
 
-	CurrentMicrophone DeviceInfo
-	CurrentHeadphones DeviceInfo
+	CurrentMicrophone media.Device
+	CurrentHeadphones media.Device
 }
 
 type speexdspComps struct {

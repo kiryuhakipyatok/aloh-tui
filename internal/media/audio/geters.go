@@ -1,18 +1,20 @@
 package audio
 
+import "aloh-tui/internal/media"
+
 type Geters interface {
-	GetCurrentMicrophone() DeviceInfo
-	GetCurrentHeadphones() DeviceInfo
+	GetCurrentMicrophone() media.Device
+	GetCurrentHeadphones() media.Device
 }
 
-func (ae *audioEngine) GetCurrentMicrophone() DeviceInfo {
+func (ae *audioEngine) GetCurrentMicrophone() media.Device {
 	ae.mu.RLock()
 	curMic := ae.CurrentMicrophone
 	ae.mu.RUnlock()
 	return curMic
 }
 
-func (ae *audioEngine) GetCurrentHeadphones() DeviceInfo {
+func (ae *audioEngine) GetCurrentHeadphones() media.Device {
 	ae.mu.RLock()
 	curH := ae.CurrentHeadphones
 	ae.mu.RUnlock()

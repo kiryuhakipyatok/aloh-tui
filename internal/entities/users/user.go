@@ -118,6 +118,7 @@ type Engines struct {
 type Devices struct {
 	Microphone string `json:"microphone"`
 	Headphones string `json:"headphones"`
+	Webcam     string `json:"webcam"`
 }
 
 type Setup struct {

@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"aloh-tui/internal/media"
 	"aloh-tui/internal/media/audio/backends"
 	"aloh-tui/internal/media/audio/filter"
 	"aloh-tui/internal/networking"
@@ -197,8 +198,8 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		return nil, err
 	}
 
-	micsInfo := make(map[string]DeviceInfo, 0)
-	headsInfo := make(map[string]DeviceInfo, 0)
+	micsInfo := make(map[string]media.Device, 0)
+	headsInfo := make(map[string]media.Device, 0)
 
 	var (
 		ch     uint32

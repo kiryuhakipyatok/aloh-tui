@@ -45,3 +45,21 @@ func ChangeHeadphonesCmd(user *users.User, headphone string) tea.Cmd {
 		return msg
 	}
 }
+
+func ChangeWebcamCmd(user *users.User, webcam string) tea.Cmd {
+	return func() tea.Msg {
+		msg := ChangeDeviceMessage{}
+		if user.Engines.VideoEngine != nil {
+			if err := user.Engines.VideoEngine.ChangeWebcam(webcam); err != nil {
+				msg.Err = err
+				return msg
+			}
+
+			if err := user.ChangeWebcam(webcam); err != nil {
+				msg.Err = err
+			}
+		}
+
+		return msg
+	}
+}

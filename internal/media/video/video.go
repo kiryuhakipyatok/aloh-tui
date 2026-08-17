@@ -1,6 +1,7 @@
 package video
 
 import (
+	"aloh-tui/internal/media"
 	"aloh-tui/internal/networking"
 	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
@@ -26,9 +27,11 @@ import (
 	"github.com/kolesa-team/go-webp/encoder"
 	"github.com/kolesa-team/go-webp/webp"
 	"github.com/pion/mediadevices"
+	"github.com/pion/mediadevices/pkg/driver"
 	_ "github.com/pion/mediadevices/pkg/driver/camera"
 	_ "github.com/pion/mediadevices/pkg/driver/screen"
 	"github.com/pion/mediadevices/pkg/io/video"
+	"github.com/pion/mediadevices/pkg/prop"
 )
 
 type VideoEngine interface {
@@ -41,11 +44,15 @@ type VideoEngine interface {
 	OnOffUsersScreenWindow(id uuid.UUID, nickname string) (bool, error)
 	GetUsersWebcamFramesTerminal() map[uuid.UUID]string
 	GetUsersScreenFramesTerminal() map[uuid.UUID]string
+	FetchWebcams() map[string]media.Device
+	GetCurrentWebcam() media.Device
 	OnOffUsersScreen(res bool, id uuid.UUID)
 	OnOffUsersWebcam(res bool, id uuid.UUID)
 	OnOffWebcamWindow() (bool, error)
 	OnOffScreenWindow() (bool, error)
 	SwitchOnWebcamTab(res bool)
+	ChangeWebcam(webcam string) error
+	UpdateWebcams()
 	SwitchOnScreenTab(res bool)
 	OnOffWebcam() (bool, error)
 	OnOffScreen() (bool, error)
@@ -79,6 +86,9 @@ type videoEngine struct {
 	webcamBytesBuffersPool sync.Pool
 	screenBytesBuffersPool sync.Pool
 
+	currentWebcam media.Device
+	webcams       map[string]media.Device
+
 	connected atomic.Bool
 
 	onWebcamTab atomic.Bool
@@ -93,7 +103,13 @@ type videoEngine struct {
 	log *logger.Logger
 }
 
+type DeviceInfo struct {
+	Name  string
+	Index int
+}
+
 type VideoSetup struct {
+	Webcam string
 }
 
 type userVideo struct {
@@ -112,7 +128,6 @@ type userVideo struct {
 
 func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 	log := l.AddOp("videoEngine")
-
 	ve := &videoEngine{
 		log:               log,
 		webcamBuffer:      bytes.NewBuffer(make([]byte, 0, 40000)),
@@ -136,10 +151,159 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		},
 	}
 
+	devices := mediadevices.EnumerateDevices()
+	webcams := make(map[string]media.Device, len(devices))
+	var i int
+	for _, d := range devices {
+		if d.DeviceType == driver.Camera && d.Kind == mediadevices.VideoInput {
+			di := DeviceInfo{
+				Name:  d.Label,
+				Index: i,
+			}
+			webcams[d.Label] = di
+
+			if vs.Webcam != "" && vs.Webcam == d.Label {
+				ve.currentWebcam = di
+				continue
+			}
+
+			ve.currentWebcam = di
+			i++
+		}
+	}
+
+	ve.log.Info("webcams", webcams)
+	ve.webcams = webcams
+
 	go ve.sendWebcam()
 	go ve.sendScreen()
 
 	return ve, nil
+}
+
+func (ve *videoEngine) UpdateWebcams() {
+	devices := mediadevices.EnumerateDevices()
+	webcams := make(map[string]media.Device, len(devices))
+
+	for i, d := range devices {
+		if d.DeviceType == driver.Camera && d.Kind == mediadevices.VideoInput {
+			di := DeviceInfo{
+				Name:  d.DeviceID,
+				Index: i,
+			}
+			webcams[d.DeviceID] = di
+
+		}
+	}
+	ve.mu.Lock()
+	ve.webcams = webcams
+	ve.mu.Unlock()
+}
+
+func (ve *videoEngine) resolveWebcamByName(webcam string) (DeviceInfo, error) {
+	var di DeviceInfo
+	devices := mediadevices.EnumerateDevices()
+	for i, d := range devices {
+		if d.DeviceType == driver.Camera && d.Kind == mediadevices.VideoInput && d.Label == webcam {
+			di.Name = d.Label
+			di.Index = i
+			return di, nil
+		}
+	}
+	return di, errs.ErrNotFound()
+}
+
+func (ve *videoEngine) ChangeWebcam(webcam string) error {
+	started := ve.userVideo.webcamStarted.Load()
+	if started && ve.connected.Load() {
+		ve.userVideo.mu.Lock()
+		if ve.userVideo.webcamWindow != nil {
+			ve.userVideo.webcamWindow.Perform(system.ActionClose)
+		}
+		ve.userVideo.mu.Unlock()
+
+		ve.mu.Lock()
+		var waitWebcam chan struct{}
+		if ve.stopProcessWebcamChan != nil {
+			close(ve.stopProcessWebcamChan)
+			if ve.waitProcessWebcamChan != nil {
+				waitWebcam = ve.waitProcessWebcamChan
+
+			}
+		}
+		ve.mu.Unlock()
+		if waitWebcam != nil {
+			<-waitWebcam
+		}
+
+		ve.mu.Lock()
+		ve.waitProcessWebcamChan = nil
+		ve.stopProcessWebcamChan = nil
+		if ve.webcamTrack != nil {
+			if err := ve.webcamTrack.Close(); err != nil {
+				ve.log.Error("failed to close webcam track", logger.Err(err))
+			}
+			ve.webcamTrack = nil
+		}
+
+		ve.webcamReader = nil
+		ve.mu.Unlock()
+		ve.userVideo.webcamFrame.Store("")
+		ve.userVideo.webcamStarted.Store(false)
+	}
+
+	resolvedWebcam, err := ve.resolveWebcamByName(webcam)
+	if err != nil {
+		ve.log.Error("failed to resolve webcam", logger.Err(err))
+		return err
+	}
+
+	ve.mu.Lock()
+	ve.currentWebcam = resolvedWebcam
+	ve.mu.Unlock()
+
+	if started {
+		stream, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
+			Video: func(mtc *mediadevices.MediaTrackConstraints) {
+
+				mtc.DeviceID = prop.String(resolvedWebcam.Name)
+			},
+		})
+		if err != nil {
+			ve.log.Error("failed to get stream webcam", logger.Err(err))
+			return err
+		}
+
+		track := stream.GetVideoTracks()[0]
+
+		videoTrack := track.(*mediadevices.VideoTrack)
+
+		videoReader := videoTrack.NewReader(false)
+
+		ve.webcamReader = videoReader
+		ve.webcamTrack = videoTrack
+
+		ve.stopProcessWebcamChan = make(chan struct{}, 1)
+		ve.waitProcessWebcamChan = make(chan struct{}, 1)
+		waitChan := make(chan struct{}, 1)
+		go ve.processWebcam(waitChan)
+		<-waitChan
+		ve.userVideo.webcamStarted.Store(true)
+	}
+	return nil
+}
+
+func (ve *videoEngine) FetchWebcams() map[string]media.Device {
+	ve.mu.RLock()
+	webcs := ve.webcams
+	ve.mu.RUnlock()
+	return webcs
+}
+
+func (ve *videoEngine) GetCurrentWebcam() media.Device {
+	ve.mu.RLock()
+	defer ve.mu.RUnlock()
+	return ve.currentWebcam
 }
 
 func (ve *videoEngine) SetNetworking(netw networking.Networking) {
@@ -292,9 +456,17 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 	s := ve.userVideo.webcamStarted.Load()
 
 	if !s == true {
-
+		ve.mu.RLock()
+		curW, ok := ve.currentWebcam.(DeviceInfo)
+		if !ok {
+			return false, errs.ErrInvalidType
+		}
+		ve.mu.RUnlock()
 		stream, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
-			Video: func(mtc *mediadevices.MediaTrackConstraints) {},
+			Video: func(mtc *mediadevices.MediaTrackConstraints) {
+
+				mtc.DeviceID = prop.String(curW.Name)
+			},
 		})
 		if err != nil {
 			ve.log.Error("failed to get stream webcam", logger.Err(err))

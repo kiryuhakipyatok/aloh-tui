@@ -152,16 +152,45 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 					lists.SetListVisible(&m.notificationsList.DefList, false)
 					lists.SetListVisible(&m.settingsList.DefList, true)
 				}
-			case states.DEVICES_STATE:
+			case states.MICROPHONE_SET_STATE:
 				switch m.sideState {
 				case states.RIGHT_STATE:
 					lists.SetListVisible(&m.microphonesList.DefList, true)
-					lists.SetListVisible(&m.headphonesList.DefList, false)
+					lists.SetListVisible(&m.settingsList.DefList, false)
 				case states.LEFT_STATE:
 					lists.SetListVisible(&m.microphonesList.DefList, false)
-					lists.SetListVisible(&m.headphonesList.DefList, true)
+					lists.SetListVisible(&m.settingsList.DefList, true)
 				}
 				cmds = append(cmds, commands.SecTickCmd())
+			case states.HEADPHONES_SET_STATE:
+				switch m.sideState {
+				case states.RIGHT_STATE:
+					lists.SetListVisible(&m.headphonesList.DefList, true)
+					lists.SetListVisible(&m.settingsList.DefList, false)
+				case states.LEFT_STATE:
+					lists.SetListVisible(&m.headphonesList.DefList, false)
+					lists.SetListVisible(&m.settingsList.DefList, true)
+				}
+				cmds = append(cmds, commands.SecTickCmd())
+			case states.WEBCAM_SET_STATE:
+				switch m.sideState {
+				case states.RIGHT_STATE:
+					lists.SetListVisible(&m.webcamsList.DefList, true)
+					lists.SetListVisible(&m.settingsList.DefList, false)
+				case states.LEFT_STATE:
+					lists.SetListVisible(&m.webcamsList.DefList, false)
+					lists.SetListVisible(&m.settingsList.DefList, true)
+				}
+				cmds = append(cmds, commands.SecTickCmd())
+			case states.DEVICES_STATE:
+				switch m.sideState {
+				case states.RIGHT_STATE:
+					lists.SetListVisible(&m.devicesList.DefList, true)
+					lists.SetListVisible(&m.settingsList.DefList, false)
+				case states.LEFT_STATE:
+					lists.SetListVisible(&m.devicesList.DefList, false)
+					lists.SetListVisible(&m.settingsList.DefList, true)
+				}
 			case states.ACCOUNT_STATE:
 				switch m.sideState {
 				case states.RIGHT_STATE:
@@ -1262,9 +1291,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.TickMsg:
 		if m.state != states.LOAD_STATE {
-			if m.user.Engines.AudioEngine != nil && m.activeTab == 5 && m.state == states.DEVICES_STATE {
-				updatesDevices := tea.Sequence(commands.UpdateMicrophonesCmd(m.user), commands.UpdateHeadphonesCmd(m.user))
-				cmds = append(cmds, updatesDevices, commands.SecTickCmd())
+			if m.user.Engines.AudioEngine != nil && m.activeTab == 6 &&
+				m.prState == states.DEVICES_STATE {
+				var cmd tea.Cmd
+				switch m.state {
+				case states.HEADPHONES_SET_STATE:
+					cmd = commands.UpdateHeadphonesCmd(m.user)
+				case states.WEBCAM_SET_STATE:
+					cmd = commands.UpdateWebcamsCmd(m.user)
+				case states.MICROPHONE_SET_STATE:
+					commands.UpdateMicrophonesCmd(m.user)
+				}
+				cmds = append(cmds, cmd, commands.SecTickCmd())
 			}
 
 		}
@@ -1628,7 +1666,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = m.prState
 				}
 			default:
-				if m.activeTab != 5 {
+				if m.activeTab != 6 {
 					m.state = m.prState
 				} else if m.prState == states.ACCOUNT_STATE {
 					m.state = m.prState
@@ -2061,11 +2099,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					switch m.sideState {
 					case states.RIGHT_STATE:
 						switch m.state {
-						case states.DEVICES_STATE:
-							m.prState = m.state
-							m.state = states.LOAD_STATE
+						case states.HEADPHONES_SET_STATE:
+							if i, ok := m.headphonesList.LipList.SelectedItem().(lists.DeviceItem); ok {
+								m.prState = m.state
+								m.state = states.LOAD_STATE
+								cmds = append(cmds, commands.ChangeHeadphonesCmd(m.user, i.Name),
+									m.headphonesList.UpdateDevicesItemList(i.Name))
+							}
+						case states.WEBCAM_SET_STATE:
+							if i, ok := m.webcamsList.LipList.SelectedItem().(lists.DeviceItem); ok {
+								m.prState = m.state
+								m.state = states.LOAD_STATE
+								cmds = append(cmds, commands.ChangeWebcamCmd(m.user, i.Name),
+									m.webcamsList.UpdateDevicesItemList(i.Name))
+							}
+						case states.MICROPHONE_SET_STATE:
 							if i, ok := m.microphonesList.LipList.SelectedItem().(lists.DeviceItem); ok {
-								cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.Name),
+								m.prState = m.state
+								m.state = states.LOAD_STATE
+								cmds = append(cmds, commands.ChangeHeadphonesCmd(m.user, i.Name),
 									m.microphonesList.UpdateDevicesItemList(i.Name))
 							}
 						case states.AUDIO_STATE:
@@ -2100,6 +2152,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						case states.ACCOUNT_STATE:
 							return m.selectAccountSetting()
+						case states.DEVICES_STATE:
+							return m.selectDevicesSetting()
 						case states.NICKNAME_STATE:
 							newNickname, ok := isEmptyString(m.nicknameInputs[0].Value())
 							if ok {
@@ -2169,17 +2223,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							return m.selectSetting()
 						case states.ACCOUNT_STATE:
 							return m.selectSetting()
+						case states.DEVICES_STATE:
+							return m.selectSetting()
 						case states.AUDIO_STATE:
 							return m.selectSetting()
 						case states.NOTIFICATIONS_STATE:
 							return m.selectSetting()
-						case states.DEVICES_STATE:
-							if i, ok := m.headphonesList.LipList.SelectedItem().(lists.DeviceItem); ok {
-								m.prState = m.state
-								m.state = states.LOAD_STATE
-								cmds = append(cmds, commands.ChangeHeadphonesCmd(m.user, i.Name),
-									m.headphonesList.UpdateDevicesItemList(i.Name))
-							}
 						}
 					}
 
@@ -2254,11 +2303,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case states.NOTIFICATIONS_STATE:
 						m.notificationsList.LipList, cmd = m.notificationsList.LipList.Update(msg)
 						cmds = append(cmds, cmd)
-					case states.DEVICES_STATE:
+					case states.MICROPHONE_SET_STATE:
 						m.microphonesList.LipList, cmd = m.microphonesList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.HEADPHONES_SET_STATE:
+						m.headphonesList.LipList, cmd = m.headphonesList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.WEBCAM_SET_STATE:
+						m.webcamsList.LipList, cmd = m.webcamsList.LipList.Update(msg)
 						cmds = append(cmds, cmd)
 					case states.ACCOUNT_STATE:
 						m.accountList.LipList, cmd = m.accountList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.DEVICES_STATE:
+						m.devicesList.LipList, cmd = m.devicesList.LipList.Update(msg)
 						cmds = append(cmds, cmd)
 					case states.NICKNAME_STATE:
 						for i := range m.nicknameInputs {
@@ -2290,9 +2348,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						cmds = append(cmds, cmd)
 					case states.NOTIFICATIONS_STATE:
 						m.settingsList.LipList, cmd = m.settingsList.LipList.Update(msg)
-						cmds = append(cmds, cmd)
-					case states.DEVICES_STATE:
-						m.headphonesList.LipList, cmd = m.headphonesList.LipList.Update(msg)
 						cmds = append(cmds, cmd)
 					}
 				}

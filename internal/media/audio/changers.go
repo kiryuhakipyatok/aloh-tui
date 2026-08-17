@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
 	"unsafe"
 
@@ -39,7 +40,11 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 	ae.mu.RLock()
 	micInfo, ok := ae.Microphones[microphone]
 	if ok && micId != nil {
-		ch = micInfo.Channels
+		di, ok := micInfo.(DeviceInfo)
+		if !ok {
+			return errs.ErrInvalidType
+		}
+		ch = di.Channels
 	}
 	ae.mu.RUnlock()
 

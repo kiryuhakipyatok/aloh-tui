@@ -41,3 +41,16 @@ func UpdateHeadphonesCmd(user *users.User) tea.Cmd {
 		return msg
 	}
 }
+
+func UpdateWebcamsCmd(user *users.User) tea.Cmd {
+	return func() tea.Msg {
+		msg := UpdateDevicesMsg{
+			Typee: lists.WEBCAMS,
+		}
+		if user.Engines.VideoEngine != nil {
+			user.Engines.VideoEngine.UpdateWebcams()
+		}
+
+		return msg
+	}
+}

@@ -19,6 +19,7 @@ var (
 	ErrNotBlockedBase             = errors.New("not blocked")
 	ErrOldAndNewPasswordEqualBase = errors.New("old and new passwords are equal")
 	ErrNoAvailableWebcamBase      = errors.New("no available webcam")
+	ErrInvalidType                = errors.New("error invalid type")
 )
 
 type AppError struct {
