@@ -15,6 +15,7 @@ type Changers interface {
 }
 
 func (ae *audioEngine) ChangeMicrophone(microphone string) error {
+	ae.log.Info(0, "changing mic")
 	ae.lifecycleMu.Lock()
 	defer ae.lifecycleMu.Unlock()
 
@@ -67,7 +68,7 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 
 	captureSampleRate := int(newCaptureDevice.SampleRate())
 
-	newCaptureResampler, err := speexdsp.NewResampler(1, captureSampleRate, 48000, 7)
+	newCaptureResampler, err := speexdsp.NewResampler(1, captureSampleRate, sampleRate, 7)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to create new capture resampler", logger.Err(err))
 		newCaptureDevice.Uninit()
@@ -122,7 +123,7 @@ func (ae *audioEngine) ChangeMicrophone(microphone string) error {
 	if oldCaptureResampler != nil {
 		oldCaptureResampler.Close()
 	}
-
+	ae.log.Info(0, "new mic", ae.CurrentMicrophone)
 	return nil
 }
 
@@ -165,7 +166,7 @@ func (ae *audioEngine) ChangeHeadphones(headphones string) error {
 
 	playbackSampleRate := int(newPlaybackDevice.SampleRate())
 
-	newPlaybackResampler, err := speexdsp.NewResampler(1, playbackSampleRate, 48000, 7)
+	newPlaybackResampler, err := speexdsp.NewResampler(1, sampleRate, playbackSampleRate, 7)
 	if err != nil {
 		ae.log.Error(ae.errLogCount, "failed to create new playback resampler", logger.Err(err))
 		newPlaybackDevice.Uninit()

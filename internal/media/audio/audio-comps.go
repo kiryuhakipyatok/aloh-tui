@@ -131,6 +131,7 @@ type usersAudio struct {
 	isSpeaking           atomic.Bool
 	playing              bool
 	framesCount          uint
+	workMix              []int16
 	muted                atomic.Bool
 	volumeCoefficient    float32
 	decodedBuffer        []byte
@@ -142,4 +143,5 @@ type usersAudio struct {
 	softDenoised         atomic.Bool
 	personalHardDenoise  *rnnoise.RNNoise
 	hardDenoised         atomic.Bool
+	mu                   sync.Mutex
 }

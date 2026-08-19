@@ -87,6 +87,19 @@ func SetupAuth(as AuthSetup) error {
 			return err
 		}
 
+		curMic, ok := audioEngine.GetCurrentMicrophone().(audio.DeviceInfo)
+		if ok {
+			as.User.Data.Devices.Microphone = curMic.Name
+		}
+		curHeads, ok := audioEngine.GetCurrentHeadphones().(audio.DeviceInfo)
+		if ok {
+			as.User.Data.Devices.Headphones = curHeads.Name
+		}
+		curW, ok := videoEngine.GetCurrentWebcam().(video.DeviceInfo)
+		if ok {
+			as.User.Data.Devices.Webcam = curW.Name
+		}
+
 		audioEngine.SetNetworking(networking)
 		videoEngine.SetNetworking(networking)
 

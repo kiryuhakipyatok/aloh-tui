@@ -14,9 +14,9 @@ type MuteUnmuters interface {
 }
 
 func (ae *audioEngine) MuteUnmuteUser(id uuid.UUID) (bool, error) {
-	ae.mu.Lock()
-	defer ae.mu.Unlock()
+	ae.mu.RLock()
 	ua, ok := ae.usersAudio[id]
+	ae.mu.RUnlock()
 	if !ok {
 		return false, errs.ErrNotFound()
 	}

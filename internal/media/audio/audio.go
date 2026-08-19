@@ -420,7 +420,7 @@ func (ae *audioEngine) sendVoice() {
 
 			ae.mu.RUnlock()
 			if isConn && netw != nil && sessionId == voice.sessionId {
-
+				ae.log.Info(0, "sended")
 				if err := ae.netw.SendVoiceData(voice.data); err != nil {
 					ae.log.Error(ae.errLogCount, "failed to send voice data", logger.Err(err))
 				}

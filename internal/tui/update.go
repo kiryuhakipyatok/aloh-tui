@@ -886,15 +886,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
 		} else if m.connected {
-			if m.user.Engines.AudioEngine != nil {
-				if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
-					return m.Err(err)
-				}
-			}
+			// if m.user.Engines.AudioEngine != nil {
+			// 	if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
+			// 		return m.Err(err)
+			// 	}
+			// }
 
-			if m.user.Engines.VideoEngine != nil {
-				m.user.Engines.VideoEngine.SetDisconnected()
-			}
+			// if m.user.Engines.VideoEngine != nil {
+			// 	m.user.Engines.VideoEngine.SetDisconnected()
+			// }
 
 			if m.activeTab == 2 && m.state == states.LOAD_STATE {
 				m.state = m.prState
@@ -1627,7 +1627,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sideState = states.LEFT_STATE
 				}
 				m, cmd = m.syncTabState()
-				m.log.Info("states after right", m.state, m.prState)
+	
 				return m, cmd
 			}
 
@@ -1648,12 +1648,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sideState = states.LEFT_STATE
 				}
 				m, cmd = m.syncTabState()
-				m.log.Info("states after left", m.state, m.prState)
+
 				return m, cmd
 			}
 
 		case "esc":
-			m.log.Info("states before esc", m.state, m.prState)
+
 			switch m.state {
 			case states.ERR_STATE:
 
@@ -1683,7 +1683,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m, cmd = m.syncTabState()
 			}
-			m.log.Info("states after esc", m.state, m.prState)
+
 			return m, cmd
 
 		case "up":
@@ -2124,7 +2124,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							if i, ok := m.microphonesList.LipList.SelectedItem().(lists.DeviceItem); ok {
 								m.prState = m.state
 								m.state = states.LOAD_STATE
-								cmds = append(cmds, commands.ChangeHeadphonesCmd(m.user, i.Name),
+								cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.Name),
 									m.microphonesList.UpdateDevicesItemList(i.Name))
 							}
 						case states.AUDIO_STATE:

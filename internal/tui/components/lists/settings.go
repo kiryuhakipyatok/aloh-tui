@@ -52,7 +52,7 @@ func SetupSettingsList(ls ListSetup) SettingsList {
 		SettingsItem{
 			Id:   DEVICES_SETTINGS,
 			Name: "devices",
-			Desc: "pick microphone or headphones",
+			Desc: "pick microphone, headphones or webcam",
 		},
 		SettingsItem{
 			Id:   BINDS_SETTINGS,

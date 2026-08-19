@@ -16,17 +16,20 @@ type OnOffers interface {
 }
 
 func (ae *audioEngine) OnOffUsersHardDenoise(id uuid.UUID, state bool) error {
-	ae.mu.Lock()
-	defer ae.mu.Unlock()
 	var err error
+	ae.mu.RLock()
 	ua, ok := ae.usersAudio[id]
+	ae.mu.RUnlock()
 	if !ok {
 		ua, err = ae.newUserAudio()
 		if err != nil {
 			return err
 		}
+		ae.mu.Lock()
 		ae.usersAudio[id] = ua
+		ae.mu.Unlock()
 	}
+	ua.mu.Lock()
 	if state && ua.personalHardDenoise == nil {
 		ua.personalHardDenoise = rnnoise.NewRNNoise()
 	} else if !state && ua.personalHardDenoise != nil {
@@ -35,23 +38,27 @@ func (ae *audioEngine) OnOffUsersHardDenoise(id uuid.UUID, state bool) error {
 		}
 		ua.personalHardDenoise = nil
 	}
+	ua.mu.Unlock()
 	ua.hardDenoised.Store(state)
 	return nil
 }
 
 func (ae *audioEngine) OnOffUsersSoftDenoise(id uuid.UUID, state bool) error {
-	ae.mu.Lock()
-	defer ae.mu.Unlock()
 	var err error
+	ae.mu.RLock()
 	ua, ok := ae.usersAudio[id]
+	ae.mu.RUnlock()
 	if !ok {
 		ua, err = ae.newUserAudio()
 		if err != nil {
 			return err
 		}
+		ae.mu.Lock()
 		ae.usersAudio[id] = ua
+		ae.mu.Unlock()
 	}
 	//s := ua.softDenoised.Load()
+	ua.mu.Lock()
 	if state && ua.personalPreprocessor == nil {
 		ua.personalPreprocessor = speexdsp.NewPreprocessor(sampleRate, frameLen)
 		ua.personalPreprocessor.EnableDenoise(true)
@@ -62,6 +69,7 @@ func (ae *audioEngine) OnOffUsersSoftDenoise(id uuid.UUID, state bool) error {
 		}
 		ua.personalPreprocessor = nil
 	}
+	ua.mu.Unlock()
 	ua.softDenoised.Store(state)
 
 	return nil
