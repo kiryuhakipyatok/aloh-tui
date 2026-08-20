@@ -30,7 +30,7 @@ jobs:
             libxext-dev libxfixes-dev libxtst-dev \
             libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev \
             libasound2-dev libpulse-dev \
-            libogg-dev libopus-dev libopusfile-dev libspeexdsp-dev libwebp-dev
+            libogg-dev libopus-dev libopusfile-dev libspeexdsp-dev libvpx-dev
 
       - name: Build RNNoise (Shared)
         run: |
@@ -65,7 +65,7 @@ jobs:
           lddtree -l aloh-linux | grep '^/' | while read -r lib; do
             libname=$(basename "$lib")
             case "$libname" in
-              libopus*|libogg*|librnnoise*|libspeexdsp*|libwebp*)
+              libopus*|libogg*|librnnoise*|libspeexdsp*|libvpx*)
                 cp -L -v "$lib" dist-linux/
                 ;;
             esac
@@ -103,7 +103,7 @@ jobs:
             mingw-w64-x86_64-opus
             mingw-w64-x86_64-opusfile
             mingw-w64-x86_64-speexdsp
-            mingw-w64-x86_64-libwebp
+            mingw-w64-x86_64-libvpx
             mingw-w64-x86_64-libsharpyuv
 
       - name: Build RNNoise (Static)

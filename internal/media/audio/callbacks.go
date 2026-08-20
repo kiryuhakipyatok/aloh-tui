@@ -180,7 +180,6 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 						data:      packetToSend[:n],
 						sessionId: sid,
 					}
-					ae.log.Info(0, "sended in callback", sid)
 					select {
 					case ae.micDataChan <- uv:
 					default:

@@ -5,13 +5,15 @@ import (
 )
 
 const (
-	FULL_MUTE    = alohnetwork.FULL_MUTE
-	MIC_MUTE     = alohnetwork.MIC_MUTE
-	HARD_DENOISE = alohnetwork.HARD_DENOISE
-	SOFT_DENOISE = alohnetwork.SOFT_DENOISE
-	WEBCAM_STATE = alohnetwork.WEBCAM_STATE
-	SCREEN_STATE = alohnetwork.SCREEN_STATE
-	GENERAL      = alohnetwork.GENERAL
+	FULL_MUTE        = alohnetwork.FULL_MUTE
+	MIC_MUTE         = alohnetwork.MIC_MUTE
+	HARD_DENOISE     = alohnetwork.HARD_DENOISE
+	SOFT_DENOISE     = alohnetwork.SOFT_DENOISE
+	WEBCAM_STATE     = alohnetwork.WEBCAM_STATE
+	SCREEN_STATE     = alohnetwork.SCREEN_STATE
+	WEBCAM_KEY_FRAME = alohnetwork.WEBCAM_KEY_FRAME
+	SCREEN_KEY_FRAME = alohnetwork.SCREEN_KEY_FRAME
+	GENERAL          = alohnetwork.GENERAL
 )
 
 func MuteMicEvent(state bool) (alohnetwork.Event, error) {
@@ -36,6 +38,14 @@ func WebcamEvent(state bool) (alohnetwork.Event, error) {
 
 func ScreenEvent(state bool) (alohnetwork.Event, error) {
 	return alohnetwork.ScreenEvent(state)
+}
+
+func WebcamKeyFrameEvent() (alohnetwork.Event, error) {
+	return alohnetwork.WebcamKeyFrameEvent()
+}
+
+func ScreenKeyFrameEvent() (alohnetwork.Event, error) {
+	return alohnetwork.ScreenKeyFrameEvent()
 }
 
 func GeneralEvent(fm, mm, hd, sd bool) (alohnetwork.Event, error) {

@@ -30,13 +30,51 @@ func (ae *audioEngine) SetConnected() {
 }
 
 func (ae *audioEngine) SetDisconnected() error {
+
 	ae.sessionId.Add(1)
 	ae.connected.Store(false)
+	ae.log.Info(0, "setted disconencted")
 	ae.voiceHolder.Store(0)
 	ae.userIsSpeaking.Store(false)
 	ae.playbackReady.Store(false)
 	ae.captureReady.Store(false)
 	ae.aecDiff.Store(0)
+	var eg errgroup.Group
+
+	ae.mu.RLock()
+	usersAudio := ae.usersAudio
+	ae.mu.RUnlock()
+	for _, ua := range usersAudio {
+		eg.Go(func() error {
+			ua.mu.Lock()
+			defer ua.mu.Unlock()
+			ua.data = ua.data[:0]
+			ua.playing = false
+			ua.framesCount = 0
+			ua.isSpeaking.Store(false)
+
+			if ua.personalPreprocessor != nil {
+				if err := ua.personalPreprocessor.Close(); err != nil {
+					return err
+				}
+			}
+			ua.personalPreprocessor = nil
+			if ua.personalHardDenoise != nil {
+				if err := ua.personalHardDenoise.Close(); err != nil {
+					return err
+				}
+			}
+			ua.personalHardDenoise = nil
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		ae.mu.Lock()
+		clear(ae.usersAudio)
+		ae.mu.Unlock()
+		return err
+	}
 	ae.mu.Lock()
 	for len(ae.micDataChan) > 0 {
 		unusedVoice := <-ae.micDataChan
@@ -63,46 +101,12 @@ func (ae *audioEngine) SetDisconnected() error {
 	ae.notificationPos = 0
 	if ae.opusEncoder != nil {
 		if err := ae.opusEncoder.Reset(); err != nil {
+			ae.mu.Unlock()
 			return err
 		}
 	}
 	ae.mu.Unlock()
 
-	var eg errgroup.Group
-	ae.mu.RLock()
-	usersAudio := ae.usersAudio
-	ae.mu.RUnlock()
-	for _, ua := range usersAudio {
-		eg.Go(func() error {
-			ua.mu.Lock()
-			ua.data = ua.data[:0]
-			ua.playing = false
-			ua.framesCount = 0
-			ua.isSpeaking.Store(false)
-
-			if ua.personalPreprocessor != nil {
-				if err := ua.personalPreprocessor.Close(); err != nil {
-					return err
-				}
-			}
-			ua.personalPreprocessor = nil
-			if ua.personalHardDenoise != nil {
-				if err := ua.personalHardDenoise.Close(); err != nil {
-					return err
-				}
-			}
-			ua.personalHardDenoise = nil
-			ua.mu.Unlock()
-			return nil
-		})
-	}
-
-	if err := eg.Wait(); err != nil {
-		ae.mu.Lock()
-		clear(ae.usersAudio)
-		ae.mu.Unlock()
-		return err
-	}
 	ae.mu.Lock()
 	clear(ae.usersAudio)
 	ae.mu.Unlock()

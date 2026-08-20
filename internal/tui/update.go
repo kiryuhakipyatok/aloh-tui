@@ -430,7 +430,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.Err(err)
 				}
 				us.webcam = state
-				m.log.Info("webcam event", state)
 				m.user.Engines.VideoEngine.OnOffUsersWebcam(state, id)
 
 				if m.activeTab != 3 {
@@ -443,10 +442,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.Err(err)
 				}
 				us.screen = state
-				m.log.Info("screen event", state)
 				m.user.Engines.VideoEngine.OnOffUsersScreen(state, id)
 				if m.activeTab != 4 {
 					m.tabsNotifications["screen"] = struct{}{}
+				}
+
+			case networking.WEBCAM_KEY_FRAME:
+				if m.connected {
+					m.log.Info("webcam key frame event")
+					cmds = append(cmds, commands.SendWebcamKeyFrameCmd(m.user.Engines.VideoEngine))
+				}
+
+			case networking.SCREEN_KEY_FRAME:
+				if m.connected {
+					m.log.Info("screen key frame event")
+					cmds = append(cmds, commands.SendScreenKeyFrameCmd(m.user.Engines.VideoEngine))
 				}
 
 			case networking.GENERAL:
@@ -485,7 +495,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		return m, commands.WaitForNetworkEventMessageCmd(m.netwEventsChan)
+		cmds = append(cmds, commands.WaitForNetworkEventMessageCmd(m.netwEventsChan))
 
 	case sshclient.Event:
 		var nickname string
@@ -817,7 +827,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg,
-		commands.MuteUnmuteUserMsg, commands.NotificationMessage, commands.UserVideo,
+		commands.MuteUnmuteUserMsg, commands.NotificationMessage, commands.UserVideo, commands.KeyFrameMsg,
 		commands.ChangeDeviceMessage, commands.UserInfoMsg, commands.UsersDenoiseMsg, commands.OnOffVideoMsg:
 		var err error
 		switch mes := msg.(type) {
@@ -842,6 +852,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case commands.UserVideo:
 			err = mes.Err
 		case commands.OnOffVideoMsg:
+			err = mes.Err
+		case commands.KeyFrameMsg:
 			err = mes.Err
 		}
 
@@ -1627,7 +1639,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sideState = states.LEFT_STATE
 				}
 				m, cmd = m.syncTabState()
-	
+
 				return m, cmd
 			}
 
