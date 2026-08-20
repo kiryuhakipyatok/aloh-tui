@@ -3,6 +3,8 @@ package main
 import (
 	"aloh-tui/internal/app"
 	"aloh-tui/pkg/logger"
+	"log"
+	"net/http"
 	_ "net/http/pprof"
 	"os"
 
@@ -15,11 +17,9 @@ var (
 )
 
 func main() {
-	// runtime.SetBlockProfileRate(1)
-	// runtime.SetMutexProfileFraction(1)
-	// go func() {
-	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
-	// }()
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 	go func() {
 		app.Run(logger.DevEnv, version)
 		os.Exit(1)

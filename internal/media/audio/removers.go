@@ -11,19 +11,22 @@ type Removers interface {
 func (ae *audioEngine) RemoveFromUsersAudio(id uuid.UUID) error {
 	ae.mu.RLock()
 	ua, ok := ae.usersAudio[id]
+	ae.mu.RUnlock()
 	if !ok {
 		return nil
 	}
-	ae.mu.RUnlock()
+
 
 	ua.mu.Lock()
 	if ua.personalPreprocessor != nil {
 		if err := ua.personalPreprocessor.Close(); err != nil {
+			ua.mu.Unlock()
 			return err
 		}
 	}
 	if ua.personalHardDenoise != nil {
 		if err := ua.personalHardDenoise.Close(); err != nil {
+			ua.mu.Unlock()
 			return err
 		}
 	}

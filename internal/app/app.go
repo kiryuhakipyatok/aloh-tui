@@ -11,6 +11,7 @@ import (
 )
 
 func Run(env, version string) {
+
 	fp, err := utils.SetupFiles()
 	if err != nil {
 		l.Fatalf("failed to setup files: %v", err)

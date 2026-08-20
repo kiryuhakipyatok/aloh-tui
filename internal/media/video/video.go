@@ -30,6 +30,8 @@ import (
 	"github.com/pion/mediadevices/pkg/driver"
 	_ "github.com/pion/mediadevices/pkg/driver/camera"
 	_ "github.com/pion/mediadevices/pkg/driver/screen"
+	"github.com/pion/mediadevices/pkg/frame"
+
 	"github.com/pion/mediadevices/pkg/io/video"
 	"github.com/pion/mediadevices/pkg/prop"
 )
@@ -147,13 +149,13 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		userVideo:         &userVideo{},
 		webcamBytesBuffersPool: sync.Pool{
 			New: func() any {
-				buf := make([]byte, 40000)
+				buf := make([]byte, 20000)
 				return buf
 			},
 		},
 		screenBytesBuffersPool: sync.Pool{
 			New: func() any {
-				buf := make([]byte, 150000)
+				buf := make([]byte, 120000)
 				return buf
 			},
 		},
@@ -295,7 +297,8 @@ func (ve *videoEngine) ChangeWebcam(webcam string) error {
 		)
 		stream, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
 			Video: func(mtc *mediadevices.MediaTrackConstraints) {
-
+				mtc.FrameFormat = prop.FrameFormat(frame.FormatYUYV)
+				mtc.FrameRate = prop.Float(15)
 				mtc.DeviceID = prop.String(resolvedWebcam.Name)
 			},
 			Codec: codecSelector,
@@ -413,8 +416,9 @@ func (ve *videoEngine) OnOffWebcamWindow() (bool, error) {
 	if ve.userVideo.webcamWindow != nil {
 		ve.userVideo.webcamWindow.Perform(system.ActionClose)
 	}
-	ve.userVideo.mu.Unlock()
 	ve.userVideo.webcamImg = nil
+	ve.userVideo.mu.Unlock()
+
 	return false, nil
 }
 
@@ -436,8 +440,9 @@ func (ve *videoEngine) OnOffScreenWindow() (bool, error) {
 	if ve.userVideo.screenWindow != nil {
 		ve.userVideo.screenWindow.Perform(system.ActionClose)
 	}
-	ve.userVideo.mu.Unlock()
 	ve.userVideo.screenImg = nil
+	ve.userVideo.mu.Unlock()
+
 	return false, nil
 }
 
@@ -511,15 +516,19 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 		}
 		ve.mu.RUnlock()
 
-		vp8Params, _ := vpx.NewVP8Params()
+		vp8Params, err := vpx.NewVP8Params()
+		if err != nil {
+			return false, err
+		}
 		vp8Params.KeyFrameInterval = 3000
 		vp8Params.ErrorResilient = vpx.ErrorResilientDefault
 		vp8Params.RateControlEndUsage = vpx.RateControlCBR
-		vp8Params.BitRate = 800_000
+		vp8Params.BitRate = 700_000
 		vp8Params.Deadline = 1 * time.Microsecond
 		vp8Params.RateControlOvershootPercent = 15
-		vp8Params.RateControlUndershootPercent = 100
-		vp8Params.RateControlMinQuantizer = 15
+		vp8Params.RateControlUndershootPercent = 50
+		vp8Params.CPUUsed = 8
+		vp8Params.RateControlMinQuantizer = 20
 		vp8Params.RateControlMaxQuantizer = 63
 		vp8Params.LagInFrames = 0
 
@@ -528,8 +537,9 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 		)
 		stream, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
 			Video: func(mtc *mediadevices.MediaTrackConstraints) {
-
+				mtc.FrameFormat = prop.FrameFormat(frame.FormatYUYV)
 				mtc.DeviceID = prop.String(curW.Name)
+				mtc.FrameRate = prop.Float(15)
 			},
 			Codec: codecSelector,
 		})
@@ -628,14 +638,15 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 
 	if !s == true {
 		vp8Params, _ := vpx.NewVP8Params()
-		vp8Params.KeyFrameInterval = 3000
+		vp8Params.KeyFrameInterval = 6000
 		vp8Params.ErrorResilient = vpx.ErrorResilientDefault
 		vp8Params.RateControlEndUsage = vpx.RateControlCBR
-		vp8Params.BitRate = 800_000
+		vp8Params.BitRate = 500_000
+		vp8Params.CPUUsed = 8
 		vp8Params.Deadline = 1 * time.Microsecond
 		vp8Params.RateControlOvershootPercent = 15
 		vp8Params.RateControlUndershootPercent = 100
-		vp8Params.RateControlMinQuantizer = 15
+		vp8Params.RateControlMinQuantizer = 20
 		vp8Params.RateControlMaxQuantizer = 63
 		vp8Params.LagInFrames = 0
 
@@ -643,7 +654,10 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 			mediadevices.WithVideoEncoders(&vp8Params),
 		)
 		stream, err := mediadevices.GetDisplayMedia(mediadevices.MediaStreamConstraints{
-			Video: func(mtc *mediadevices.MediaTrackConstraints) {},
+			Video: func(mtc *mediadevices.MediaTrackConstraints) {
+				mtc.FrameRate = prop.Float(15)
+				mtc.FrameFormat = prop.FrameFormat(frame.FormatYUYV)
+			},
 			Codec: codecSelector,
 		})
 		if err != nil {
@@ -916,7 +930,7 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 				realese()
 				ve.userVideo.mu.Unlock()
 			default:
-				ve.webcamBytesBuffersPool.Put(buffer[:40000])
+				ve.webcamBytesBuffersPool.Put(buffer[:20000])
 			}
 		}
 
@@ -1006,7 +1020,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 				realese()
 				ve.userVideo.mu.Unlock()
 			default:
-				ve.screenBytesBuffersPool.Put(buffer[:150000])
+				ve.screenBytesBuffersPool.Put(buffer[:120000])
 			}
 
 		}
@@ -1110,8 +1124,8 @@ func (ve *videoEngine) RenderUsersWebcam(id uuid.UUID, data []byte) {
 	uv, ok := ve.usersVideo[id]
 	if !ok {
 		uv = &userVideo{
-			webcamDecoderBuffer: bytes.NewBuffer(make([]byte, 0, 40000)),
-			screenDecoderBuffer: bytes.NewBuffer(make([]byte, 0, 100000)),
+			webcamDecoderBuffer: new(bytes.Buffer),
+			screenDecoderBuffer: new(bytes.Buffer),
 		}
 		webcamVp8Decoder, err := vpx.NewDecoder(uv.webcamDecoderBuffer, prop.Media{})
 		if err != nil {
@@ -1172,6 +1186,7 @@ func (ve *videoEngine) RenderUsersWebcam(id uuid.UUID, data []byte) {
 			uv.webcamWindow.Invalidate()
 		}
 		release()
+		uv.webcamDecoderBuffer.Reset()
 		uv.mu.Unlock()
 	}
 
@@ -1182,8 +1197,8 @@ func (ve *videoEngine) RenderUsersScreen(id uuid.UUID, data []byte) {
 	uv, ok := ve.usersVideo[id]
 	if !ok {
 		uv = &userVideo{
-			webcamDecoderBuffer: bytes.NewBuffer(make([]byte, 0, 40000)),
-			screenDecoderBuffer: bytes.NewBuffer(make([]byte, 0, 100000)),
+			webcamDecoderBuffer: new(bytes.Buffer),
+			screenDecoderBuffer: new(bytes.Buffer),
 		}
 		webcamVp8Decoder, err := vpx.NewDecoder(uv.webcamDecoderBuffer, prop.Media{})
 		if err != nil {
@@ -1244,6 +1259,7 @@ func (ve *videoEngine) RenderUsersScreen(id uuid.UUID, data []byte) {
 			uv.screenWindow.Invalidate()
 		}
 		release()
+		uv.screenDecoderBuffer.Reset()
 		uv.mu.Unlock()
 
 	}
@@ -1256,8 +1272,8 @@ func (ve *videoEngine) OnOffUsersWebcam(res bool, id uuid.UUID) {
 	uv, ok := ve.usersVideo[id]
 	if !ok {
 		uv = &userVideo{
-			webcamDecoderBuffer: bytes.NewBuffer(make([]byte, 0, 40000)),
-			screenDecoderBuffer: bytes.NewBuffer(make([]byte, 0, 100000)),
+			webcamDecoderBuffer: new(bytes.Buffer),
+			screenDecoderBuffer: new(bytes.Buffer),
 		}
 		webcamVp8Decoder, err := vpx.NewDecoder(uv.webcamDecoderBuffer, prop.Media{})
 		if err != nil {
@@ -1291,8 +1307,8 @@ func (ve *videoEngine) OnOffUsersScreen(res bool, id uuid.UUID) {
 	uv, ok := ve.usersVideo[id]
 	if !ok {
 		uv = &userVideo{
-			webcamDecoderBuffer: bytes.NewBuffer(make([]byte, 0, 40000)),
-			screenDecoderBuffer: bytes.NewBuffer(make([]byte, 0, 100000)),
+			webcamDecoderBuffer: new(bytes.Buffer),
+			screenDecoderBuffer: new(bytes.Buffer),
 		}
 		webcamVp8Decoder, err := vpx.NewDecoder(uv.webcamDecoderBuffer, prop.Media{})
 		if err != nil {
@@ -1468,7 +1484,7 @@ func (ve *videoEngine) sendWebcam() {
 					ve.log.Error("failed to send webcam data", logger.Err(err))
 				}
 			}
-			ve.webcamBytesBuffersPool.Put(webcamFrame[:40000])
+			ve.webcamBytesBuffersPool.Put(webcamFrame[:20000])
 		}
 	}
 }
@@ -1490,7 +1506,7 @@ func (ve *videoEngine) sendScreen() {
 					ve.log.Error("failed to send screen data", logger.Err(err))
 				}
 			}
-			ve.screenBytesBuffersPool.Put(screenFrame[:150000])
+			ve.screenBytesBuffersPool.Put(screenFrame[:120000])
 		}
 	}
 }

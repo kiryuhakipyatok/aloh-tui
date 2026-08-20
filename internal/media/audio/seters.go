@@ -101,13 +101,12 @@ func (ae *audioEngine) SetDisconnected() error {
 	ae.notificationPos = 0
 	if ae.opusEncoder != nil {
 		if err := ae.opusEncoder.Reset(); err != nil {
+			clear(ae.usersAudio)
 			ae.mu.Unlock()
 			return err
 		}
 	}
-	ae.mu.Unlock()
-
-	ae.mu.Lock()
+	
 	clear(ae.usersAudio)
 	ae.mu.Unlock()
 	return nil

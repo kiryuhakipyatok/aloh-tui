@@ -43,7 +43,10 @@ const (
 func (m Model) syncTabState() (Model, tea.Cmd) {
 	cmds := []tea.Cmd{textinput.Blink}
 	m.curWindow = windows.DEF_WINDOW
-	//m.prState = m.state
+	if m.activeTab != 6 {
+		m.prState = m.state
+	}
+
 	if !m.isLoggedIn() {
 		//if m.state != states.LOAD_STATE {
 		switch m.activeTab {
@@ -898,15 +901,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
 		} else if m.connected {
-			// if m.user.Engines.AudioEngine != nil {
-			// 	if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
-			// 		return m.Err(err)
-			// 	}
-			// }
-
-			// if m.user.Engines.VideoEngine != nil {
-			// 	m.user.Engines.VideoEngine.SetDisconnected()
-			// }
 
 			if m.activeTab == 2 && m.state == states.LOAD_STATE {
 				m.state = m.prState
@@ -920,6 +914,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages = []commands.ChatMessage{}
 			m.connections = []users.Identity{}
 			m.connecctionsNicks = []string{}
+			if m.user.Engines.AudioEngine != nil {
+				if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
+					m.err = err
+					m.state = states.ERR_STATE
+				}
+			}
+			if m.user.Engines.VideoEngine != nil {
+				m.user.Engines.VideoEngine.SetDisconnected()
+			}
 			clear(m.usersStates)
 			//clear(m.webcamUsersFrames)
 			m.user.Engines.AudioEngine.PlayNotification()
@@ -1244,7 +1247,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return ansi.Strip(n) == nickname
 		})
 
-		if len(m.connections) == 0 && m.connected {
+		if len(m.connections) <= 0 && m.connected {
 
 			m.connected = false
 			m.connections = []users.Identity{}
@@ -1267,8 +1270,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		}
 
-		cmds = append(cmds, commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan))
-
 		//if !m.user.IsBlocked(iden) {
 
 		if m.activeTab != 2 {
@@ -1277,19 +1278,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.usersStates, id)
 		//delete(m.webcamUsersFrames, id)
 		//	id := iden.ID
-		coloredNickname := lipgloss.NewStyle().Foreground(m.usersColors[id].MainColor).Render(nickname)
 
-		if err := m.user.Engines.AudioEngine.RemoveFromUsersAudio(id); err != nil {
-			m.err = err
-			m.state = states.ERR_STATE
+		if m.connected {
+
+			if err := m.user.Engines.AudioEngine.RemoveFromUsersAudio(id); err != nil {
+				m.err = err
+				m.state = states.ERR_STATE
+			}
+			m.user.Engines.VideoEngine.OnOffUsersScreen(false, id)
+			m.user.Engines.VideoEngine.OnOffUsersWebcam(false, id)
+			coloredNickname := lipgloss.NewStyle().Foreground(m.usersColors[id].MainColor).Render(nickname)
+			m.messages = append(m.messages, commands.ChatMessage{
+				Identity: users.Identity{
+					Nickname: "system",
+				}, Time: msg.Time, Text: coloredNickname + " disconnected!"})
 		}
-		m.user.Engines.VideoEngine.OnOffUsersScreen(false, id)
-		m.user.Engines.VideoEngine.OnOffUsersWebcam(false, id)
-		m.messages = append(m.messages, commands.ChatMessage{
-			Identity: users.Identity{
-				Nickname: "system",
-			}, Time: msg.Time, Text: coloredNickname + " disconnected!"})
-		cmds = append(cmds, m.connectionsList.UpdateConnectionsList(m.user, m.connections, m.usersColors),
+		m.log.Info("peer disconnected", id)
+		cmds = append(cmds, commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan), m.connectionsList.UpdateConnectionsList(m.user, m.connections, m.usersColors),
 			commands.PlayNotificationCmd(m.user.Engines.AudioEngine), commands.UpdateCurrentConnectsCmd(m.user, m.connections))
 		//}
 
@@ -1623,6 +1628,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "right":
+
 			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
 				m.cursor = 0
 				maxTabs := 2
@@ -1644,6 +1650,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "shift+tab", "left":
+
 			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
 				m.cursor = 0
 				maxTabs := 2
