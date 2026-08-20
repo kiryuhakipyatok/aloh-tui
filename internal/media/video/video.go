@@ -155,7 +155,7 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		},
 		screenBytesBuffersPool: sync.Pool{
 			New: func() any {
-				buf := make([]byte, 120000)
+				buf := make([]byte, 150000)
 				return buf
 			},
 		},
@@ -281,14 +281,15 @@ func (ve *videoEngine) ChangeWebcam(webcam string) error {
 
 	if started {
 		vp8Params, _ := vpx.NewVP8Params()
-		vp8Params.KeyFrameInterval = 30
+		vp8Params.KeyFrameInterval = 3000
 		vp8Params.ErrorResilient = vpx.ErrorResilientDefault
 		vp8Params.RateControlEndUsage = vpx.RateControlCBR
-		vp8Params.BitRate = 800_000
+		vp8Params.BitRate = 650_000
 		vp8Params.Deadline = 1 * time.Microsecond
 		vp8Params.RateControlOvershootPercent = 15
-		vp8Params.RateControlUndershootPercent = 100
-		vp8Params.RateControlMinQuantizer = 15
+		vp8Params.RateControlUndershootPercent = 50
+		vp8Params.CPUUsed = 8
+		vp8Params.RateControlMinQuantizer = 20
 		vp8Params.RateControlMaxQuantizer = 63
 		vp8Params.LagInFrames = 0
 
@@ -300,6 +301,8 @@ func (ve *videoEngine) ChangeWebcam(webcam string) error {
 				mtc.FrameFormat = prop.FrameFormat(frame.FormatYUYV)
 				mtc.FrameRate = prop.Float(15)
 				mtc.DeviceID = prop.String(resolvedWebcam.Name)
+				mtc.Width = prop.Int(1280)
+				mtc.Height = prop.Int(720)
 			},
 			Codec: codecSelector,
 		})
@@ -523,7 +526,7 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 		vp8Params.KeyFrameInterval = 3000
 		vp8Params.ErrorResilient = vpx.ErrorResilientDefault
 		vp8Params.RateControlEndUsage = vpx.RateControlCBR
-		vp8Params.BitRate = 700_000
+		vp8Params.BitRate = 650_000
 		vp8Params.Deadline = 1 * time.Microsecond
 		vp8Params.RateControlOvershootPercent = 15
 		vp8Params.RateControlUndershootPercent = 50
@@ -540,6 +543,8 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 				mtc.FrameFormat = prop.FrameFormat(frame.FormatYUYV)
 				mtc.DeviceID = prop.String(curW.Name)
 				mtc.FrameRate = prop.Float(15)
+				mtc.Width = prop.Int(1280)
+				mtc.Height = prop.Int(720)
 			},
 			Codec: codecSelector,
 		})
@@ -641,7 +646,7 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 		vp8Params.KeyFrameInterval = 6000
 		vp8Params.ErrorResilient = vpx.ErrorResilientDefault
 		vp8Params.RateControlEndUsage = vpx.RateControlCBR
-		vp8Params.BitRate = 500_000
+		vp8Params.BitRate = 400_000
 		vp8Params.CPUUsed = 8
 		vp8Params.Deadline = 1 * time.Microsecond
 		vp8Params.RateControlOvershootPercent = 15
@@ -657,6 +662,8 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 			Video: func(mtc *mediadevices.MediaTrackConstraints) {
 				mtc.FrameRate = prop.Float(15)
 				mtc.FrameFormat = prop.FrameFormat(frame.FormatYUYV)
+				mtc.Width = prop.Int(1280)
+				mtc.Height = prop.Int(720)
 			},
 			Codec: codecSelector,
 		})
@@ -901,6 +908,7 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 					ve.log.Error("failed to read webcamFrame", logger.Err(err))
 					continue
 				}
+
 				if ve.onWebcamTab.Load() {
 					var f string
 					o := ve.GetUserWebcamFrame()
@@ -992,6 +1000,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 					ve.log.Error("failed to read screenFrame", logger.Err(err))
 					continue
 				}
+				ve.log.Info("webcam res", screenFrame.Bounds().Dx(), screenFrame.Bounds().Dy())
 				if ve.onScreenTab.Load() {
 					var f string
 					o := ve.GetUserScreenFrame()
@@ -1001,7 +1010,8 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 
 					resizedScreenFrame := image.NewNRGBA(image.Rect(0, 0, 160, 80))
 
-					draw.NearestNeighbor.Scale(resizedScreenFrame, resizedScreenFrame.Rect, screenFrame, screenFrame.Bounds(), draw.Over, nil)
+					draw.NearestNeighbor.Scale(resizedScreenFrame, resizedScreenFrame.Rect, screenFrame,
+						screenFrame.Bounds(), draw.Over, nil)
 					f, err = renderLocalImg(float64(n+1), resizedScreenFrame)
 					if err != nil {
 						ve.log.Error("failed to render img", logger.Err(err))
@@ -1020,7 +1030,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 				realese()
 				ve.userVideo.mu.Unlock()
 			default:
-				ve.screenBytesBuffersPool.Put(buffer[:120000])
+				ve.screenBytesBuffersPool.Put(buffer[:150000])
 			}
 
 		}
@@ -1506,7 +1516,7 @@ func (ve *videoEngine) sendScreen() {
 					ve.log.Error("failed to send screen data", logger.Err(err))
 				}
 			}
-			ve.screenBytesBuffersPool.Put(screenFrame[:120000])
+			ve.screenBytesBuffersPool.Put(screenFrame[:150000])
 		}
 	}
 }
