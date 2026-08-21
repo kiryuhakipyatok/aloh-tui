@@ -104,6 +104,8 @@ github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260726211718-ebaf500ab11e h1
 github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260726211718-ebaf500ab11e/go.mod h1:SiCYcZqok9gyc+fNQgxwt3fzBAHK8D8HVz0D3ZwF0oQ=
 github.com/kiryuhakipyatok/aloh-ssh v0.0.0-20260726171110-30dc3a8c5b15 h1:MzClu/V+rzZ7SxH172hPqao3ttfuWMd1mTwHlm4AQ/E=
 github.com/kiryuhakipyatok/aloh-ssh v0.0.0-20260726171110-30dc3a8c5b15/go.mod h1:xt2E/magL6Cy5+7QlyfC83std60bhqkK/C4dLkyj2b0=
+github.com/kiryuhakipyatok/mediadevices v0.0.0-20260821123753-f9b1c414d62a h1:Bc3j7WbmYec2e58I48Ol/UKSfvcLTX+atV00zHLlODE=
+github.com/kiryuhakipyatok/mediadevices v0.0.0-20260821123753-f9b1c414d62a/go.mod h1:sonUtIDqFXL+SGpPMAcWsYLeo2k6WmhNIhKssk7X0Ng=
 github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e h1:r140sC6YmBlbwkO1ObcLh/27idiqCuNzTD4eMtmq8nw=
 github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e/go.mod h1:ygGMfWezx/ZqLUUZWbQr7geVOaGYdgUOxbp8KZBuasQ=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
@@ -163,8 +165,6 @@ github.com/pion/mdns v0.0.12 h1:CiMYlY+O0azojWDmxdNr7ADGrnZ+V6Ilfner+6mSVK8=
 github.com/pion/mdns v0.0.12/go.mod h1:VExJjv8to/6Wqm1FXK+Ii/Z9tsVk/F5sD/N70cnYFbk=
 github.com/pion/mdns/v2 v2.1.0 h1:3IJ9+Xio6tWYjhN6WwuY142P/1jA0D5ERaIqawg/fOY=
 github.com/pion/mdns/v2 v2.1.0/go.mod h1:pcez23GdynwcfRU1977qKU0mDxSeucttSHbCSfFOd9A=
-github.com/pion/mediadevices v0.10.1-0.20260709193927-29a80cc3a982 h1:xCdKC4R8igTZaZ47JFSTZb4Ch1BlwlhFuBcj9UBoU1w=
-github.com/pion/mediadevices v0.10.1-0.20260709193927-29a80cc3a982/go.mod h1:sonUtIDqFXL+SGpPMAcWsYLeo2k6WmhNIhKssk7X0Ng=
 github.com/pion/randutil v0.1.0 h1:CFG1UdESneORglEsnimhUjf33Rwjubwj6xfiOXBa3mA=
 github.com/pion/randutil v0.1.0/go.mod h1:XcJrSMMbbMRhASFVOlj/5hQial/Y8oH/HVo7TBZq+j8=
 github.com/pion/rtcp v1.2.17 h1:PxiT6L79yPZKtXIsXdG1eakBl6dtBj4x+4oVEL0DlSw=
