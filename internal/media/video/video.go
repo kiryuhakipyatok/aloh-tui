@@ -332,14 +332,17 @@ func (ve *videoEngine) ChangeWebcam(webcam string) error {
 		track := stream.GetVideoTracks()[0]
 
 		videoTrack := track.(*mediadevices.VideoTrack)
-
+		webcamReader := videoTrack.NewReader(false)
 		encodedWebcamReader, err := videoTrack.NewEncodedReader("vp8")
 		if err != nil {
 			ve.log.Error("failed to create new encoded reader", logger.Err(err))
+			if terr := videoTrack.Close(); terr != nil {
+				ve.log.Error("failed to close screen videoTrack", logger.Err(terr))
+			}
+			videoTrack = nil
+			webcamReader = nil
 			return err
 		}
-
-		webcamReader := videoTrack.NewReader(false)
 
 		ctrl := encodedWebcamReader.Controller()
 
@@ -577,9 +580,14 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 		track := stream.GetVideoTracks()[0]
 
 		videoTrack := track.(*mediadevices.VideoTrack)
-
+		webcamReader := videoTrack.NewReader(false)
 		encodedWebcamReader, err := videoTrack.NewEncodedReader("vp8")
 		if err != nil {
+			if terr := videoTrack.Close(); terr != nil {
+				ve.log.Error("failed to close screen videoTrack", logger.Err(terr))
+			}
+			videoTrack = nil
+			webcamReader = nil
 			ve.log.Error("failed to create new encoded reader", logger.Err(err))
 			return false, err
 		}
@@ -593,8 +601,6 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 		}
 
 		//r := encodedWebcamReader.Controller().(codec.KeyFrameController)
-
-		webcamReader := videoTrack.NewReader(false)
 
 		ve.encodedWebcamReader = encodedWebcamReader
 
@@ -694,7 +700,7 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 		stream, err := mediadevices.GetDisplayMedia(mediadevices.MediaStreamConstraints{
 			Video: func(mtc *mediadevices.MediaTrackConstraints) {
 				mtc.FrameRate = prop.Float(15)
-				mtc.FrameFormat = prop.FrameFormat(frame.FormatYUYV)
+				//mtc.FrameFormat = prop.FrameFormat(frame.FormatYUYV)
 				mtc.Width = prop.Int(1280)
 				mtc.Height = prop.Int(720)
 			},
@@ -713,6 +719,11 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 		encodedVideoReader, err := videoTrack.NewEncodedReader("vp8")
 		if err != nil {
 			ve.log.Error("failed to create encoded reader", logger.Err(err))
+			if terr := videoTrack.Close(); terr != nil {
+				ve.log.Error("failed to close screen videoTrack", logger.Err(terr))
+			}
+			videoTrack = nil
+			videoReader = nil
 			return false, err
 		}
 
