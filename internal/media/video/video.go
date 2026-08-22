@@ -131,6 +131,9 @@ type userVideo struct {
 	screenWindow   *app.Window
 	windowedScreen atomic.Bool
 
+	termWebcamFrameCount atomic.Int32
+	termScreenFrameCount atomic.Int32
+
 	webcamDecoderBuffer *bytes.Buffer
 	webcamVp8Decoder    codec.VideoDecoder
 
@@ -528,8 +531,6 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 	ve.userVideo.webcamImg = nil
 	ve.mu.Unlock()
 
-	ve.userVideo.webcamFrame.Store("")
-	ve.userVideo.webcamStarted.Store(!s)
 	if !s == true {
 		ve.mu.RLock()
 		curW, ok := ve.currentWebcam.(DeviceInfo)
@@ -660,14 +661,14 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 
 		ve.mu.Unlock()
 	}
-
+	ve.userVideo.webcamStarted.Store(!s)
+	ve.userVideo.webcamFrame.Store("")
+	ve.userVideo.termWebcamFrameCount.Store(0)
 	return !s, nil
 }
 
 func (ve *videoEngine) OnOffScreen() (bool, error) {
 	s := ve.userVideo.screenStarted.Load()
-	ve.userVideo.screenFrame.Store("")
-	ve.userVideo.screenStarted.Store(!s)
 
 	ve.mu.Lock()
 	ve.userVideo.screenImg = nil
@@ -802,7 +803,9 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 		ve.mu.Unlock()
 
 	}
-
+	ve.userVideo.screenFrame.Store("")
+	ve.userVideo.screenStarted.Store(!s)
+	ve.userVideo.termScreenFrameCount.Store(0)
 	ve.log.Info("of off screen done")
 
 	return !s, nil
@@ -912,6 +915,8 @@ func (ve *videoEngine) SetDisconnected() {
 	ve.userVideo.screenImg = nil
 	ve.userVideo.webcamFrame.Store("")
 	ve.userVideo.screenFrame.Store("")
+	ve.userVideo.termScreenFrameCount.Store(0)
+	ve.userVideo.termScreenFrameCount.Store(0)
 }
 
 func (ve *videoEngine) processWebcam(wc chan struct{}) {
@@ -930,7 +935,6 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 		close(wc)
 	})
 
-	var frameCount atomic.Int32
 	resizedWebcamFrame := image.NewNRGBA(image.Rect(0, 0, 180, 80))
 	for {
 		select {
@@ -967,23 +971,23 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 				eRealese()
 				continue
 			}
-			frameCount.Add(1)
+			ve.userVideo.termWebcamFrameCount.Add(1)
 			eRealese()
 
 			select {
 			case ve.webcamBufferChan <- buffer:
 				closeWaitChan()
-				frameN := frameCount.Load()
+				frameN := ve.userVideo.termWebcamFrameCount.Load()
 				webcamFrame, realese, err := reader.Read()
 				if err != nil {
 					ve.log.Error("failed to read webcamFrame", logger.Err(err))
 					if frameN > 0 {
-						frameCount.Add(-1)
+						ve.userVideo.termWebcamFrameCount.Add(-1)
 					}
 					continue
 				}
 
-				if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 1) {
+				if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 2) {
 					var f string
 					o := ve.GetUserWebcamFrame()
 					ve.mu.RLock()
@@ -1029,7 +1033,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 
 	timer := time.NewTicker(66 * time.Millisecond)
 	defer timer.Stop()
-	var frameCount atomic.Int32
+
 	closeWaitChan := sync.OnceFunc(func() {
 		close(wc)
 	})
@@ -1070,21 +1074,21 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 				continue
 			}
 			eRealese()
-			frameCount.Add(1)
+			ve.userVideo.termScreenFrameCount.Add(1)
 			select {
 			case ve.screenBufferChan <- buffer:
 				closeWaitChan()
-				frameN := frameCount.Load()
+				frameN := ve.userVideo.termScreenFrameCount.Load()
 				screenFrame, realese, err := reader.Read()
 				if err != nil {
 					ve.log.Error("failed to read screenFrame", logger.Err(err))
 					if frameN > 0 {
-						frameCount.Add(-1)
+						ve.userVideo.termScreenFrameCount.Add(-1)
 					}
 					continue
 				}
 
-				if ve.onScreenTab.Load() && (frameN%3 == 0 || frameN <= 1) {
+				if ve.onScreenTab.Load() && (frameN%3 == 0 || frameN <= 2) {
 					var f string
 					o := ve.GetUserScreenFrame()
 					ve.mu.RLock()
@@ -1259,7 +1263,9 @@ func (ve *videoEngine) RenderUsersWebcam(id uuid.UUID, data []byte) {
 			return
 		}
 		uv.mu.Unlock()
-		if ve.onWebcamTab.Load() {
+		uv.termWebcamFrameCount.Add(1)
+		frameCount := uv.termWebcamFrameCount.Load()
+		if ve.onWebcamTab.Load() && (frameCount%3 == 0 || frameCount <= 2) {
 
 			if ve.userVideo.webcamStarted.Load() {
 				n++
@@ -1268,6 +1274,7 @@ func (ve *videoEngine) RenderUsersWebcam(id uuid.UUID, data []byte) {
 			webcamFrame, err := renderTerminalImg(float64(n), img)
 			if err != nil {
 				ve.log.Error("failed to render img", logger.Err(err))
+				uv.termWebcamFrameCount.Add(-1)
 				return
 			}
 			if uv.webcamStarted.Load() {
@@ -1308,6 +1315,7 @@ func (ve *videoEngine) RenderUsersScreen(id uuid.UUID, data []byte) {
 		ve.usersVideo[id] = uv
 	}
 	ve.mu.Unlock()
+
 	if uv.screenStarted.Load() {
 		ve.mu.RLock()
 		n := len(ve.usersVideo)
@@ -1336,8 +1344,9 @@ func (ve *videoEngine) RenderUsersScreen(id uuid.UUID, data []byte) {
 			return
 		}
 		uv.mu.Unlock()
-
-		if ve.onScreenTab.Load() {
+		uv.termScreenFrameCount.Add(1)
+		frameCount := uv.termScreenFrameCount.Load()
+		if ve.onScreenTab.Load() && (frameCount%3 == 0 || frameCount <= 2) {
 
 			if ve.userVideo.screenStarted.Load() {
 				n++
@@ -1345,6 +1354,7 @@ func (ve *videoEngine) RenderUsersScreen(id uuid.UUID, data []byte) {
 			screenFrame, err := renderTerminalImg(float64(n), img)
 			if err != nil {
 				ve.log.Error("failed to render img", logger.Err(err))
+				uv.termScreenFrameCount.Add(-1)
 				return
 			}
 			if uv.screenStarted.Load() {
