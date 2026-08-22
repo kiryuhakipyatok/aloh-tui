@@ -47,6 +47,9 @@ type buffers struct {
 	resampledWorkMix     []int16
 	resampledWorkMic     []int16
 	monoCaptureBuffer    []int16
+
+	// plcBuffer  bytes.Buffer
+	// sendBuffer bytes.Buffer
 }
 
 type atmoics struct {
