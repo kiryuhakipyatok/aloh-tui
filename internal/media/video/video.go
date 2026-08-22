@@ -930,6 +930,8 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 		close(wc)
 	})
 
+	var frameCount atomic.Int32
+	resizedWebcamFrame := image.NewNRGBA(image.Rect(0, 0, 180, 80))
 	for {
 		select {
 		case <-ve.stopProcessWebcamChan:
@@ -940,6 +942,7 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 				return
 			default:
 			}
+
 			ve.mu.RLock()
 			ecodedReader := ve.encodedWebcamReader
 			reader := ve.webcamReader
@@ -964,25 +967,28 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 				eRealese()
 				continue
 			}
+			frameCount.Add(1)
 			eRealese()
 
 			select {
 			case ve.webcamBufferChan <- buffer:
 				closeWaitChan()
+				frameN := frameCount.Load()
 				webcamFrame, realese, err := reader.Read()
 				if err != nil {
 					ve.log.Error("failed to read webcamFrame", logger.Err(err))
+					if frameN > 0 {
+						frameCount.Add(-1)
+					}
 					continue
 				}
 
-				if ve.onWebcamTab.Load() {
+				if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 1) {
 					var f string
 					o := ve.GetUserWebcamFrame()
 					ve.mu.RLock()
 					n := len(ve.usersVideo)
 					ve.mu.RUnlock()
-
-					resizedWebcamFrame := image.NewNRGBA(image.Rect(0, 0, 180, 80))
 
 					draw.NearestNeighbor.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, webcamFrame, webcamFrame.Bounds(), draw.Over, nil)
 
@@ -1023,11 +1029,11 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 
 	timer := time.NewTicker(66 * time.Millisecond)
 	defer timer.Stop()
-
+	var frameCount atomic.Int32
 	closeWaitChan := sync.OnceFunc(func() {
 		close(wc)
 	})
-
+	resizedScreenFrame := image.NewNRGBA(image.Rect(0, 0, 160, 80))
 	for {
 		select {
 		case <-ve.stopProcessScreenChan:
@@ -1064,23 +1070,26 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 				continue
 			}
 			eRealese()
+			frameCount.Add(1)
 			select {
 			case ve.screenBufferChan <- buffer:
 				closeWaitChan()
+				frameN := frameCount.Load()
 				screenFrame, realese, err := reader.Read()
 				if err != nil {
 					ve.log.Error("failed to read screenFrame", logger.Err(err))
+					if frameN > 0 {
+						frameCount.Add(-1)
+					}
 					continue
 				}
 
-				if ve.onScreenTab.Load() {
+				if ve.onScreenTab.Load() && (frameN%3 == 0 || frameN <= 1) {
 					var f string
 					o := ve.GetUserScreenFrame()
 					ve.mu.RLock()
 					n := len(ve.usersVideo)
 					ve.mu.RUnlock()
-
-					resizedScreenFrame := image.NewNRGBA(image.Rect(0, 0, 160, 80))
 
 					draw.NearestNeighbor.Scale(resizedScreenFrame, resizedScreenFrame.Rect, screenFrame,
 						screenFrame.Bounds(), draw.Over, nil)
