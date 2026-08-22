@@ -3,6 +3,8 @@ package main
 import (
 	"aloh-tui/internal/app"
 	"aloh-tui/pkg/logger"
+	"embed"
+	_ "embed"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -10,6 +12,9 @@ import (
 
 	gapp "gioui.org/app"
 )
+
+//go:embed aloh.exe.manifest.xml
+var m embed.FS
 
 var (
 	//env     string = "dev"

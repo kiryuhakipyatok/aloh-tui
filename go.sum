@@ -65,6 +65,8 @@ github.com/gen2brain/malgo v0.11.25 h1:g0eMVeZIBvMRBbkVSR8p7ZafGFbxBcQERPa1GKHkg
 github.com/gen2brain/malgo v0.11.25/go.mod h1:xLVG3ROA33Bzol1quF3e4ehqcFuqh8QK4B8T6LQUs/M=
 github.com/gen2brain/shm v0.1.0 h1:MwPeg+zJQXN0RM9o+HqaSFypNoNEcNpeoGp0BTSx2YY=
 github.com/gen2brain/shm v0.1.0/go.mod h1:UgIcVtvmOu+aCJpqJX7GOtiN7X2ct+TKLg4RTxwPIUA=
+github.com/ghp3000/screenshot v0.0.0-20230616013409-47b0c5d3b9ac h1:0yhnSFIvLUxrpOXJHkgtEB2gE30b3cly4haCSi62sKM=
+github.com/ghp3000/screenshot v0.0.0-20230616013409-47b0c5d3b9ac/go.mod h1:8owpdPDUV9gwwrDfvWPklFo1yJkQCtrkndXfcjDK/Q8=
 github.com/go-ole/go-ole v1.3.0 h1:Dt6ye7+vXGIKZ7Xtk4s6/xVdGDQynvom7xCFEdWr6uE=
 github.com/go-ole/go-ole v1.3.0/go.mod h1:5LS6F96DhAwUc7C+1HLexzMXY1xGRSryjyPPKW6zv78=
 github.com/go-playground/assert/v2 v2.2.0 h1:JvknZsQTYeFEAhQwI4qEt9cyV5ONwRHC+lYKSsYSR8s=
@@ -104,8 +106,8 @@ github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260726211718-ebaf500ab11e h1
 github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260726211718-ebaf500ab11e/go.mod h1:SiCYcZqok9gyc+fNQgxwt3fzBAHK8D8HVz0D3ZwF0oQ=
 github.com/kiryuhakipyatok/aloh-ssh v0.0.0-20260726171110-30dc3a8c5b15 h1:MzClu/V+rzZ7SxH172hPqao3ttfuWMd1mTwHlm4AQ/E=
 github.com/kiryuhakipyatok/aloh-ssh v0.0.0-20260726171110-30dc3a8c5b15/go.mod h1:xt2E/magL6Cy5+7QlyfC83std60bhqkK/C4dLkyj2b0=
-github.com/kiryuhakipyatok/mediadevices v0.0.0-20260822133020-6f840a7cae2d h1:Z3HFG+PiBCdIwubJw+6EDb+yIPCbdtFsHtD658a6oOI=
-github.com/kiryuhakipyatok/mediadevices v0.0.0-20260822133020-6f840a7cae2d/go.mod h1:sonUtIDqFXL+SGpPMAcWsYLeo2k6WmhNIhKssk7X0Ng=
+github.com/kiryuhakipyatok/mediadevices v0.0.0-20260822174224-7cc74bbf6fe1 h1:+dcBZt0r3pI5rmvJT7l2qQxoswW10n9Zwyt283ZGInY=
+github.com/kiryuhakipyatok/mediadevices v0.0.0-20260822174224-7cc74bbf6fe1/go.mod h1:fkl7XYeZavEEIBwZROxw25zT7PEeQX+acLdC0WL5kqA=
 github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e h1:r140sC6YmBlbwkO1ObcLh/27idiqCuNzTD4eMtmq8nw=
 github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e/go.mod h1:ygGMfWezx/ZqLUUZWbQr7geVOaGYdgUOxbp8KZBuasQ=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
