@@ -29,6 +29,7 @@ import (
 	"github.com/pion/mediadevices/pkg/codec/vpx"
 	"github.com/pion/mediadevices/pkg/driver"
 	_ "github.com/pion/mediadevices/pkg/driver/camera"
+	"github.com/pion/mediadevices/pkg/driver/screen"
 	_ "github.com/pion/mediadevices/pkg/driver/screen"
 	"github.com/pion/mediadevices/pkg/frame"
 
@@ -69,13 +70,12 @@ type VideoEngine interface {
 
 type videoEngine struct {
 	//webcamReader        video.Reader
-	encodedWebcamReader mediadevices.EncodedReadCloser
+	encodedWebcamReader codec.ReadCloser
 	webcamTrack         *mediadevices.VideoTrack
 	webcamKeyFrameCtrl  codec.KeyFrameController
 
-	//screenReader        video.Reader
-	encodedScreenReader mediadevices.EncodedReadCloser
-	screenTrack         *mediadevices.VideoTrack
+	screen              *screen.Screen
+	encodedScreenReader codec.ReadCloser
 	screenKeyFrameCtrl  codec.KeyFrameController
 
 	netw networking.Networking
@@ -337,57 +337,95 @@ func (ve *videoEngine) ChangeWebcam(webcam string) error {
 
 		videoTrack := track.(*mediadevices.VideoTrack)
 
-		videoTrack.Transform(func(r video.Reader) video.Reader {
-			return video.ReaderFunc(func() (img image.Image, release func(), err error) {
-				img, release, err = r.Read()
-				if err != nil {
-					return nil, nil, err
-				}
-				frameN := ve.userVideo.termWebcamFrameCount.Load()
-
-				if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 2) {
-					var f string
-					o := ve.GetUserWebcamFrame()
-					ve.mu.RLock()
-					n := len(ve.usersVideo)
-					resizedWebcamFrame := ve.userVideo.resizedWebcamFrame
-					ve.mu.RUnlock()
-
-					if resizedWebcamFrame != nil {
-						draw.NearestNeighbor.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, img,
-							img.Bounds(), draw.Over, nil)
-						f, err = renderLocalImg(float64(n+1), resizedWebcamFrame)
-						if err != nil {
-							ve.log.Error("failed to render img", logger.Err(err))
-							f = o
-						}
-						ve.userVideo.webcamFrame.Store(f)
-					}
-
-				}
-
-				ve.userVideo.mu.Lock()
-				if ve.userVideo.windowedWebcam.Load() && ve.userVideo.webcamWindow != nil {
-					ve.userVideo.webcamImg = img
-					ve.userVideo.webcamWindow.Invalidate()
-				}
-				ve.userVideo.mu.Unlock()
-
-				return
-			})
-
-		})
-		// webcamReader := videoTrack.NewReader(false)
-		encodedWebcamReader, err := videoTrack.NewEncodedReader("vp8")
-		if err != nil {
-			ve.log.Error("failed to create new encoded reader", logger.Err(err))
-			if terr := videoTrack.Close(); terr != nil {
-				ve.log.Error("failed to close screen videoTrack", logger.Err(terr))
+		r := videoTrack.NewReader(false)
+		interceptor := video.ReaderFunc(func() (img image.Image, release func(), err error) {
+			img, release, err = r.Read()
+			if err != nil {
+				return nil, nil, err
 			}
-			videoTrack = nil
-			//webcamReader = nil
-			return err
-		}
+			frameN := ve.userVideo.termWebcamFrameCount.Load()
+
+			if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 2) {
+				var f string
+				o := ve.GetUserWebcamFrame()
+				ve.mu.RLock()
+				n := len(ve.usersVideo)
+				resizedWebcamFrame := ve.userVideo.resizedWebcamFrame
+				ve.mu.RUnlock()
+
+				if resizedWebcamFrame != nil {
+					draw.NearestNeighbor.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, img,
+						img.Bounds(), draw.Over, nil)
+					f, err = renderLocalImg(float64(n+1), resizedWebcamFrame)
+					if err != nil {
+						ve.log.Error("failed to render img", logger.Err(err))
+						f = o
+					}
+					ve.userVideo.webcamFrame.Store(f)
+				}
+
+			}
+
+			ve.userVideo.mu.Lock()
+			if ve.userVideo.windowedWebcam.Load() && ve.userVideo.webcamWindow != nil {
+				ve.userVideo.webcamImg = img
+				ve.userVideo.webcamWindow.Invalidate()
+			}
+			ve.userVideo.mu.Unlock()
+
+			return
+		})
+
+		// videoTrack.Transform(func(r video.Reader) video.Reader {
+		// 	return video.ReaderFunc(func() (img image.Image, release func(), err error) {
+		// 		img, release, err = r.Read()
+		// 		if err != nil {
+		// 			return nil, nil, err
+		// 		}
+		// 		frameN := ve.userVideo.termWebcamFrameCount.Load()
+
+		// 		if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 2) {
+		// 			var f string
+		// 			o := ve.GetUserWebcamFrame()
+		// 			ve.mu.RLock()
+		// 			n := len(ve.usersVideo)
+		// 			resizedWebcamFrame := ve.userVideo.resizedWebcamFrame
+		// 			ve.mu.RUnlock()
+
+		// 			if resizedWebcamFrame != nil {
+		// 				draw.NearestNeighbor.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, img,
+		// 					img.Bounds(), draw.Over, nil)
+		// 				f, err = renderLocalImg(float64(n+1), resizedWebcamFrame)
+		// 				if err != nil {
+		// 					ve.log.Error("failed to render img", logger.Err(err))
+		// 					f = o
+		// 				}
+		// 				ve.userVideo.webcamFrame.Store(f)
+		// 			}
+
+		// 		}
+
+		// 		ve.userVideo.mu.Lock()
+		// 		if ve.userVideo.windowedWebcam.Load() && ve.userVideo.webcamWindow != nil {
+		// 			ve.userVideo.webcamImg = img
+		// 			ve.userVideo.webcamWindow.Invalidate()
+		// 		}
+		// 		ve.userVideo.mu.Unlock()
+
+		// 		return
+		// 	})
+
+		// })
+		// webcamReader := videoTrack.NewReader(false)
+		encodedWebcamReader, err := vp8Params.BuildVideoEncoder(interceptor, prop.Media{
+			Video: prop.Video{
+				Width:       1280,
+				Height:      720,
+				FrameRate:   15,
+				FrameFormat: frame.FormatYUYV,
+			},
+			DeviceID: resolvedWebcam.Name,
+		})
 
 		ctrl := encodedWebcamReader.Controller()
 
@@ -626,59 +664,106 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 		track := stream.GetVideoTracks()[0]
 
 		videoTrack := track.(*mediadevices.VideoTrack)
+		r := videoTrack.NewReader(false)
+		interceptor := video.ReaderFunc(func() (img image.Image, release func(), err error) {
+			img, release, err = r.Read()
+			if err != nil {
+				return nil, nil, err
+			}
+			frameN := ve.userVideo.termWebcamFrameCount.Load()
 
-		videoTrack.Transform(func(r video.Reader) video.Reader {
-			return video.ReaderFunc(func() (img image.Image, release func(), err error) {
-				img, release, err = r.Read()
-				if err != nil {
-					return nil, nil, err
-				}
-				frameN := ve.userVideo.termWebcamFrameCount.Load()
+			if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 2) {
+				var f string
+				o := ve.GetUserWebcamFrame()
+				ve.mu.RLock()
+				n := len(ve.usersVideo)
+				resizedWebcamFrame := ve.userVideo.resizedWebcamFrame
+				ve.mu.RUnlock()
 
-				if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 2) {
-					var f string
-					o := ve.GetUserWebcamFrame()
-					ve.mu.RLock()
-					n := len(ve.usersVideo)
-					resizedWebcamFrame := ve.userVideo.resizedWebcamFrame
-					ve.mu.RUnlock()
-
-					if resizedWebcamFrame != nil {
-						draw.NearestNeighbor.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, img,
-							img.Bounds(), draw.Over, nil)
-						f, err = renderLocalImg(float64(n+1), resizedWebcamFrame)
-						if err != nil {
-							ve.log.Error("failed to render img", logger.Err(err))
-							f = o
-						}
-						ve.userVideo.webcamFrame.Store(f)
+				if resizedWebcamFrame != nil {
+					draw.NearestNeighbor.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, img,
+						img.Bounds(), draw.Over, nil)
+					f, err = renderLocalImg(float64(n+1), resizedWebcamFrame)
+					if err != nil {
+						ve.log.Error("failed to render img", logger.Err(err))
+						f = o
 					}
-
+					ve.userVideo.webcamFrame.Store(f)
 				}
 
-				ve.userVideo.mu.Lock()
-				if ve.userVideo.windowedWebcam.Load() && ve.userVideo.webcamWindow != nil {
-					ve.userVideo.webcamImg = img
-					ve.userVideo.webcamWindow.Invalidate()
-				}
-				ve.userVideo.mu.Unlock()
+			}
 
-				return
-			})
+			ve.userVideo.mu.Lock()
+			if ve.userVideo.windowedWebcam.Load() && ve.userVideo.webcamWindow != nil {
+				ve.userVideo.webcamImg = img
+				ve.userVideo.webcamWindow.Invalidate()
+			}
+			ve.userVideo.mu.Unlock()
 
+			return
 		})
 
+		// videoTrack.Transform(func(r video.Reader) video.Reader {
+		// 	return video.ReaderFunc(func() (img image.Image, release func(), err error) {
+		// 		img, release, err = r.Read()
+		// 		if err != nil {
+		// 			return nil, nil, err
+		// 		}
+		// 		frameN := ve.userVideo.termWebcamFrameCount.Load()
+
+		// 		if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 2) {
+		// 			var f string
+		// 			o := ve.GetUserWebcamFrame()
+		// 			ve.mu.RLock()
+		// 			n := len(ve.usersVideo)
+		// 			resizedWebcamFrame := ve.userVideo.resizedWebcamFrame
+		// 			ve.mu.RUnlock()
+
+		// 			if resizedWebcamFrame != nil {
+		// 				draw.NearestNeighbor.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, img,
+		// 					img.Bounds(), draw.Over, nil)
+		// 				f, err = renderLocalImg(float64(n+1), resizedWebcamFrame)
+		// 				if err != nil {
+		// 					ve.log.Error("failed to render img", logger.Err(err))
+		// 					f = o
+		// 				}
+		// 				ve.userVideo.webcamFrame.Store(f)
+		// 			}
+
+		// 		}
+
+		// 		ve.userVideo.mu.Lock()
+		// 		if ve.userVideo.windowedWebcam.Load() && ve.userVideo.webcamWindow != nil {
+		// 			ve.userVideo.webcamImg = img
+		// 			ve.userVideo.webcamWindow.Invalidate()
+		// 		}
+		// 		ve.userVideo.mu.Unlock()
+
+		// 		return
+		// 	})
+
+		// })
+
 		//	webcamReader := videoTrack.NewReader(false)
-		encodedWebcamReader, err := videoTrack.NewEncodedReader("vp8")
-		if err != nil {
-			if terr := videoTrack.Close(); terr != nil {
-				ve.log.Error("failed to close screen videoTrack", logger.Err(terr))
-			}
-			videoTrack = nil
-			//webcamReader = nil
-			ve.log.Error("failed to create new encoded reader", logger.Err(err))
-			return false, err
-		}
+		// encodedWebcamReader, err := videoTrack.NewEncodedReader("vp8")
+		// if err != nil {
+		// 	if terr := videoTrack.Close(); terr != nil {
+		// 		ve.log.Error("failed to close screen videoTrack", logger.Err(terr))
+		// 	}
+		// 	videoTrack = nil
+		// 	//webcamReader = nil
+		// 	ve.log.Error("failed to create new encoded reader", logger.Err(err))
+		// 	return false, err
+		// }
+		encodedWebcamReader, err := vp8Params.BuildVideoEncoder(interceptor, prop.Media{
+			Video: prop.Video{
+				Width:       1280,
+				Height:      720,
+				FrameRate:   15,
+				FrameFormat: frame.FormatYUYV,
+			},
+			DeviceID: curW.Name,
+		})
 
 		ctrl := encodedWebcamReader.Controller()
 
@@ -785,85 +870,78 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 		vp8Params.RateControlMaxQuantizer = 63
 		vp8Params.LagInFrames = 0
 
-		codecSelector := mediadevices.NewCodecSelector(
-			mediadevices.WithVideoEncoders(&vp8Params),
-		)
-		stream, err := mediadevices.GetDisplayMedia(mediadevices.MediaStreamConstraints{
-			Video: func(mtc *mediadevices.MediaTrackConstraints) {
-				mtc.FrameRate = prop.Float(15)
-				//mtc.FrameFormat = prop.FrameFormat(frame.FormatYUYV)
-				mtc.Width = prop.Int(1280)
-				mtc.Height = prop.Int(720)
+		screen := screen.NewScreen(0)
+		if err := screen.Open(); err != nil {
+			return false, err
+		}
+
+		reader, err := screen.VideoRecord(prop.Media{
+			Video: prop.Video{
+				Width:       1280,
+				Height:      720,
+				FrameRate:   15,
+				FrameFormat: frame.FormatYUYV,
 			},
-			Codec: codecSelector,
 		})
-		if err != nil {
-			ve.log.Error("failed to get stream screen", logger.Err(err))
-			return false, err
-		}
 
-		track := stream.GetVideoTracks()[0]
+		interceptor := video.ReaderFunc(func() (img image.Image, release func(), err error) {
+			img, release, err = reader.Read()
+			if err != nil {
+				return nil, nil, err
+			}
 
-		videoTrack := track.(*mediadevices.VideoTrack)
+			frameN := ve.userVideo.termScreenFrameCount.Load()
 
-		videoTrack.Transform(func(r video.Reader) video.Reader {
-			return video.ReaderFunc(func() (img image.Image, release func(), err error) {
-				img, release, err = r.Read()
-				if err != nil {
-					return nil, nil, err
-				}
-				frameN := ve.userVideo.termScreenFrameCount.Load()
+			if ve.onScreenTab.Load() && (frameN%3 == 0 || frameN <= 2) {
+				var f string
+				o := ve.GetUserScreenFrame()
+				ve.mu.RLock()
+				n := len(ve.usersVideo)
+				resizedScreenFrame := ve.userVideo.resizedScreenFrame
+				ve.mu.RUnlock()
 
-				if ve.onScreenTab.Load() && (frameN%3 == 0 || frameN <= 2) {
-					var f string
-					o := ve.GetUserScreenFrame()
-					ve.mu.RLock()
-					n := len(ve.usersVideo)
-					resizedScreenFrame := ve.userVideo.resizedScreenFrame
-					ve.mu.RUnlock()
-
-					if resizedScreenFrame != nil {
-						draw.NearestNeighbor.Scale(resizedScreenFrame, resizedScreenFrame.Rect, img,
-							img.Bounds(), draw.Over, nil)
-						f, err = renderLocalImg(float64(n+1), resizedScreenFrame)
-						if err != nil {
-							ve.log.Error("failed to render img", logger.Err(err))
-							f = o
-						}
-						ve.userVideo.screenFrame.Store(f)
+				if resizedScreenFrame != nil {
+					draw.NearestNeighbor.Scale(resizedScreenFrame, resizedScreenFrame.Rect, img,
+						img.Bounds(), draw.Over, nil)
+					f, err = renderLocalImg(float64(n+1), resizedScreenFrame)
+					if err != nil {
+						ve.log.Error("failed to render img", logger.Err(err))
+						f = o
 					}
-
+					ve.userVideo.screenFrame.Store(f)
 				}
 
-				ve.userVideo.mu.Lock()
-				if ve.userVideo.windowedScreen.Load() && ve.userVideo.screenWindow != nil {
-					ve.userVideo.screenImg = img
-					ve.userVideo.screenWindow.Invalidate()
-				}
-				ve.userVideo.mu.Unlock()
+			}
 
-				return
-			})
+			ve.userVideo.mu.Lock()
+			if ve.userVideo.windowedScreen.Load() && ve.userVideo.screenWindow != nil {
+				ve.userVideo.screenImg = img
+				ve.userVideo.screenWindow.Invalidate()
+			}
+			ve.userVideo.mu.Unlock()
 
+			return
 		})
-
-		encodedReader, err := videoTrack.NewEncodedReader("vp8")
-		if err != nil {
-			return false, err
-		}
+		encodedReader, err := vp8Params.BuildVideoEncoder(interceptor, prop.Media{
+			Video: prop.Video{
+				Width:       1280,
+				Height:      720,
+				FrameRate:   15,
+				FrameFormat: frame.FormatYUYV,
+			},
+		})
 
 		ctrl := encodedReader.Controller()
 
 		fCtrl, ok := ctrl.(codec.KeyFrameController)
 		if !ok {
-			ve.log.Error("failed to casr KeyFrameController", logger.Err(err))
+			ve.log.Error("failed to cast KeyFrameController", logger.Err(err))
 			return false, err
 		}
 
+		ve.screen = screen
 		ve.encodedScreenReader = encodedReader
 		ve.screenKeyFrameCtrl = fCtrl
-		//ve.screenReader = videoReader
-		ve.screenTrack = videoTrack
 
 		ve.stopProcessScreenChan = make(chan struct{}, 1)
 		ve.waitProcessScreenChan = make(chan struct{}, 1)
@@ -904,13 +982,19 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 		}
 		ve.log.Info("wait screen done")
 		ve.mu.Lock()
-		if ve.screenTrack != nil {
-			ve.log.Info("closing screen track")
-			if err := ve.screenTrack.Close(); err != nil {
-				ve.log.Error("failed to close screen track", logger.Err(err))
+		// if ve.screenTrack != nil {
+		// 	ve.log.Info("closing screen track")
+		// 	if err := ve.screenTrack.Close(); err != nil {
+		// 		ve.log.Error("failed to close screen track", logger.Err(err))
+		// 	}
+		// 	ve.log.Info("screen track closed")
+		// 	ve.screenTrack = nil
+		// }
+		if ve.screen != nil {
+			if err := ve.screen.Close(); err != nil {
+				ve.log.Error("failed to close screen", logger.Err(err))
 			}
-			ve.log.Info("screen track closed")
-			ve.screenTrack = nil
+			ve.screen = nil
 		}
 
 		if ve.encodedScreenReader != nil {
@@ -1031,12 +1115,11 @@ func (ve *videoEngine) SetDisconnected() {
 	}
 	ve.stopProcessScreenChan = nil
 	ve.webcamKeyFrameCtrl = nil
-	if ve.screenTrack != nil {
-		ve.log.Info("close screen track when disc")
-		if err := ve.screenTrack.Close(); err != nil {
-			ve.log.Error("failed to close screen track", logger.Err(err))
+	if ve.screen != nil {
+		if err := ve.screen.Close(); err != nil {
+			ve.log.Error("failed to close screen", logger.Err(err))
 		}
-		ve.screenTrack = nil
+		ve.screen = nil
 	}
 	if ve.encodedScreenReader != nil {
 		if err := ve.encodedScreenReader.Close(); err != nil {
@@ -1105,10 +1188,10 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 			// }
 			// ve.webcamBuffer.Reset()
 			//buf := ve.webcamBuffer.Bytes()
-
+			ve.log.Info("len webcam", len(encodedWebcamFrame))
 			buffer := ve.webcamBytesBuffersPool.Get().(*bytes.Buffer)
 
-			_, err = buffer.Write(encodedWebcamFrame.Data)
+			_, err = buffer.Write(encodedWebcamFrame)
 			if err != nil {
 				ve.log.Error("failed to write in webcam buffer", logger.Err(err))
 				realese()
@@ -1173,7 +1256,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 	closeWaitChan := sync.OnceFunc(func() {
 		close(wc)
 	})
-	// resizedScreenFrame := image.NewNRGBA(image.Rect(0, 0, 160, 80))
+
 	for {
 		select {
 		case <-ve.stopProcessScreenChan:
@@ -1187,7 +1270,6 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 			default:
 			}
 			ve.mu.RLock()
-			//reader := ve.screenReader
 			encodedRader := ve.encodedScreenReader
 			ve.mu.RUnlock()
 			if encodedRader == nil {
@@ -1200,19 +1282,10 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 				continue
 			}
 
-			// screenFrame, realese, err := reader.Read()
-			// if err != nil {
-			// 	ve.log.Error("failed to read screenFrame", logger.Err(err))
-			// 	if ve.userVideo.termScreenFrameCount.Load() > 0 {
-			// 		ve.userVideo.termScreenFrameCount.Add(-1)
-			// 	}
-			// 	eRealese()
-			// 	continue
-			// }
-			ve.log.Info("n", len(encodedScreenFrame.Data))
+		//	ve.log.Info("n", len(encodedScreenFrame))
 			buffer := ve.screenBytesBuffersPool.Get().(*bytes.Buffer)
 
-			_, err = buffer.Write(encodedScreenFrame.Data)
+			_, err = buffer.Write(encodedScreenFrame)
 			if err != nil {
 				ve.log.Error("failed to write screen buffer", logger.Err(err))
 				ve.screenBytesBuffersPool.Put(buffer)
@@ -1224,24 +1297,6 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 			select {
 			case ve.screenBufferChan <- buffer:
 				closeWaitChan()
-				// frameN := ve.userVideo.termScreenFrameCount.Load()
-
-				// if ve.onScreenTab.Load() && (frameN%3 == 0 || frameN <= 2) {
-				// 	var f string
-				// 	o := ve.GetUserScreenFrame()
-				// 	ve.mu.RLock()
-				// 	n := len(ve.usersVideo)
-				// 	ve.mu.RUnlock()
-
-				// 	draw.NearestNeighbor.Scale(resizedScreenFrame, resizedScreenFrame.Rect, screenFrame,
-				// 		screenFrame.Bounds(), draw.Over, nil)
-				// 	f, err = renderLocalImg(float64(n+1), resizedScreenFrame)
-				// 	if err != nil {
-				// 		ve.log.Error("failed to render img", logger.Err(err))
-				// 		f = o
-				// 	}
-				// 	ve.userVideo.screenFrame.Store(f)
-				// }
 
 			default:
 				buffer.Reset()
@@ -1828,10 +1883,11 @@ func (ve *videoEngine) Stop() {
 
 	//ve.webcamReader = nil
 
-	if ve.screenTrack != nil {
-		if err := ve.screenTrack.Close(); err != nil {
-			ve.log.Error("failed to close screenTrack", logger.Err(err))
+	if ve.screen != nil {
+		if err := ve.screen.Close(); err != nil {
+			ve.log.Error("failed to close screen", logger.Err(err))
 		}
+		ve.screen = nil
 	}
 
 	if ve.encodedScreenReader != nil {
@@ -1839,9 +1895,7 @@ func (ve *videoEngine) Stop() {
 			ve.log.Error("failed to close screenTrack", logger.Err(err))
 		}
 
-		ve.screenTrack = nil
+		ve.encodedScreenReader = nil
 	}
-
-	ve.encodedScreenReader = nil
 
 }
