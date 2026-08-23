@@ -1121,8 +1121,8 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 					ve.userVideo.screenImg = screenFrame
 					ve.userVideo.screenWindow.Invalidate()
 				}
-				realese()
 				ve.userVideo.mu.Unlock()
+				realese()
 			default:
 				buffer.Reset()
 				ve.screenBytesBuffersPool.Put(buffer)
