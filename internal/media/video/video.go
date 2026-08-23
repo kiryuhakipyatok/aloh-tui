@@ -962,7 +962,7 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 			ecodedReader := ve.encodedWebcamReader
 			reader := ve.webcamReader
 			ve.mu.RUnlock()
-			if reader == nil {
+			if reader == nil || ecodedReader == nil {
 				return
 			}
 			encodedWebcamFrame, eRealese, err := ecodedReader.Read()
@@ -970,7 +970,15 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 				ve.log.Error("failed to read encodedWebcamFrame", logger.Err(err))
 				continue
 			}
-
+			webcamFrame, realese, err := reader.Read()
+			if err != nil {
+				ve.log.Error("failed to read webcamFrame", logger.Err(err))
+				if ve.userVideo.termWebcamFrameCount.Load() > 0 {
+					ve.userVideo.termWebcamFrameCount.Add(-1)
+				}
+				eRealese()
+				continue
+			}
 			// ve.webcamBuffer.Reset()
 			//buf := ve.webcamBuffer.Bytes()
 
@@ -989,14 +997,6 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 			case ve.webcamBufferChan <- buffer:
 				closeWaitChan()
 				frameN := ve.userVideo.termWebcamFrameCount.Load()
-				webcamFrame, realese, err := reader.Read()
-				if err != nil {
-					ve.log.Error("failed to read webcamFrame", logger.Err(err))
-					if frameN > 0 {
-						ve.userVideo.termWebcamFrameCount.Add(-1)
-					}
-					continue
-				}
 
 				if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 2) {
 					var f string
@@ -1020,9 +1020,10 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 					ve.userVideo.webcamImg = webcamFrame
 					ve.userVideo.webcamWindow.Invalidate()
 				}
-				realese()
 				ve.userVideo.mu.Unlock()
+				realese()
 			default:
+				realese()
 				buffer.Reset()
 				ve.webcamBytesBuffersPool.Put(buffer)
 			}
@@ -1065,13 +1066,23 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 			reader := ve.screenReader
 			encodedRader := ve.encodedScreenReader
 			ve.mu.RUnlock()
-			if reader == nil {
+			if reader == nil || encodedRader == nil {
 				return
 			}
 
 			encodedScreenFrame, eRealese, err := encodedRader.Read()
 			if err != nil {
 				ve.log.Error("failed to read screenFrame", logger.Err(err))
+				continue
+			}
+
+			screenFrame, realese, err := reader.Read()
+			if err != nil {
+				ve.log.Error("failed to read screenFrame", logger.Err(err))
+				if ve.userVideo.termScreenFrameCount.Load() > 0 {
+					ve.userVideo.termScreenFrameCount.Add(-1)
+				}
+				eRealese()
 				continue
 			}
 
@@ -1090,14 +1101,6 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 			case ve.screenBufferChan <- buffer:
 				closeWaitChan()
 				frameN := ve.userVideo.termScreenFrameCount.Load()
-				screenFrame, realese, err := reader.Read()
-				if err != nil {
-					ve.log.Error("failed to read screenFrame", logger.Err(err))
-					if frameN > 0 {
-						ve.userVideo.termScreenFrameCount.Add(-1)
-					}
-					continue
-				}
 
 				if ve.onScreenTab.Load() && (frameN%3 == 0 || frameN <= 2) {
 					var f string
@@ -1124,6 +1127,7 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 				ve.userVideo.mu.Unlock()
 				realese()
 			default:
+				realese()
 				buffer.Reset()
 				ve.screenBytesBuffersPool.Put(buffer)
 			}
