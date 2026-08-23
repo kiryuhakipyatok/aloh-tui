@@ -123,3 +123,5 @@ require (
 )
 
 replace github.com/pion/mediadevices => github.com/kiryuhakipyatok/mediadevices v0.0.0-20260823132856-82642563d046
+
+replace github.com/ghp3000/screenshot => github.com/kiryuhakipyatok/screenshot v0.0.0-20260823132040-b0e7017fcec3
