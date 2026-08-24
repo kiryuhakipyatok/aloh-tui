@@ -116,6 +116,7 @@ type DeviceInfo struct {
 	Name  string
 	Id    string
 	Index int
+	Label string
 }
 
 type VideoSetup struct {
@@ -181,37 +182,7 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		},
 	}
 
-	devices := mediadevices.EnumerateDevices()
-	webcams := make(map[string]media.Device, len(devices))
-	var i int
-	var name string
-	for _, d := range devices {
-		if d.DeviceType == driver.Camera && d.Kind == mediadevices.VideoInput {
-			splited := strings.Split(d.Label, ";")
-			if len(splited) > 0 {
-				name = splited[0]
-			} else {
-				name = d.Label
-			}
-			di := DeviceInfo{
-				Name:  name,
-				Index: i,
-				Id:    d.DeviceID,
-			}
-
-			webcams[name] = di
-
-			if di.Index == 0 {
-				ve.currentWebcam = di
-			}
-
-			if vs.Webcam != "" && name == vs.Webcam {
-				ve.currentWebcam = di
-			}
-
-			i++
-		}
-	}
+	webcams := ve.fetchWebcams(vs.Webcam)
 
 	ve.log.Info("webcams", webcams)
 	ve.webcams = webcams
@@ -248,29 +219,6 @@ func (ve *videoEngine) UpdateWebcams() {
 	ve.mu.Unlock()
 }
 
-func (ve *videoEngine) resolveWebcamByName(webcam string) (DeviceInfo, error) {
-	var di DeviceInfo
-	var name string
-	devices := mediadevices.EnumerateDevices()
-	for i, d := range devices {
-		if d.DeviceType == driver.Camera && d.Kind == mediadevices.VideoInput && strings.HasPrefix(d.Label, webcam) {
-			splited := strings.Split(d.Label, ";")
-			if len(splited) > 0 {
-				name = splited[0]
-			} else {
-				name = d.Label
-			}
-			di := DeviceInfo{
-				Name:  name,
-				Index: i,
-				Id:    d.DeviceID,
-			}
-			return di, nil
-		}
-	}
-	return di, errs.ErrNotFound()
-}
-
 func (ve *videoEngine) ChangeWebcam(webcam string) error {
 	started := ve.userVideo.webcamStarted.Load()
 	if started && ve.connected.Load() {
@@ -305,9 +253,16 @@ func (ve *videoEngine) ChangeWebcam(webcam string) error {
 		ve.waitProcessWebcamChan = nil
 		ve.stopProcessWebcamChan = nil
 
+		if ve.camera != nil {
+			if err := ve.camera.Close(); err != nil {
+				ve.log.Error("failed to close camera", logger.Err(err))
+			}
+			ve.camera = nil
+		}
+
 		if ve.encodedWebcamReader != nil {
 			if err := ve.encodedWebcamReader.Close(); err != nil {
-				ve.log.Error("failed to close encodedWebcamReader track", logger.Err(err))
+				ve.log.Error("failed to close encodedWebcamReader", logger.Err(err))
 			}
 			ve.encodedWebcamReader = nil
 		}
