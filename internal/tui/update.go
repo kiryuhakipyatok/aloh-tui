@@ -1285,6 +1285,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = err
 				m.state = states.ERR_STATE
 			}
+
 			m.user.Engines.VideoEngine.OnOffUsersScreen(false, id)
 			m.user.Engines.VideoEngine.OnOffUsersWebcam(false, id)
 			coloredNickname := lipgloss.NewStyle().Foreground(m.usersColors[id].MainColor).Render(nickname)
