@@ -104,8 +104,8 @@ github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260726211718-ebaf500ab11e h1
 github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260726211718-ebaf500ab11e/go.mod h1:SiCYcZqok9gyc+fNQgxwt3fzBAHK8D8HVz0D3ZwF0oQ=
 github.com/kiryuhakipyatok/aloh-ssh v0.0.0-20260726171110-30dc3a8c5b15 h1:MzClu/V+rzZ7SxH172hPqao3ttfuWMd1mTwHlm4AQ/E=
 github.com/kiryuhakipyatok/aloh-ssh v0.0.0-20260726171110-30dc3a8c5b15/go.mod h1:xt2E/magL6Cy5+7QlyfC83std60bhqkK/C4dLkyj2b0=
-github.com/kiryuhakipyatok/mediadevices v0.0.0-20260824132423-08c7df37e22b h1:Zz4KjPjDmdehIB3Rz2bp6jK3t/w46ElsndVz1i0QiPI=
-github.com/kiryuhakipyatok/mediadevices v0.0.0-20260824132423-08c7df37e22b/go.mod h1:nYnbdhyz8P/QedpwuLwaxQuR1lZLbcrQIAZXwvpAvjo=
+github.com/kiryuhakipyatok/mediadevices v0.0.0-20260824133442-c1815811a732 h1:jTVjSUVcmRjP6h5JEpJifnp1UuweSoS7dOa1M/byaCE=
+github.com/kiryuhakipyatok/mediadevices v0.0.0-20260824133442-c1815811a732/go.mod h1:nYnbdhyz8P/QedpwuLwaxQuR1lZLbcrQIAZXwvpAvjo=
 github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e h1:r140sC6YmBlbwkO1ObcLh/27idiqCuNzTD4eMtmq8nw=
 github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e/go.mod h1:ygGMfWezx/ZqLUUZWbQr7geVOaGYdgUOxbp8KZBuasQ=
 github.com/kiryuhakipyatok/screenshot v0.0.0-20260823132040-b0e7017fcec3 h1:H0J9MG8zUdhJqcjCWZe5wPIN388RJVDaOs94eYlnhDM=
