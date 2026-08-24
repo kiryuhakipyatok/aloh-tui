@@ -287,7 +287,7 @@ func (ve *videoEngine) ChangeWebcam(webcam string) error {
 		vp8Params.KeyFrameInterval = 3000
 		vp8Params.ErrorResilient = vpx.ErrorResilientDefault
 		vp8Params.RateControlEndUsage = vpx.RateControlCBR
-		vp8Params.BitRate = 700_000
+		vp8Params.BitRate = 600_000
 		vp8Params.Deadline = 1 * time.Microsecond
 		vp8Params.RateControlOvershootPercent = 15
 		vp8Params.RateControlUndershootPercent = 50
@@ -568,7 +568,7 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 		vp8Params.KeyFrameInterval = 3000
 		vp8Params.ErrorResilient = vpx.ErrorResilientDefault
 		vp8Params.RateControlEndUsage = vpx.RateControlCBR
-		vp8Params.BitRate = 700_000
+		vp8Params.BitRate = 600_000
 		vp8Params.Deadline = 1 * time.Microsecond
 		vp8Params.RateControlOvershootPercent = 15
 		vp8Params.RateControlUndershootPercent = 50
@@ -754,12 +754,12 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 		vp8Params.KeyFrameInterval = 6000
 		vp8Params.ErrorResilient = vpx.ErrorResilientDefault
 		vp8Params.RateControlEndUsage = vpx.RateControlCBR
-		vp8Params.BitRate = 300_000
+		vp8Params.BitRate = 150_000
 		vp8Params.CPUUsed = 8
 		vp8Params.Deadline = 1 * time.Microsecond
 		vp8Params.RateControlOvershootPercent = 15
 		vp8Params.RateControlUndershootPercent = 100
-		vp8Params.RateControlMinQuantizer = 20
+		vp8Params.RateControlMinQuantizer = 30
 		vp8Params.RateControlMaxQuantizer = 63
 		vp8Params.LagInFrames = 0
 
@@ -1045,8 +1045,8 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 		}
 	}()
 
-	timer := time.NewTicker(66 * time.Millisecond)
-	defer timer.Stop()
+	//timer := time.NewTicker(66 * time.Millisecond)
+	//defer timer.Stop()
 
 	closeWaitChan := sync.OnceFunc(func() {
 		close(wc)
@@ -1057,36 +1057,28 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 		select {
 		case <-ve.stopProcessWebcamChan:
 			return
-		case <-timer.C:
-			select {
-			case <-ve.stopProcessWebcamChan:
-				return
-			default:
-			}
+		//case <-timer.C:
+		default:
+			// select {
+			// case <-ve.stopProcessWebcamChan:
+			// 	return
+			// default:
+			// }
 
 			ve.mu.RLock()
 			ecodedReader := ve.encodedWebcamReader
-			//reader := ve.webcamReader
 			ve.mu.RUnlock()
 			if ecodedReader == nil {
 				return
 			}
+			now := time.Now()
 			encodedWebcamFrame, realese, err := ecodedReader.Read()
 			if err != nil {
 				ve.log.Error("failed to read encodedWebcamFrame", logger.Err(err))
 				continue
 			}
-			// webcamFrame, realese, err := reader.Read()
-			// if err != nil {
-			// 	ve.log.Error("failed to read webcamFrame", logger.Err(err))
-			// 	if ve.userVideo.termWebcamFrameCount.Load() > 0 {
-			// 		ve.userVideo.termWebcamFrameCount.Add(-1)
-			// 	}
-			// 	eRealese()
-			// 	continue
-			// }
-			// ve.webcamBuffer.Reset()
-			//buf := ve.webcamBuffer.Bytes()
+			ve.log.Info("webcam frame time", time.Since(now).Milliseconds())
+
 			ve.log.Info("len webcam", len(encodedWebcamFrame))
 			buffer := ve.webcamBytesBuffersPool.Get().(*bytes.Buffer)
 
@@ -1102,34 +1094,9 @@ func (ve *videoEngine) processWebcam(wc chan struct{}) {
 			select {
 			case ve.webcamBufferChan <- buffer:
 				closeWaitChan()
-				// frameN := ve.userVideo.termWebcamFrameCount.Load()
 
-				// if ve.onWebcamTab.Load() && (frameN%3 == 0 || frameN <= 2) {
-				// 	var f string
-				// 	o := ve.GetUserWebcamFrame()
-				// 	ve.mu.RLock()
-				// 	n := len(ve.usersVideo)
-				// 	ve.mu.RUnlock()
-
-				// 	draw.NearestNeighbor.Scale(resizedWebcamFrame, resizedWebcamFrame.Rect, webcamFrame, webcamFrame.Bounds(), draw.Over, nil)
-
-				// 	f, err = renderLocalImg(float64(n+1), resizedWebcamFrame)
-				// 	if err != nil {
-				// 		ve.log.Error("failed to render img", logger.Err(err))
-				// 		f = o
-				// 	}
-				// 	ve.userVideo.webcamFrame.Store(f)
-				// }
-
-				// ve.userVideo.mu.Lock()
-				// if ve.userVideo.windowedWebcam.Load() && ve.userVideo.webcamWindow != nil {
-				// 	ve.userVideo.webcamImg = webcamFrame
-				// 	ve.userVideo.webcamWindow.Invalidate()
-				// }
-				// ve.userVideo.mu.Unlock()
-				// realese()
 			default:
-				//realese()
+
 				buffer.Reset()
 				ve.webcamBytesBuffersPool.Put(buffer)
 			}
@@ -1149,8 +1116,8 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 		}
 	}()
 
-	timer := time.NewTicker(66 * time.Millisecond)
-	defer timer.Stop()
+	//timer := time.NewTicker(66 * time.Millisecond)
+	//defer timer.Stop()
 
 	closeWaitChan := sync.OnceFunc(func() {
 		close(wc)
@@ -1159,28 +1126,24 @@ func (ve *videoEngine) processScreen(wc chan struct{}) {
 	for {
 		select {
 		case <-ve.stopProcessScreenChan:
-			ve.log.Debug("stop process screen 1")
+
 			return
-		case <-timer.C:
-			select {
-			case <-ve.stopProcessScreenChan:
-				ve.log.Debug("stop process screen 2")
-				return
-			default:
-			}
+		default:
+			//case <-timer.C:
+
 			ve.mu.RLock()
 			encodedRader := ve.encodedScreenReader
 			ve.mu.RUnlock()
 			if encodedRader == nil {
 				return
 			}
-
+			now := time.Now()
 			encodedScreenFrame, realese, err := encodedRader.Read()
 			if err != nil {
 				ve.log.Error("failed to read screenFrame", logger.Err(err))
 				continue
 			}
-
+			ve.log.Info("screen frame time", time.Since(now).Milliseconds())
 			//	ve.log.Info("n", len(encodedScreenFrame))
 			buffer := ve.screenBytesBuffersPool.Get().(*bytes.Buffer)
 
