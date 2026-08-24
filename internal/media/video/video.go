@@ -1331,9 +1331,6 @@ func (ve *videoEngine) RenderUsersWebcam(id uuid.UUID, data []byte) {
 
 		}
 
-		ve.mu.Lock()
-		defer ve.mu.Unlock()
-
 		uv.mu.Lock()
 		if uv.windowedWebcam.Load() && uv.webcamWindow != nil {
 			uv.webcamImg = img
@@ -1410,9 +1407,6 @@ func (ve *videoEngine) RenderUsersScreen(id uuid.UUID, data []byte) {
 			}
 		}
 
-		ve.mu.Lock()
-		defer ve.mu.Unlock()
-
 		uv.mu.Lock()
 		if uv.windowedScreen.Load() && uv.screenWindow != nil {
 			uv.screenImg = img
@@ -1427,12 +1421,14 @@ func (ve *videoEngine) RenderUsersScreen(id uuid.UUID, data []byte) {
 }
 
 func (ve *videoEngine) OnOffUsersWebcam(res bool, id uuid.UUID) {
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
+	ve.mu.RLock()
 	uv, ok := ve.usersVideo[id]
+	ve.mu.RUnlock()
 	if !ok {
 		uv = &userVideo{}
+		ve.mu.Lock()
 		ve.usersVideo[id] = uv
+		ve.mu.Unlock()
 	}
 	uv.mu.Lock()
 	if !res {
@@ -1464,14 +1460,15 @@ func (ve *videoEngine) OnOffUsersWebcam(res bool, id uuid.UUID) {
 }
 
 func (ve *videoEngine) OnOffUsersScreen(res bool, id uuid.UUID) {
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
+	ve.mu.RLock()
 	uv, ok := ve.usersVideo[id]
+	ve.mu.RUnlock()
 	if !ok {
 		uv = &userVideo{}
+		ve.mu.Lock()
 		ve.usersVideo[id] = uv
+		ve.mu.Unlock()
 	}
-
 	uv.mu.Lock()
 	if !res {
 		if uv.windowedScreen.Load() && uv.screenWindow != nil {
@@ -1520,27 +1517,31 @@ func (ve *videoEngine) GetUsersWebcamFramesTerminal() map[uuid.UUID]string {
 
 func (ve *videoEngine) SendWebcamKeyFrame() error {
 	ve.log.Debug("sending webcam key frame")
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
-	if ve.webcamKeyFrameCtrl != nil {
-		if err := ve.webcamKeyFrameCtrl.ForceKeyFrame(); err != nil {
+	ve.mu.RLock()
+	kfc := ve.webcamKeyFrameCtrl
+	ve.mu.RUnlock()
+	if kfc != nil {
+		if err := kfc.ForceKeyFrame(); err != nil {
 			ve.log.Error("failed to force webcam key frame", logger.Err(err))
 			return err
 		}
 	}
+	ve.log.Debug("webcam key frame sended")
 	return nil
 }
 
 func (ve *videoEngine) SendScreenKeyFrame() error {
 	ve.log.Debug("sending screen key frame")
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
-	if ve.screenKeyFrameCtrl != nil {
-		if err := ve.screenKeyFrameCtrl.ForceKeyFrame(); err != nil {
+	ve.mu.RLock()
+	kfc := ve.screenKeyFrameCtrl
+	ve.mu.RUnlock()
+	if kfc != nil {
+		if err := kfc.ForceKeyFrame(); err != nil {
 			ve.log.Error("failed to force screen key frame", logger.Err(err))
 			return err
 		}
 	}
+	ve.log.Debug("screen key frame sended")
 	return nil
 }
 
@@ -1653,6 +1654,7 @@ func (ve *videoEngine) sendWebcam() {
 				}
 			}
 			webcamBuffer.Reset()
+			data = nil
 			ve.webcamBytesBuffersPool.Put(webcamBuffer)
 		}
 	}
