@@ -82,7 +82,11 @@ func SetupAuth(as AuthSetup) error {
 			return err
 		}
 
-		videoEngine, err := video.NewVideoEngine(as.Log, video.VideoSetup{})
+		vs := video.VideoSetup{
+			Webcam: as.User.Data.Devices.Webcam,
+		}
+
+		videoEngine, err := video.NewVideoEngine(as.Log, vs)
 		if err != nil {
 			return err
 		}

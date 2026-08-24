@@ -198,14 +198,17 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 				Index: i,
 				Id:    d.DeviceID,
 			}
-			webcams[d.Label] = di
 
-			if vs.Webcam != "" && vs.Webcam == d.Label {
+			webcams[name] = di
+
+			if di.Index == 0 {
 				ve.currentWebcam = di
-				continue
 			}
 
-			ve.currentWebcam = di
+			if vs.Webcam != "" && name == vs.Webcam {
+				ve.currentWebcam = di
+			}
+
 			i++
 		}
 	}
@@ -250,7 +253,7 @@ func (ve *videoEngine) resolveWebcamByName(webcam string) (DeviceInfo, error) {
 	var name string
 	devices := mediadevices.EnumerateDevices()
 	for i, d := range devices {
-		if d.DeviceType == driver.Camera && d.Kind == mediadevices.VideoInput && d.Label == webcam {
+		if d.DeviceType == driver.Camera && d.Kind == mediadevices.VideoInput && strings.HasPrefix(d.Label, webcam) {
 			splited := strings.Split(d.Label, ";")
 			if len(splited) > 0 {
 				name = splited[0]
@@ -621,7 +624,7 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 
 		cameraNames := camera.GetCameraNames()
 		ve.log.Info("camera names", cameraNames)
-
+		ve.log.Info("cur name", curW.Name)
 		name, ok := cameraNames[curW.Name]
 		if !ok {
 			ve.log.Error("no camera with that name", curW.Name)
@@ -691,7 +694,7 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 				Width:       1280,
 				Height:      720,
 				FrameRate:   15,
-				FrameFormat: frame.FormatYUYV,
+				FrameFormat: frame.FormatI420,
 			},
 			//DeviceID: curW.Id,
 		})
@@ -700,7 +703,7 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 
 		fCtrl, ok := ctrl.(codec.KeyFrameController)
 		if !ok {
-			ve.log.Error("failed to casr KeyFrameController", logger.Err(err))
+			ve.log.Error("failed to cast KeyFrameController", logger.Err(err))
 			return false, err
 		}
 
@@ -818,6 +821,8 @@ func (ve *videoEngine) OnOffScreen() (bool, error) {
 			ve.log.Error("failed to create VideoRecord", logger.Err(err))
 			return false, err
 		}
+		cn := screen.GetCaptureName()
+		ve.log.Info("reader initialized", logger.Attr("type", cn))
 
 		interceptor := video.ReaderFunc(func() (img image.Image, release func(), err error) {
 			img, release, err = reader.Read()
