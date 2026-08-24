@@ -622,7 +622,11 @@ func (ve *videoEngine) OnOffWebcam() (bool, error) {
 		vp8Params.RateControlMaxQuantizer = 63
 		vp8Params.LagInFrames = 0
 
-		cameraNames := camera.GetCameraNames()
+		cameraNames, err := camera.GetCameraNames()
+		if err != nil {
+			ve.log.Error("failed to get camera names", logger.Err(err))
+			return false, err
+		}
 		ve.log.Info("camera names", cameraNames)
 		ve.log.Info("cur name", curW.Name)
 		name, ok := cameraNames[curW.Name]
