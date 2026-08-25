@@ -1004,7 +1004,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// 	m.headphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.HEADPHONES, ls)
 			// }
 			//friends := m.user.GetFriends()
-
+			m.cursor = 0
 			cmds = append(cmds,
 				commands.WaitForChatMessageCmd(m.msgChan),
 				commands.WaitForSSHEventMessageCmd(m.sshEventsChan),

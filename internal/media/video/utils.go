@@ -161,7 +161,7 @@ func getVp8Params(typee uint) (vpx.VP8Params, error) {
 	case WEBCAM:
 		kfi, br, rcop, rcup, rcminq, rcmaxq = 3000, 600_000, 15, 50, 20, 63
 	case SCREEN:
-		kfi, br, rcop, rcup, rcminq, rcmaxq = 6000, 200_000, 15, 50, 20, 63
+		kfi, br, rcop, rcup, rcminq, rcmaxq = 6000, 150_000, 15, 50, 25, 63
 	}
 
 	vp8Params.KeyFrameInterval = kfi
