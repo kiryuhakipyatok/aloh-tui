@@ -1,6 +1,6 @@
 module aloh-tui
 
-go 1.26.0
+go 1.27.0
 
 require (
 	gioui.org v0.10.2
@@ -11,6 +11,7 @@ require (
 	github.com/charmbracelet/keygen v0.5.4
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.6
+	github.com/charmbracelet/x/term v0.2.2
 	github.com/gen2brain/beeep v0.11.2
 	github.com/gen2brain/malgo v0.11.25
 	github.com/google/uuid v1.6.0
@@ -27,7 +28,6 @@ require (
 	golang.org/x/crypto v0.55.0
 	golang.org/x/image v0.45.0
 	golang.org/x/sync v0.22.0
-	golang.org/x/term v0.45.0
 	gopkg.in/hraban/opus.v2 v2.0.0-20230925203106-0188a62cb302
 )
 
@@ -41,7 +41,6 @@ require (
 	github.com/charmbracelet/colorprofile v0.4.1 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/mosaic v0.0.0-20260216111343-536eb63c1f4c // indirect
-	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.9.0 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.5.0 // indirect
@@ -117,11 +116,12 @@ require (
 	golang.org/x/mobile v0.0.0-20250606033058-a2a15c67f36f // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/pion/mediadevices => github.com/kiryuhakipyatok/mediadevices v0.0.0-20260825123257-5f87d64614fd
+replace github.com/pion/mediadevices => github.com/kiryuhakipyatok/mediadevices v0.0.0-20260825184643-f76f46351cbd
 
 replace github.com/ghp3000/screenshot => github.com/kiryuhakipyatok/screenshot v0.0.0-20260823132040-b0e7017fcec3

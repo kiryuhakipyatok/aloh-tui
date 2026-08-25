@@ -30,11 +30,11 @@ func (ve *videoEngine) fetchWebcams(userWebcam string) map[string]media.Device {
 			webcams[name] = di
 
 			if di.Index == 0 {
-				ve.currentWebcam = di
+				ve.webcam.current = di
 			}
 
 			if userWebcam != "" && name == userWebcam {
-				ve.currentWebcam = di
+				ve.webcam.current = di
 			}
 
 			i++
