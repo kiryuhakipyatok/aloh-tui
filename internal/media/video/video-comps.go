@@ -30,7 +30,7 @@ type deviceInfo struct {
 	started atomic.Bool
 
 	decoderBuffer *bytes.Buffer
-	vp8Decoder    codec.VideoDecoder
+	h264Decoder    codec.VideoDecoder
 
 	ui ui
 

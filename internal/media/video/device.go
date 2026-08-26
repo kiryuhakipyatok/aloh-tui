@@ -122,6 +122,9 @@ func (ve *videoEngine) onOffDevice(typee uint) (bool, error) {
 	case SCREEN:
 		vd = ve.screen
 	}
+	if vd == nil {
+		panic("PIDARAS")
+	}
 	s := vd.started.Load()
 
 	if !s == true {
@@ -171,6 +174,7 @@ func (vd *videoDevice) processVideoDevice(wc chan struct{}, log *logger.Logger) 
 				log.Error("failed to read encodedFrame", logger.Err(err))
 				continue
 			}
+
 			log.Info("frame time", time.Since(now).Milliseconds())
 
 			log.Info("len", len(encodedFrame))
@@ -206,7 +210,7 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 	curW := vd.current
 	vd.mu.RUnlock()
 
-	vp8Params, err := getVp8Params(vd.typee)
+	encParams, err := getEncParams(vd.typee)
 	if err != nil {
 		return err
 	}
@@ -308,7 +312,7 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 		return
 	})
 
-	encodedReader, err := vp8Params.BuildVideoEncoder(interceptor, prop.Media{
+	encodedReader, err := encParams.BuildVideoEncoder(interceptor, prop.Media{
 		Video: prop.Video{
 			Width:       1280,
 			Height:      720,
@@ -341,6 +345,7 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 }
 
 func (ve *videoEngine) offDevice(vd *videoDevice) error {
+	ve.log.Info("QQQQQQQQQQQQQQQQQQQQ")
 	log := setupLog(vd.typee, ve.log)
 	vd.ui.mu.Lock()
 	if vd.ui.windowed.Load() && vd.ui.window != nil {
@@ -360,6 +365,7 @@ func (ve *videoEngine) offDevice(vd *videoDevice) error {
 	vd.mu.Unlock()
 
 	if wait != nil {
+
 		<-wait
 	}
 

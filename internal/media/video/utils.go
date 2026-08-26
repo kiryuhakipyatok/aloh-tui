@@ -5,11 +5,10 @@ import (
 	"bytes"
 	"image"
 	"os"
-	"time"
 
 	"github.com/blacktop/go-termimg"
 	"github.com/charmbracelet/x/term"
-	"github.com/pion/mediadevices/pkg/codec/vpx"
+	"github.com/pion/mediadevices/pkg/codec/openh264"
 	"github.com/pion/mediadevices/pkg/prop"
 )
 
@@ -122,59 +121,36 @@ func newUserDevices() (*userDevices, error) {
 			FrameRate: 15,
 		},
 	}
-	wVp8Decoder, err := vpx.NewDecoder(wdb, propM)
+
+	wDecParams, err := getDecParams(WEBCAM)
+	if err != nil {
+		return nil, err
+	}
+
+	wH264Decoder, err := openh264.NewDecoder(wdb, propM, wDecParams)
 	if err != nil {
 		wdb = nil
 		sdb = nil
 		return nil, err
 	}
 
-	sVp8Decoder, err := vpx.NewDecoder(sdb, propM)
+	sDecParams, err := getDecParams(SCREEN)
+	if err != nil {
+		return nil, err
+	}
+
+	sH264Decoder, err := openh264.NewDecoder(sdb, propM, sDecParams)
 	if err != nil {
 		wdb = nil
 		sdb = nil
 		return nil, err
 	}
 
-	wdi.vp8Decoder = wVp8Decoder
-	sdi.vp8Decoder = sVp8Decoder
+	wdi.h264Decoder = wH264Decoder
+	sdi.h264Decoder = sH264Decoder
 
 	ud.webcam = wdi
 	ud.screen = sdi
 
 	return ud, nil
-}
-
-func getVp8Params(typee uint) (vpx.VP8Params, error) {
-
-	vp8Params, err := vpx.NewVP8Params()
-	if err != nil {
-		return vp8Params, err
-	}
-
-	var (
-		kfi, br                    int
-		rcop, rcup, rcminq, rcmaxq uint
-	)
-
-	switch typee {
-	case WEBCAM:
-		kfi, br, rcop, rcup, rcminq, rcmaxq = 3000, 600_000, 15, 50, 20, 63
-	case SCREEN:
-		kfi, br, rcop, rcup, rcminq, rcmaxq = 6000, 150_000, 15, 50, 25, 63
-	}
-
-	vp8Params.KeyFrameInterval = kfi
-	vp8Params.ErrorResilient = vpx.ErrorResilientDefault
-	vp8Params.RateControlEndUsage = vpx.RateControlCBR
-	vp8Params.BitRate = br
-	vp8Params.Deadline = 1 * time.Microsecond
-	vp8Params.RateControlOvershootPercent = rcop
-	vp8Params.RateControlUndershootPercent = rcup
-	vp8Params.CPUUsed = 8
-	vp8Params.RateControlMinQuantizer = rcminq
-	vp8Params.RateControlMaxQuantizer = rcmaxq
-	vp8Params.LagInFrames = 0
-
-	return vp8Params, nil
 }

@@ -2,6 +2,8 @@ package video
 
 import (
 	"aloh-tui/pkg/logger"
+	"errors"
+	"io"
 
 	"github.com/google/uuid"
 )
@@ -50,7 +52,7 @@ func (ve *videoEngine) renderUsersDevice(typee uint, id uuid.UUID, data []byte) 
 		ve.mu.RUnlock()
 
 		di.mu.Lock()
-		if di.decoderBuffer == nil || di.vp8Decoder == nil {
+		if di.decoderBuffer == nil || di.h264Decoder == nil {
 			di.mu.Unlock()
 			return
 		}
@@ -60,13 +62,13 @@ func (ve *videoEngine) renderUsersDevice(typee uint, id uuid.UUID, data []byte) 
 			di.mu.Unlock()
 			return
 		}
-		img, release, err := di.vp8Decoder.Read()
+		img, release, err := di.h264Decoder.Read()
 		if err != nil {
-			if err.Error() == "decode failed: 5" {
+			if err.Error() == "decode error: 16" {
 				if rerr := ve.receiveKeyFrame(typee); rerr != nil {
-					ve.log.Error("failed to receiveWebcamKeyFrame", logger.Err(rerr))
+					ve.log.Error("failed to receiveKeyFrame", logger.Err(rerr))
 				}
-			} else {
+			} else if !errors.Is(err, io.EOF) {
 				ve.log.Error("failed to decode img", logger.Err(err))
 			}
 			di.mu.Unlock()
@@ -75,27 +77,41 @@ func (ve *videoEngine) renderUsersDevice(typee uint, id uuid.UUID, data []byte) 
 		di.mu.Unlock()
 		di.ui.termFrameCount.Add(1)
 		frameCount := di.ui.termFrameCount.Load()
-		if ve.onWebcamTab.Load() && (frameCount%3 == 0 || frameCount <= 2) {
+		var tab bool
+		switch typee {
+		case WEBCAM:
+			tab = ve.onWebcamTab.Load()
+		case SCREEN:
+			tab = ve.onScreenTab.Load()
+		}
+		if tab && (frameCount%3 == 0 || frameCount <= 2) {
 
 			var s bool
+
 			switch typee {
 			case WEBCAM:
-				s = ve.webcam.started.Load()
+				if ve.webcam != nil {
+					s = ve.webcam.started.Load()
+				}
+
 			case SCREEN:
-				s = ve.screen.started.Load()
+				if ve.screen != nil {
+					s = ve.screen.started.Load()
+				}
 			}
+
 			if s {
 				n++
 			}
 
-			webcamFrame, err := renderTerminalImg(float64(n), img)
+			frame, err := renderTerminalImg(float64(n), img)
 			if err != nil {
 				ve.log.Error("failed to render img", logger.Err(err))
 				di.ui.termFrameCount.Add(-1)
 				return
 			}
 			if di.started.Load() {
-				di.ui.frame.Store(webcamFrame)
+				di.ui.frame.Store(frame)
 			}
 
 		}

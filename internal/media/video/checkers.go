@@ -6,9 +6,15 @@ type Checker interface {
 }
 
 func (ve *videoEngine) IsWebcamStarted() bool {
-	return ve.webcam.started.Load()
+	if ve.webcam != nil {
+		return ve.webcam.started.Load()
+	}
+	return false
 }
 
 func (ve *videoEngine) IsScreenStarted() bool {
-	return ve.screen.started.Load()
+	if ve.screen != nil {
+		return ve.screen.started.Load()
+	}
+	return false
 }

@@ -10,7 +10,7 @@ import (
 	"gioui.org/app"
 	"gioui.org/io/system"
 	"github.com/google/uuid"
-	"github.com/pion/mediadevices/pkg/codec/vpx"
+	"github.com/pion/mediadevices/pkg/codec/openh264"
 	"github.com/pion/mediadevices/pkg/prop"
 )
 
@@ -85,10 +85,6 @@ func (ve *videoEngine) onOffUsersDevice(typee uint, res bool, id uuid.UUID) erro
 		di = ud.screen
 	}
 
-	if di == nil {
-		panic("PIDOR")
-	}
-
 	if !res {
 		di.ui.mu.Lock()
 		if di.ui.windowed.Load() && di.ui.window != nil {
@@ -99,36 +95,48 @@ func (ve *videoEngine) onOffUsersDevice(typee uint, res bool, id uuid.UUID) erro
 		di.ui.mu.Unlock()
 
 		di.mu.Lock()
-		if err := di.vp8Decoder.Close(); err != nil {
+		if err := di.h264Decoder.Close(); err != nil {
 			ve.log.Error("failed to close webcam user decoder", logger.Err(err))
 		}
 		di.decoderBuffer = nil
-		di.vp8Decoder = nil
+		di.h264Decoder = nil
 		di.mu.Unlock()
 
 	} else {
 		grow := setupGrow(typee)
 		db := new(bytes.Buffer)
 		db.Grow(grow)
-		vp8Decoder, err := vpx.NewDecoder(db, prop.Media{
+		wDecParams, err := getDecParams(WEBCAM)
+		if err != nil {
+			return err
+		}
+		propM := prop.Media{
 			Video: prop.Video{
 				Width:     1280,
 				Height:    720,
 				FrameRate: 15,
 			},
-		})
+		}
+
+		wH264Decoder, err := openh264.NewDecoder(db, propM, wDecParams)
+		if err != nil {
+			db = nil
+			return err
+		}
 		if err != nil {
 			ve.log.Error("failed to create decoder", logger.Err(err))
 			return err
 		}
 		di.mu.Lock()
 		di.decoderBuffer = db
-		di.vp8Decoder = vp8Decoder
+		di.h264Decoder = wH264Decoder
 		di.mu.Unlock()
 	}
 
 	di.started.Store(res)
+	di.mu.Lock()
 	di.ui.resizedFrame = image.NewNRGBA(image.Rect(0, 0, 160, 80))
+	di.mu.Unlock()
 	return nil
 }
 
