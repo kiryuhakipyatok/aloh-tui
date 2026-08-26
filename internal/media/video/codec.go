@@ -19,7 +19,7 @@ func getEncParams(typee uint) (openh264.EncParams, error) {
 	case WEBCAM:
 		kfi, br, ut = 3000, 500_000, openh264.CameraVideoRealTime
 	case SCREEN:
-		kfi, br, ut = 6000, 150_000, openh264.ScreenContentRealTime
+		kfi, br, ut = 4000, 300_000, openh264.ScreenContentRealTime
 
 	}
 
@@ -44,9 +44,9 @@ func getDecParams(typee uint) (openh264.DecParams, error) {
 
 	switch typee {
 	case WEBCAM:
-		kfi, br = 3000, 600_000
+		kfi, br = 3000, 500_000
 	case SCREEN:
-		kfi, br = 6000, 150_000
+		kfi, br = 6000, 300_000
 
 	}
 
