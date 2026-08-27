@@ -58,6 +58,8 @@ func NewVideoEngine(l *logger.Logger, vs VideoSetup) (VideoEngine, error) {
 		webcam: NewWebcam(),
 		screen: NewScreen(),
 
+		stopSendChan: make(chan struct{}, 1),
+
 		usersDevices: make(map[uuid.UUID]*userDevices, 3),
 	}
 

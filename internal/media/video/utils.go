@@ -16,9 +16,9 @@ func setupGrow(typee uint) int {
 	var grow int
 	switch typee {
 	case WEBCAM:
-		grow = 20000
+		grow = 50000
 	case SCREEN:
-		grow = 150000
+		grow = 300000
 	}
 
 	return grow
@@ -118,7 +118,7 @@ func newUserDevices() (*userDevices, error) {
 		Video: prop.Video{
 			Width:     1280,
 			Height:    720,
-			FrameRate: 15,
+			FrameRate: 10,
 		},
 	}
 

@@ -43,7 +43,7 @@ func (ve *videoEngine) SetDisconnected() {
 		if err := ve.offDevice(ve.webcam); err != nil {
 			ve.log.Error("failed to off webcam", logger.Err(err))
 		}
-		ve.webcam = nil
+		//ve.webcam = nil
 	}
 
 	if ve.screen != nil {
@@ -70,7 +70,7 @@ func (ve *videoEngine) SetDisconnected() {
 		if err := ve.offDevice(ve.screen); err != nil {
 			ve.log.Error("failed to off screen", logger.Err(err))
 		}
-		ve.screen = nil
+		//ve.screen = nil
 	}
 
 	for _, ud := range ve.usersDevices {

@@ -13,7 +13,7 @@ type FilesPaths struct {
 	AppLog        string
 	KeysDir       string
 	UserdataFile  string
-	CrashLog      string
+	ErrorsLog     string
 }
 
 func SetupFiles() (FilesPaths, error) {
@@ -28,7 +28,7 @@ func SetupFiles() (FilesPaths, error) {
 	appLogPath := filepath.Join(binDir, "app-logs")
 	keysPath := filepath.Join(binDir, "keys")
 	userdataFilePath := filepath.Join(binDir, "userdata.json")
-	crashLogFilePath := filepath.Join(binDir, "crash.log")
+	erorrsLogFilePath := filepath.Join(binDir, "errors.log")
 
 	if err := os.MkdirAll(netwLogPath, 0755); err != nil {
 		return FilesPaths{}, err
@@ -70,12 +70,21 @@ func SetupFiles() (FilesPaths, error) {
 		return FilesPaths{}, err
 	}
 
+	errFile, err := os.OpenFile(erorrsLogFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND|os.O_TRUNC, 0644)
+	if err != nil {
+		return FilesPaths{}, err
+	}
+
+	if err := errFile.Close(); err != nil {
+		return FilesPaths{}, err
+	}
+
 	return FilesPaths{
 		NetworkingLog: netwLogFilePath,
 		AppLog:        appLogFilePath,
 		UserdataFile:  userdataFilePath,
 		KeysDir:       keysPath,
-		CrashLog:      crashLogFilePath,
+		ErrorsLog:     erorrsLogFilePath,
 	}, nil
 }
 

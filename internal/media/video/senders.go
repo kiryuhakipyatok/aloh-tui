@@ -61,6 +61,9 @@ func (ve *videoEngine) sendVideo(typee uint) {
 			data := buffer.Bytes()
 			if len(data) == 0 {
 				log.Error("zero data")
+				buffer.Reset()
+				data = nil
+				vd.bytesBuffersPool.Put(buffer)
 				continue
 			}
 			ve.mu.RLock()

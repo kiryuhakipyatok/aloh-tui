@@ -55,7 +55,7 @@ func NewWebcam() *videoDevice {
 		bytesBuffersPool: sync.Pool{
 			New: func() any {
 				b := new(bytes.Buffer)
-				b.Grow(20000)
+				b.Grow(50000)
 				return b
 			},
 		},
@@ -73,7 +73,7 @@ func NewScreen() *videoDevice {
 		bytesBuffersPool: sync.Pool{
 			New: func() any {
 				b := new(bytes.Buffer)
-				b.Grow(150000)
+				b.Grow(300000)
 				return b
 			},
 		},
@@ -122,9 +122,7 @@ func (ve *videoEngine) onOffDevice(typee uint) (bool, error) {
 	case SCREEN:
 		vd = ve.screen
 	}
-	if vd == nil {
-		panic("PIDARAS")
-	}
+
 	s := vd.started.Load()
 
 	if !s == true {
@@ -215,7 +213,10 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 		return err
 	}
 
-	var device driver.VideoDevice
+	var (
+		device driver.VideoDevice
+		propM  prop.Video
+	)
 	switch vd.typee {
 	case WEBCAM:
 		cameraNames, err := camera.GetCameraNames()
@@ -234,6 +235,12 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 			log.Error("failed to open camera", logger.Err(err))
 			return err
 		}
+		propM = prop.Video{
+			Width:       1280,
+			Height:      720,
+			FrameRate:   10,
+			FrameFormat: frame.FormatYUYV,
+		}
 		device = camera
 
 	case SCREEN:
@@ -242,16 +249,17 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 			log.Error("failed to open screen", logger.Err(err))
 			return err
 		}
+		propM = prop.Video{
+			Width:       1920,
+			Height:      1080,
+			FrameRate:   10,
+			FrameFormat: frame.FormatYUYV,
+		}
 		device = screen
 	}
 
 	reader, err := device.VideoRecord(prop.Media{
-		Video: prop.Video{
-			Width:       1280,
-			Height:      720,
-			FrameRate:   15,
-			FrameFormat: frame.FormatYUYV,
-		},
+		Video: propM,
 	})
 	if err != nil {
 		log.Error("failed to create video reader", logger.Err(err))
@@ -312,13 +320,10 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 		return
 	})
 
+	propM.FrameFormat = frame.FormatI420
+
 	encodedReader, err := encParams.BuildVideoEncoder(interceptor, prop.Media{
-		Video: prop.Video{
-			Width:       1280,
-			Height:      720,
-			FrameRate:   15,
-			FrameFormat: frame.FormatI420,
-		},
+		Video: propM,
 	})
 
 	ctrl := encodedReader.Controller()

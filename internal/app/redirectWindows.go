@@ -14,21 +14,20 @@ var (
 
 const stdErrorHandle = syscall.STD_ERROR_HANDLE
 
-func redirectErr(crashLogPath string) (*os.File, error) {
-	file, err := os.OpenFile(crashLogPath, os.O_CREATE|os.O_WRONLY, 0666)
+func redirectErr(errorsLogPath string) (*os.File, error) {
+	errorsFile, err := os.OpenFile(errorsLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, err
 	}
+	os.Stderr = errorsFile
 
-	os.Stderr = file
-
-	err = setStdHandle(stdErrorHandle, syscall.Handle(file.Fd()))
+	err = setStdHandle(stdErrorHandle, syscall.Handle(errorsFile.Fd()))
 	if err != nil {
-		file.Close()
+		errorsFile.Close()
 		return nil, err
 	}
 
-	return file, nil
+	return errorsFile, nil
 }
 
 func setStdHandle(stdHandle int, handle syscall.Handle) error {

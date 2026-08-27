@@ -17,7 +17,7 @@ func Run(env, version string) {
 		l.Fatalf("failed to setup files: %v", err)
 	}
 
-	null, err := redirectErr(fp.CrashLog)
+	null, err := redirectErr(fp.ErrorsLog)
 
 	log := logger.NewLogger(env, fp.AppLog, version)
 

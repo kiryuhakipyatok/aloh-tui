@@ -13,13 +13,14 @@ func getEncParams(typee uint) (openh264.EncParams, error) {
 		br  int
 		ut  openh264.UsageTypeEnum
 		kfi uint
+		rcm openh264.RCModeEnum
 	)
 
 	switch typee {
 	case WEBCAM:
-		kfi, br, ut = 3000, 500_000, openh264.CameraVideoRealTime
+		kfi, br, ut, rcm = 3000, 1_000_000, openh264.CameraVideoRealTime, openh264.RCBitrateMode
 	case SCREEN:
-		kfi, br, ut = 4000, 300_000, openh264.ScreenContentRealTime
+		kfi, br, ut, rcm = 6000, 600_000, openh264.ScreenContentRealTime, openh264.RCQualityMode
 
 	}
 
@@ -27,6 +28,8 @@ func getEncParams(typee uint) (openh264.EncParams, error) {
 	encParams.IntraPeriod = kfi
 	encParams.KeyFrameInterval = int(kfi)
 	encParams.UsageType = ut
+	encParams.RCMode = rcm
+	encParams.EnableFrameSkip = true
 
 	return encParams, nil
 }
@@ -44,14 +47,15 @@ func getDecParams(typee uint) (openh264.DecParams, error) {
 
 	switch typee {
 	case WEBCAM:
-		kfi, br = 3000, 500_000
+		kfi, br = 3000, 1_000_000
 	case SCREEN:
-		kfi, br = 6000, 300_000
+		kfi, br = 6000, 600_000
 
 	}
 
 	decParams.BitRate = br
 	decParams.KeyFrameInterval = kfi
+	decParams.VideoBitstreamType = openh264.VideoBitstreamAVC
 
 	return decParams, nil
 }

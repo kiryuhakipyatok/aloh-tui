@@ -110,11 +110,25 @@ func (ve *videoEngine) onOffUsersDevice(typee uint, res bool, id uuid.UUID) erro
 		if err != nil {
 			return err
 		}
+
+		var (
+			w int
+			h int
+		)
+
+		switch typee {
+		case WEBCAM:
+			w = 1280
+			h = 720
+		case SCREEN:
+			w = 1920
+			h = 1080
+		}
 		propM := prop.Media{
 			Video: prop.Video{
-				Width:     1280,
-				Height:    720,
-				FrameRate: 15,
+				Width:     w,
+				Height:    h,
+				FrameRate: 10,
 			},
 		}
 

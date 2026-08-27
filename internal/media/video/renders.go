@@ -71,6 +71,7 @@ func (ve *videoEngine) renderUsersDevice(typee uint, id uuid.UUID, data []byte) 
 			} else if !errors.Is(err, io.EOF) {
 				ve.log.Error("failed to decode img", logger.Err(err))
 			}
+			di.decoderBuffer.Reset()
 			di.mu.Unlock()
 			return
 		}
