@@ -11,6 +11,9 @@ import (
 )
 
 func Run(env, version string) {
+	if err := udpSizeSetup(); err != nil {
+		l.Fatalf("failed to setup udp size: %v", err)
+	}
 
 	fp, err := utils.SetupFiles()
 	if err != nil {

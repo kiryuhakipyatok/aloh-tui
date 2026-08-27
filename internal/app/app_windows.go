@@ -40,3 +40,13 @@ func setStdHandle(stdHandle int, handle syscall.Handle) error {
 	}
 	return nil
 }
+
+func udpSizeSetup() error {
+	if err := os.Setenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING", "true"); err != nil {
+		return err
+	}
+	if err := os.Setenv("QUIC_GO_DISABLE_SEND_BUFFER_WARNING", "true"); err != nil {
+		return err
+	}
+	return nil
+}
