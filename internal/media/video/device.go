@@ -320,8 +320,6 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 		return
 	})
 
-	propM.FrameFormat = frame.FormatI420
-
 	encodedReader, err := encParams.BuildVideoEncoder(interceptor, prop.Media{
 		Video: propM,
 	})
@@ -350,7 +348,6 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 }
 
 func (ve *videoEngine) offDevice(vd *videoDevice) error {
-	ve.log.Info("QQQQQQQQQQQQQQQQQQQQ")
 	log := setupLog(vd.typee, ve.log)
 	vd.ui.mu.Lock()
 	if vd.ui.windowed.Load() && vd.ui.window != nil {

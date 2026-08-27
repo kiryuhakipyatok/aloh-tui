@@ -114,10 +114,18 @@ func newUserDevices() (*userDevices, error) {
 	sdi := &deviceInfo{
 		decoderBuffer: sdb,
 	}
-	propM := prop.Media{
+	propW := prop.Media{
 		Video: prop.Video{
 			Width:     1280,
 			Height:    720,
+			FrameRate: 10,
+		},
+	}
+
+	propS := prop.Media{
+		Video: prop.Video{
+			Width:     1920,
+			Height:    1080,
 			FrameRate: 10,
 		},
 	}
@@ -127,7 +135,7 @@ func newUserDevices() (*userDevices, error) {
 		return nil, err
 	}
 
-	wH264Decoder, err := openh264.NewDecoder(wdb, propM, wDecParams)
+	wH264Decoder, err := openh264.NewDecoder(wdb, propW, wDecParams)
 	if err != nil {
 		wdb = nil
 		sdb = nil
@@ -139,7 +147,7 @@ func newUserDevices() (*userDevices, error) {
 		return nil, err
 	}
 
-	sH264Decoder, err := openh264.NewDecoder(sdb, propM, sDecParams)
+	sH264Decoder, err := openh264.NewDecoder(sdb, propS, sDecParams)
 	if err != nil {
 		wdb = nil
 		sdb = nil
