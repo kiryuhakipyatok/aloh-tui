@@ -7,7 +7,7 @@ const (
 	jitterSize       = 13440
 	rnnoiseFrameSize = 480
 	mono             = 1
-	bitrate          = 64000
+	bitrate          = 48000
 )
 
 const (
