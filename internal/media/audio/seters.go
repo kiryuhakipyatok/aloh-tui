@@ -106,7 +106,7 @@ func (ae *audioEngine) SetDisconnected() error {
 			return err
 		}
 	}
-	
+
 	clear(ae.usersAudio)
 	ae.mu.Unlock()
 	return nil

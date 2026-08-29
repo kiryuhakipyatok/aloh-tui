@@ -208,7 +208,7 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 			return
 		}
 
-		if pOutputSample != nil {
+		if pOutputSample != nil && !ae.muted.Load() {
 			ae.playbackReady.Store(true)
 			clear(pOutputSample)
 
@@ -223,14 +223,19 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 				usersAudio := ae.usersAudio
 				ae.mu.RUnlock()
 				for _, ua := range usersAudio {
-					//	wg.Go(func() {
 					ua.mu.Lock()
 					for i := 0; i < frameLen; i++ {
 						ua.workMix[i] = 0
 					}
+					ua.mu.Unlock()
+					if ua.muted.Load() {
+						continue
+					}
+					ua.mu.Lock()
+					
 					if len(ua.data) == 0 {
 						ua.framesCount++
-						if ua.framesCount <= 5 {
+						if ua.framesCount <= 20 {
 							plcBuffer := ae.int16BuffersPool.Get().([]int16)
 
 							n, err := ua.decoder.Decode(nil, plcBuffer)
@@ -241,7 +246,9 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 							ae.int16BuffersPool.Put(plcBuffer[:4096])
 						} else {
 							ua.isSpeaking.Store(false)
+
 							ua.playing = false
+
 						}
 					} else {
 						ua.framesCount = 0

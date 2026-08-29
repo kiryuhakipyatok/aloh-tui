@@ -47,6 +47,8 @@ type audioEngine struct {
 	opusEncoder *opus.Encoder
 	rnnoise     *rnnoise.RNNoise
 
+	//muteFade atomic.Uint32
+
 	sessionId atomic.Int32
 
 	buffers

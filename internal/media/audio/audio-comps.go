@@ -147,4 +147,5 @@ type usersAudio struct {
 	personalHardDenoise  *rnnoise.RNNoise
 	hardDenoised         atomic.Bool
 	mu                   sync.Mutex
+	//muteFade             atomic.Uint32
 }
