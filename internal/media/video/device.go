@@ -249,6 +249,7 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 			log.Error("failed to open screen", logger.Err(err))
 			return err
 		}
+		log.Info("capture name", logger.Attr("name", screen.GetCaptureName()))
 		propM = prop.Video{
 			Width:       1920,
 			Height:      1080,
