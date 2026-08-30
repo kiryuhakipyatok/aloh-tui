@@ -110,4 +110,4 @@ require (
 
 replace github.com/pion/mediadevices => github.com/kiryuhakipyatok/mediadevices v0.0.0-20260827170739-e5bb84f12077
 
-replace github.com/ghp3000/screenshot => github.com/kiryuhakipyatok/screenshot v0.0.0-20260823132040-b0e7017fcec3
+replace github.com/ghp3000/screenshot => github.com/kiryuhakipyatok/screenshot v0.0.0-20260830173552-372aa49cac41

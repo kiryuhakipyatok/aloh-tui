@@ -48,6 +48,7 @@ func (ae *audioEngine) PlayUserVoice(id uuid.UUID, userVoiceByte []byte) {
 		ua.mu.Unlock()
 		return
 	}
+
 	ua.mu.Unlock()
 	setupVolume(v, pcmBuffer[:n])
 	ua.mu.Lock()

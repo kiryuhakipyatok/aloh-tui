@@ -81,22 +81,14 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		log.Error("failed to create new opus encoder", logger.Err(err))
 		return nil, err
 	}
-	if err := opusEncoder.SetInBandFEC(true); err != nil {
-		log.Error("failed to set fec", logger.Err(err))
-		return nil, err
-	}
 
 	if err = opusEncoder.SetBitrate(bitrate); err != nil {
 		log.Error("failed to set bitrate to opus encoder", logger.Err(err))
 		return nil, err
 	}
 
-	if err = opusEncoder.SetMaxBandwidth(opus.Fullband); err != nil {
+	if err = opusEncoder.SetMaxBandwidth(opus.SuperWideband); err != nil {
 		log.Error("failed to set max bandwidth to opus encoder", logger.Err(err))
-		return nil, err
-	}
-	if err = opusEncoder.SetInBandFEC(true); err != nil {
-		log.Error("failed to set in band fec to opus encoder", logger.Err(err))
 		return nil, err
 	}
 

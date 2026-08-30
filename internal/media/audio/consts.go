@@ -1,10 +1,11 @@
 package audio
 
 const (
-	sampleRate       = 48000
-	frameSize        = 1920
-	frameLen         = 960
-	jitterSize       = 5760
+	sampleRate = 48000
+	frameSize  = 1920
+	frameLen   = 960
+	//jitterSize       = 5760
+	jitterSize       = 13440
 	rnnoiseFrameSize = 480
 	mono             = 1
 	bitrate          = 64000
