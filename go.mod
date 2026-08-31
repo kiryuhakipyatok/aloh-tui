@@ -108,6 +108,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/pion/mediadevices => github.com/kiryuhakipyatok/mediadevices v0.0.0-20260831150304-0656092bd4fc
+replace github.com/pion/mediadevices => github.com/kiryuhakipyatok/mediadevices v0.0.0-20260831185036-dbe86e02f16d
 
 replace github.com/ghp3000/screenshot => github.com/kiryuhakipyatok/screenshot v0.0.0-20260830204908-d020b15d92f2
