@@ -336,7 +336,7 @@ func isEmptyString(s string) (string, bool) {
 
 func validatePassword(s string) error {
 	entropy := passwordvalidator.GetEntropy(s)
-	if err := passwordvalidator.Validate(s, 60); err != nil {
+	if err := passwordvalidator.Validate(s, 55); err != nil {
 		return errs.ErrInvalidPassword(entropy)
 	}
 	return nil

@@ -1,7 +1,6 @@
 package sshclient
 
 import (
-	"aloh-tui/pkg/errs"
 	"context"
 	"errors"
 	"fmt"
@@ -62,25 +61,25 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 			payload  []byte
 			status   bool
 			authType string
-			errAuth  error
+			//errAuth  error
 		)
 
 		switch setup.Typee {
 		case LOGIN:
 			authType = "SSH-2.0-aloh-login"
-			errAuth = errs.ErrLogin()
+		//	errAuth = errs.ErrLogin()
 		case REGISTER:
 			authType = "SSH-2.0-aloh-register"
-			errAuth = errs.ErrRegister()
+		//	errAuth = errs.ErrRegister()
 		case DEFAULT:
 			authType = "SSH-2.0-aloh-default"
-			errAuth = errs.ErrAuth()
+			//errAuth = errs.ErrAuth()
 		default:
 			authType = "SSH-2.0-aloh-default"
-			errAuth = errs.ErrAuth()
+			//errAuth = errs.ErrAuth()
 		}
 
-		kp, err := InitKeys(setup.KeysPath)
+		kp, err := InitKeys(setup.KeysPath, setup.Typee)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -100,9 +99,9 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 			ClientVersion:   authType,
 		})
 		if err != nil {
-			if authErr(err.Error()) {
-				return nil, nil, errAuth
-			}
+			// if authErr(err.Error()) {
+			// 	return nil, nil, errAuth
+			// }
 			return nil, nil, err
 		}
 

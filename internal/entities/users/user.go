@@ -39,9 +39,6 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 		Data: Data{
 			Setup: Setup{
 				Audio: Audio{
-					Denoises: Denoises{
-						SoftDenoise: true,
-					},
 					UsersSetup: make(map[string]setups.UsersSetup, 5),
 				},
 				Notifications: Notifications{

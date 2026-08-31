@@ -236,9 +236,9 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 			return err
 		}
 		propM = prop.Video{
-			Width:       1280,
-			Height:      720,
-			FrameRate:   10,
+			Width:       640,
+			Height:      480,
+			FrameRate:   30,
 			FrameFormat: frame.FormatYUYV,
 		}
 		device = camera
@@ -253,7 +253,7 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 		propM = prop.Video{
 			Width:       1920,
 			Height:      1080,
-			FrameRate:   10,
+			FrameRate:   30,
 			FrameFormat: frame.FormatYUYV,
 		}
 		device = screen
@@ -271,6 +271,7 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 		if err != nil {
 			return nil, nil, err
 		}
+		ve.log.Info("img bounds", img.Bounds())
 		frameN := vd.ui.termFrameCount.Load()
 		ve.mu.RLock()
 		n := len(ve.usersDevices)
@@ -285,7 +286,7 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 			tab = ve.onScreenTab.Load()
 		}
 
-		if tab && (frameN%3 == 0 || frameN <= 2) {
+		if tab && (frameN%5 == 0 || frameN <= 1) {
 			var (
 				f string
 				o string
