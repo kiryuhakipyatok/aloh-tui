@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	host = "164.90.163.153"
+	host = "91.98.160.221"
 	port = "48713"
 
 	REGISTER = iota
