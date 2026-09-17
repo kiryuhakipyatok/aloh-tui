@@ -7,6 +7,7 @@ import (
 	"image"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"gioui.org/io/system"
 	"github.com/pion/mediadevices/pkg/codec"
@@ -165,16 +166,16 @@ func (vd *videoDevice) processVideoDevice(wc chan struct{}, log *logger.Logger) 
 			if ecodedReader == nil {
 				return
 			}
-			//now := time.Now()
+			now := time.Now()
 			encodedFrame, realese, err := ecodedReader.Read()
 			if err != nil {
 				log.Error("failed to read encodedFrame", logger.Err(err))
 				continue
 			}
 
-			//			log.Info("frame time", time.Since(now).Milliseconds())
+			log.Info("frame time", time.Since(now).Milliseconds())
 
-			//			log.Info("len", len(encodedFrame))
+			log.Info("len", len(encodedFrame))
 			buffer := vd.bytesBuffersPool.Get().(*bytes.Buffer)
 
 			_, err = buffer.Write(encodedFrame)
@@ -235,9 +236,9 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 			return err
 		}
 		propM = prop.Video{
-			Width:       1280,
-			Height:      720,
-			FrameRate:   10,
+			Width:       640,
+			Height:      480,
+			FrameRate:   30,
 			FrameFormat: frame.FormatYUYV,
 		}
 		device = camera
@@ -252,7 +253,7 @@ func (ve *videoEngine) onDevice(vd *videoDevice) error {
 		propM = prop.Video{
 			Width:       1920,
 			Height:      1080,
-			FrameRate:   20,
+			FrameRate:   30,
 			FrameFormat: frame.FormatYUYV,
 		}
 		device = screen

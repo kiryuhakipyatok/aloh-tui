@@ -116,9 +116,9 @@ func newUserDevices() (*userDevices, error) {
 	}
 	propW := prop.Media{
 		Video: prop.Video{
-			Width:     1280,
-			Height:    720,
-			FrameRate: 10,
+			Width:     640,
+			Height:    480,
+			FrameRate: 30,
 		},
 	}
 
@@ -126,7 +126,7 @@ func newUserDevices() (*userDevices, error) {
 		Video: prop.Video{
 			Width:     1920,
 			Height:    1080,
-			FrameRate: 20,
+			FrameRate: 30,
 		},
 	}
 

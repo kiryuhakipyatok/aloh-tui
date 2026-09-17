@@ -16,7 +16,7 @@ require (
 	github.com/gen2brain/malgo v0.11.25
 	github.com/google/uuid v1.6.0
 	github.com/kechako/go-speexdsp v0.2.2
-	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260820164225-e88ef198799d
+	github.com/kiryuhakipyatok/aloh-networking v0.0.0-20260917200946-20ce5b7416cc
 	github.com/kiryuhakipyatok/aloh-signalling v0.0.0-20260726211718-ebaf500ab11e
 	github.com/kiryuhakipyatok/aloh-ssh v0.0.0-20260726171110-30dc3a8c5b15
 	github.com/kiryuhakipyatok/rnnoise v0.0.0-20260420220437-cc7786ccfc3e
@@ -108,6 +108,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/pion/mediadevices => github.com/kiryuhakipyatok/mediadevices v0.0.0-20260831204956-f6750d59bb71
+replace github.com/pion/mediadevices => github.com/kiryuhakipyatok/mediadevices v0.0.0-20260917190650-c1046193e459
 
 replace github.com/ghp3000/screenshot => github.com/kiryuhakipyatok/screenshot v0.0.0-20260831201422-7730f3b52676
