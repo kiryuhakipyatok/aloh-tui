@@ -2102,8 +2102,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 							cmds = append(cmds, commands.ChangeBanTagCmd(m.user, newBanTag))
 							m.appereanceInputs[3].Reset()
-						case 5:
+						case 4:
 							if i, ok := m.apearenceList.LipList.SelectedItem().(lists.SwitcherItem); ok {
+								
 								m.prState = m.state
 								m.state = states.LOAD_STATE
 								switch i.Id {

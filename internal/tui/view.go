@@ -99,7 +99,7 @@ func (m Model) View() string {
 
 	for i, t := range tabs {
 		if _, ok := m.tabsNotifications[t]; ok && m.user.GetAppNotificationsState() {
-			t += m.user.GetNotificationTag()
+			t += " " + m.user.GetNotificationTag()
 		}
 		if m.user.Engines.VideoEngine != nil && m.user.Engines.VideoEngine.IsWebcamStarted() && t == webcamTab {
 			t = "🔴 " + t
