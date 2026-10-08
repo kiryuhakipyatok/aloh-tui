@@ -35,7 +35,7 @@ func (m Model) View() string {
 	usableW := m.width - (padW * 2)
 	usableH := m.height - (padH * 2)
 
-	if usableW < 76 || usableH < 24 {
+	if usableW < minW || usableH < minH {
 		return "terminal too small"
 	}
 
@@ -99,7 +99,13 @@ func (m Model) View() string {
 
 	for i, t := range tabs {
 		if _, ok := m.tabsNotifications[t]; ok && m.user.GetAppNotificationsState() {
-			t += fmt.Sprintf(" %s", m.user.GetNotificationTag())
+			t += " " + m.user.GetNotificationTag()
+		}
+		if m.user.Engines.VideoEngine != nil && m.user.Engines.VideoEngine.IsWebcamStarted() && t == webcamTab {
+			t = "🔴 " + t
+		}
+		if m.user.Engines.VideoEngine != nil && m.user.Engines.VideoEngine.IsScreenStarted() && t == screenTab {
+			t = "🔴 " + t
 		}
 		isFirst, isLast, isActive := i == 0, i == len(tabs)-1, i == m.activeTab
 		style := inactiveTabStyle
@@ -144,10 +150,12 @@ func (m Model) View() string {
 			case 2:
 				mark = "voiceT"
 			case 3:
-				mark = "videoT"
+				mark = "webcamT"
 			case 4:
-				mark = "profileT"
+				mark = "screenT"
 			case 5:
+				mark = "profileT"
+			case 6:
 				mark = "settingsT"
 			}
 		}
@@ -182,10 +190,12 @@ func (m Model) View() string {
 			case 2:
 				uiContent = m.renderVoiceTab(windowInnerW, windowInnerH)
 			case 3:
-				uiContent = m.renderVideoTab(windowInnerW, windowInnerH)
+				uiContent = m.renderWebcamTab(windowInnerW, windowInnerH)
 			case 4:
-				uiContent = m.renderProfileView(windowInnerW, windowInnerH, styles.CText)
+				uiContent = m.rendeScreenTab(windowInnerW, windowInnerH)
 			case 5:
+				uiContent = m.renderProfileView(windowInnerW, windowInnerH, styles.CText)
+			case 6:
 				uiContent = m.renderSettingsView(windowInnerW, windowInnerH)
 			}
 		}
@@ -268,26 +278,18 @@ func (m Model) renderVoiceTab(w, h int) string {
 
 	lblRight := m.headerActiveStyle.Render("► details")
 	voicePowerLbl := ""
-	statusText := "not connected"
-	statusColor := styles.CDim
 	disc := ""
 	if m.connected {
 		voicePowerLbl = styles.PaddingLeftCDimStyle.Width(rightW).Align(lipgloss.Center).Render("voice powers")
-		statusText = "connected"
-		statusColor = m.themeColor
 		disc = styles.CErrPaddingStyle.Render("ENTER to disconnect")
 	}
 
-	bottomRightLPart := lipgloss.NewStyle().Foreground(statusColor).Render("status: " + statusText)
-
-	bottomRightLWidth := lipgloss.Width(bottomRightLPart)
-
-	bottomRightRPart := lipgloss.NewStyle().
-		Width(rightW - bottomRightLWidth).
-		Align(lipgloss.Right).
+	bottomRightDisc := lipgloss.NewStyle().
+		Width(rightW).
+		Align(lipgloss.Center).
 		Render(disc)
 
-	bottomRight := lipgloss.JoinHorizontal(lipgloss.Bottom, bottomRightLPart, bottomRightRPart)
+	bottomRight := lipgloss.JoinHorizontal(lipgloss.Bottom, bottomRightDisc)
 	rightMiddleHeight := h - lipgloss.Height(lblRight) - lipgloss.Height(bottomRight) - lipgloss.Height(voicePowerLbl)
 	if rightMiddleHeight < 0 {
 		rightMiddleHeight = 0
@@ -297,7 +299,7 @@ func (m Model) renderVoiceTab(w, h int) string {
 		textStyle := styles.CGrayBold.Render(titles.NOT_CONN1)
 		rightMiddleSect = lipgloss.Place(
 			rightW,
-			rightMiddleHeight,
+			rightMiddleHeight-1,
 			lipgloss.Center,
 			lipgloss.Center,
 			textStyle,
@@ -328,8 +330,256 @@ func (m Model) renderVoiceTab(w, h int) string {
 	return m.zone.Mark("voiceW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPanel, rightPane))
 }
 
-func (m Model) renderVideoTab(w, h int) string {
-	return m.zone.Mark("videoW", lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, safeTruncate(styles.CDimStyle.Render("~ video functionality coming soon ~"), w)))
+func (m Model) renderWebcamTab(w, h int) string {
+	lbl := m.headerActiveStyle.Render("► active webcams")
+	var content string
+	if !m.connected {
+
+		textStyle := styles.CGrayBold.Render(titles.ALONE1)
+
+		content = lipgloss.Place(
+			w,
+			h-2,
+			lipgloss.Center,
+			lipgloss.Center,
+			textStyle,
+		)
+	} else {
+		usersFrames := m.user.Engines.VideoEngine.GetUsersWebcamFramesTerminal()
+
+		userStarted := m.user.Engines.VideoEngine.IsWebcamStarted()
+
+		lUFrames := len(usersFrames)
+
+		lenFrames := lUFrames
+
+		if lUFrames%2 == 0 {
+			lenFrames += lUFrames/2 + 2
+		} else {
+			lenFrames += lUFrames/2 + 3
+		}
+
+		gap := "    "
+
+		if lUFrames > 0 && userStarted {
+			frames := make([]string, 0, lenFrames)
+			var zoneId string
+			uf := m.user.Engines.VideoEngine.GetUserWebcamFrame()
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+
+			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf)
+			zoneId = fmt.Sprintf("webcam-%s", iden.ID)
+			userFrame := m.zone.Mark(zoneId, ufStr)
+			frames = append(frames, userFrame, gap)
+
+			for i, c := range m.connections {
+				f, ok := usersFrames[c.ID]
+				if ok && f != "" {
+
+					usersColor := m.usersColors[c.ID]
+					coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
+					zoneId = fmt.Sprintf("webcam-%s", c.ID.String())
+					frame := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredNick, f))
+					frames = append(frames, frame)
+					if i != len(m.connections)-1 {
+						frames = append(frames, gap)
+					}
+
+				}
+			}
+
+			//framesStr := strings.Join(frames, "    ")
+
+			joinedFrames := m.renderVideoFrames(frames)
+			//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
+
+		} else if lUFrames > 0 && !userStarted {
+			frames := make([]string, 0, lenFrames)
+
+			if m.state == states.LOAD_STATE && m.prState == states.WEBCAM_STATE {
+				loadWebcam := styles.CGrayStyle.Render(m.spinner.View(), "loading webcam...")
+				iden := m.user.GetUserIdentity()
+				coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+				ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, "", loadWebcam)
+				//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
+				frames = append(frames, ufStr, gap)
+
+			}
+
+			for i, c := range m.connections {
+				f, ok := usersFrames[c.ID]
+				if ok && f != "" {
+
+					usersColor := m.usersColors[c.ID]
+					coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
+					zoneId := fmt.Sprintf("webcam-%s", c.ID.String())
+					frame := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredNick, f))
+					frames = append(frames, frame)
+					if i != len(m.connections)-1 {
+						frames = append(frames, gap)
+					}
+
+				}
+			}
+
+			joinedFrames := m.renderVideoFrames(frames)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
+
+		} else if userStarted && lUFrames <= 0 {
+			uf := m.user.Engines.VideoEngine.GetUserWebcamFrame()
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+			zoneId := fmt.Sprintf("webcam-%s", iden.ID)
+			ufStr := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf))
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, ufStr)
+		} else if !userStarted && m.state == states.LOAD_STATE && m.prState == states.WEBCAM_STATE {
+			loadWebcam := styles.CGrayStyle.Render(m.spinner.View(), "loading webcam...")
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, "", loadWebcam)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, ufStr)
+		} else {
+			textStyle := styles.CGrayBold.Render(titles.NO_WEBCAMS)
+
+			content = lipgloss.Place(
+				w,
+				h-2,
+				lipgloss.Center,
+				lipgloss.Center,
+				textStyle,
+			)
+		}
+	}
+
+	return m.zone.Mark("webcamW", lipgloss.JoinVertical(lipgloss.Top, lbl, content))
+}
+
+func (m Model) rendeScreenTab(w, h int) string {
+	lbl := m.headerActiveStyle.Render("► active screen demonstrations")
+	var content string
+	if !m.connected {
+
+		textStyle := styles.CGrayBold.Render(titles.ALONE1)
+
+		content = lipgloss.Place(
+			w,
+			h-2,
+			lipgloss.Center,
+			lipgloss.Center,
+			textStyle,
+		)
+	} else {
+		usersFrames := m.user.Engines.VideoEngine.GetUsersScreenFramesTerminal()
+
+		userStarted := m.user.Engines.VideoEngine.IsScreenStarted()
+
+		lUFrames := len(usersFrames)
+
+		lenFrames := lUFrames
+
+		if lUFrames%2 == 0 {
+			lenFrames += lUFrames/2 + 2
+		} else {
+			lenFrames += lUFrames/2 + 3
+		}
+
+		gap := "    "
+
+		if lUFrames > 0 && userStarted {
+			frames := make([]string, 0, lenFrames)
+			var zoneId string
+			uf := m.user.Engines.VideoEngine.GetUserScreenFrame()
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+
+			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf)
+			zoneId = fmt.Sprintf("screen-%s", iden.ID)
+			userFrame := m.zone.Mark(zoneId, ufStr)
+			frames = append(frames, userFrame, gap)
+
+			for i, c := range m.connections {
+				f, ok := usersFrames[c.ID]
+				if ok && f != "" {
+
+					usersColor := m.usersColors[c.ID]
+					coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
+					zoneId = fmt.Sprintf("screen-%s", c.ID.String())
+					frame := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredNick, f))
+					frames = append(frames, frame)
+					if i != len(m.connections)-1 {
+						frames = append(frames, gap)
+					}
+
+				}
+			}
+
+			//framesStr := strings.Join(frames, "    ")
+
+			joinedFrames := m.renderVideoFrames(frames)
+			//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
+
+		} else if lUFrames > 0 && !userStarted {
+			frames := make([]string, 0, lenFrames)
+
+			if m.state == states.LOAD_STATE && m.prState == states.SCREEN_STATE {
+				loadScreen := styles.CGrayStyle.Render(m.spinner.View(), "loading screen...")
+				iden := m.user.GetUserIdentity()
+				coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+				ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, "", loadScreen)
+				//hor := lipgloss.JoinHorizontal(lipgloss.Left, ufStr, "    ", framesStr)
+				frames = append(frames, ufStr, gap)
+
+			}
+
+			for i, c := range m.connections {
+				f, ok := usersFrames[c.ID]
+				if ok && f != "" {
+
+					usersColor := m.usersColors[c.ID]
+					coloredNick := lipgloss.NewStyle().Foreground(usersColor.MainColor).Render(c.Nickname)
+					zoneId := fmt.Sprintf("screen-%s", c.ID.String())
+					frame := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredNick, f))
+					frames = append(frames, frame)
+					if i != len(m.connections)-1 {
+						frames = append(frames, gap)
+					}
+
+				}
+			}
+
+			joinedFrames := m.renderVideoFrames(frames)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, joinedFrames)
+
+		} else if userStarted && lUFrames <= 0 {
+			uf := m.user.Engines.VideoEngine.GetUserScreenFrame()
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+			zoneId := fmt.Sprintf("screen-%s", iden.ID)
+			ufStr := m.zone.Mark(zoneId, lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, uf))
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, ufStr)
+		} else if !userStarted && m.state == states.LOAD_STATE && m.prState == states.SCREEN_STATE {
+			loadScreen := styles.CGrayStyle.Render(m.spinner.View(), "loading screen...")
+			iden := m.user.GetUserIdentity()
+			coloredUserNickname := lipgloss.NewStyle().Foreground(lipgloss.Color(m.userColor)).Render(iden.Nickname)
+			ufStr := lipgloss.JoinVertical(lipgloss.Left, coloredUserNickname, "", loadScreen)
+			content = lipgloss.Place(w, h-1, lipgloss.Center, lipgloss.Center, ufStr)
+		} else {
+			textStyle := styles.CGrayBold.Render(titles.NO_SCREENS)
+
+			content = lipgloss.Place(
+				w,
+				h-2,
+				lipgloss.Center,
+				lipgloss.Center,
+				textStyle,
+			)
+		}
+	}
+
+	return m.zone.Mark("screenW", lipgloss.JoinVertical(lipgloss.Top, lbl, content))
 }
 
 func (m Model) renderFriendsTab(w, h int) string {
@@ -475,19 +725,27 @@ func (m Model) renderSettingsView(w, h int) string {
 		notifications := m.user.GetNotifications()
 		devices := m.user.GetDevices()
 
-		leftRight := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("binds"),
+		leftRightRows := []string{styles.PaddingLeftCGrayStyle.Render("binds"),
 			renderSetup("friends tab", binds.FriendsTab, colW),
 			renderSetup("chat tab", binds.ChatTab, colW),
 			renderSetup("voice tab", binds.VoiceTab, colW),
-			renderSetup("video tab", binds.VideoTab, colW),
+			renderSetup("webcam tab", binds.WebcamTab, colW),
+			renderSetup("screen tab", binds.ScreenTab, colW),
 			renderSetup("profile tab", binds.ProfileTab, colW),
 			renderSetup("settings tab", binds.SettingsTab, colW),
 			renderSetup("mute mic", binds.MicMute, colW),
-			renderSetup("full mute", binds.FullMute, colW),
-			renderSetup("user's mute", binds.UserMute, colW),
-		)
+		}
 
-		leftLeft := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("audio"),
+		if h > minH+2 {
+			leftRightRows = append(leftRightRows,
+				renderSetup("full mute", binds.FullMute, colW),
+				renderSetup("user's mute", binds.UserMute, colW))
+		}
+
+		leftRight := lipgloss.JoinVertical(lipgloss.Left, leftRightRows...)
+
+		leftLeftRows := []string{
+			styles.PaddingLeftCGrayStyle.Render("audio"),
 			renderSetup("hard denoise", fmt.Sprintf("%t", audio.Denoises.HardDenoise), colW),
 			renderSetup("soft denoise", fmt.Sprintf("%t", audio.Denoises.SoftDenoise), colW),
 			renderSetup("echocanceller", fmt.Sprintf("%t", audio.AEC), colW),
@@ -495,12 +753,19 @@ func (m Model) renderSettingsView(w, h int) string {
 			"", styles.PaddingLeftCGrayStyle.Render("notifications"),
 			renderSetup("app notifications", fmt.Sprintf("%t", notifications.AppNotifications), colW),
 			renderSetup("desktop notifications", fmt.Sprintf("%t", notifications.DesktopNotifications), colW),
-			renderSetup("audio notifications", fmt.Sprintf("%t", notifications.AudioNotifications), colW),
-		)
+		}
+
+		if h > minH+2 {
+			leftLeftRows = append(leftLeftRows,
+				renderSetup("audio notifications", fmt.Sprintf("%t", notifications.AudioNotifications), colW))
+		}
+
+		leftLeft := lipgloss.JoinVertical(lipgloss.Left, leftLeftRows...)
 
 		leftTop := lipgloss.JoinVertical(lipgloss.Left, styles.PaddingLeftCGrayStyle.Render("devices"),
 			renderSetup("headphones", devices.Headphones, rightW),
 			renderSetup("microphone", devices.Microphone, rightW),
+			renderSetup("webcam", devices.Webcam, rightW),
 		)
 
 		styledLeftLeft := lipgloss.NewStyle().Width(colW).Render(leftLeft)
@@ -532,13 +797,40 @@ func (m Model) renderSettingsView(w, h int) string {
 		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
 
 	case states.DEVICES_STATE:
-		lblLeft = m.headerActiveStyle.Render("► headphones")
-		m.headphonesList.LipList.SetSize(leftW-2, h-2)
-		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.headphonesList.LipList.View())
+		lblRight = m.headerActiveStyle.Render("► devices settings")
+		m.devicesList.LipList.SetSize(rightW-2, h-2)
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.devicesList.LipList.View())
 
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+
+	case states.MICROPHONE_SET_STATE:
 		lblRight = m.headerActiveStyle.Render("► microphones")
 		m.microphonesList.LipList.SetSize(rightW-2, h-2)
 		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.microphonesList.LipList.View())
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+
+	case states.HEADPHONES_SET_STATE:
+		lblRight = m.headerActiveStyle.Render("► headphones")
+		m.headphonesList.LipList.SetSize(rightW-2, h-2)
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.headphonesList.LipList.View())
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
+
+	case states.WEBCAM_SET_STATE:
+		lblRight = m.headerActiveStyle.Render("► webcams")
+		m.webcamsList.LipList.SetSize(rightW-2, h-2)
+		rightContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.webcamsList.LipList.View())
+
+		lblLeft = m.headerActiveStyle.Render("► app settings")
+		m.settingsList.LipList.SetSize(leftW-2, h-2)
+		leftContent = lipgloss.NewStyle().PaddingLeft(2).Render(m.settingsList.LipList.View())
 
 	case states.BINDS_STATE:
 		lblRight = m.headerActiveStyle.Render("► audio binds")
@@ -1027,7 +1319,7 @@ func (m Model) renderErrView(w, h int) string {
 	rightW := w - leftW - 3
 
 	lblLeft := styles.CErrBoldStyle.Render("► error detected")
-	errText := styles.PaddingLeftCTextStyle.Render(tuierrs.CastError(m.err))
+	errText := styles.PaddingLeftCTextStyle.Render(safeTruncate(tuierrs.CastError(m.err), rightW))
 	leftBox := lipgloss.JoinVertical(lipgloss.Left, lblLeft, "", errText)
 	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
@@ -1059,7 +1351,7 @@ func (m Model) renderHelpView(w, h int) string {
 	rightW := w - leftW - 3
 
 	lblLeft := m.headerActiveStyle.Render("► general & navigation")
-	lblRight := m.headerActiveStyle.Render("► audio & voice controls")
+	lblRight := m.headerActiveStyle.Render("► audio & video controls")
 
 	renderShortcut := func(keys, desc string) string {
 		k := lipgloss.NewStyle().Foreground(m.themeColor).Width(22).Render(keys)
@@ -1067,8 +1359,8 @@ func (m Model) renderHelpView(w, h int) string {
 		return safeTruncate(styles.PaddingLeftStyle.Render(k+d), leftW)
 	}
 
-	quote := styles.PaddingLeftCGrayStyle.
-		Render("hint - phd: personal hard denoise, psd: personal soft denoise")
+	quote := safeTruncate(styles.PaddingLeftCGrayStyle.
+		Render("hint - phd: personal hard denoise, psd: personal soft denoise"), rightW)
 
 	leftRows := []string{
 		lblLeft, "",
@@ -1086,17 +1378,7 @@ func (m Model) renderHelpView(w, h int) string {
 		renderShortcut("UP / DN", "- move cursor in lists/inputs"),
 		"",
 		styles.PaddingLeftCGrayStyle.Render("quick jump:"),
-		renderShortcut("ALT+F", "- go to friends tab"),
-		renderShortcut("ALT+C", "- go to chat tab"),
-		renderShortcut("ALT+G", "- go to voice tab"),
-		renderShortcut("ALT+D", "- go to video tab"),
-		renderShortcut("ALT+E", "- go to profile tab"),
-		renderShortcut("ALT+S", "- go to settings tab"),
-		renderShortcut("ALT+H", "- go to / close help menu"),
 	}
-
-	leftBox := lipgloss.JoinVertical(lipgloss.Left, leftRows...)
-	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	rightRows := []string{
 		lblRight, "", quote, "",
@@ -1109,14 +1391,39 @@ func (m Model) renderHelpView(w, h int) string {
 		renderShortcut("ALT+UP/DN", "- increase / decrease user's volume"), "",
 		styles.PaddingLeftCGrayStyle.Render("chat controls:"),
 		renderShortcut("CTRL+P", "- paste smth"), "",
-		styles.PaddingLeftCGrayStyle.Render("friends contols:"),
-		renderShortcut("ALT+X", "- deny friendship request"),
-		renderShortcut("ENTER", "- accept friendship request"),
+		styles.PaddingLeftCGrayStyle.Render("webcam controls:"),
 	}
+
+	if h > minH+2 {
+		leftRows = append(leftRows,
+			renderShortcut("ALT+F", "- go to friends tab"),
+			renderShortcut("ALT+C", "- go to chat tab"),
+			renderShortcut("ALT+G", "- go to voice tab"),
+			renderShortcut("ALT+D", "- go to webcam tab"),
+			renderShortcut("ALT+A", "- go to screen tab"),
+			renderShortcut("ALT+E", "- go to profile tab"),
+			renderShortcut("ALT+S", "- go to settings tab"),
+			renderShortcut("ALT+H", "- go to / close help menu"), "",
+			styles.PaddingLeftCGrayStyle.Render("friends contols:"),
+			renderShortcut("ALT+X", "- deny friendship request"),
+			renderShortcut("ENTER", "- accept friendship request"),
+		)
+
+		rightRows = append(rightRows,
+			renderShortcut("ENTER", "- toggle webcam"),
+			renderShortcut("LMB ON WEBCAM", "- toggle webcam window"), "",
+			styles.PaddingLeftCGrayStyle.Render("screen controls:"),
+			renderShortcut("ENTER", "- toggle screen"),
+			renderShortcut("LMB ON SCREEN", "- toggle screen window"),
+		)
+	}
+
+	leftBox := lipgloss.JoinVertical(lipgloss.Left, leftRows...)
+	leftPane := lipgloss.Place(leftW, h, lipgloss.Left, lipgloss.Top, leftBox)
 
 	rightBox := lipgloss.JoinVertical(lipgloss.Left, rightRows...)
 	rightPane := lipgloss.Place(rightW, h, lipgloss.Left, lipgloss.Top, rightBox)
 
 	dividerPane := lipgloss.Place(3, h, lipgloss.Center, lipgloss.Top, styles.CDimStyle.Render(vertLine(h)))
-	return m.zone.Mark("profileW", lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane))
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, dividerPane, rightPane)
 }

@@ -62,7 +62,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 		},
 
 		tabs: tabs{
-			defTabs:           []string{freindsTab, chatTab, voiceTab, videoTab, profileTab, settingsTab},
+			defTabs:           []string{freindsTab, chatTab, voiceTab, webcamTab, screenTab, profileTab, settingsTab},
 			regTabs:           []string{regTab, logTab},
 			tabsNotifications: make(map[string]struct{}, 6),
 		},
@@ -111,6 +111,7 @@ func NewModel(logFilePath, dataFilePath, keysPath string, appLogger *logger.Logg
 			rightHeaderData: make([]string, 3),
 			spinner:         sp,
 			zone:            bz.New(),
+			//webcamUsersFrames: make(map[uuid.UUID]userVideoFrame, 3),
 		},
 
 		colors: colors{
@@ -174,6 +175,11 @@ func (m *Model) Clean() {
 	if m.user.Engines.AudioEngine != nil {
 		m.user.Engines.AudioEngine.SetDisconnected()
 		m.user.Engines.AudioEngine.Stop()
+	}
+
+	if m.user.Engines.VideoEngine != nil {
+		m.user.Engines.VideoEngine.SetDisconnected()
+		m.user.Engines.VideoEngine.Stop()
 	}
 
 	if m.user.SSHClient != nil {

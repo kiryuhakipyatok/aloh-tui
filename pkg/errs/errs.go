@@ -18,6 +18,8 @@ var (
 	ErrNotFriendBase              = errors.New("not friend")
 	ErrNotBlockedBase             = errors.New("not blocked")
 	ErrOldAndNewPasswordEqualBase = errors.New("old and new passwords are equal")
+	ErrNoAvailableWebcamBase      = errors.New("no available webcam")
+	ErrInvalidType                = errors.New("error invalid type")
 )
 
 type AppError struct {
@@ -75,4 +77,8 @@ func ErrInvalidPassword(entropy float64) AppError {
 
 func ErrOldAndNewPasswordEqual() AppError {
 	return AppError{Err: ErrOldAndNewPasswordEqualBase}
+}
+
+func ErrNoAvailableWebcam() AppError {
+	return AppError{Err: ErrNoAvailableWebcamBase}
 }

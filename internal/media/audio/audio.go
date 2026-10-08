@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"aloh-tui/internal/media"
 	"aloh-tui/internal/media/audio/backends"
 	"aloh-tui/internal/media/audio/filter"
 	"aloh-tui/internal/networking"
@@ -46,6 +47,8 @@ type audioEngine struct {
 	opusEncoder *opus.Encoder
 	rnnoise     *rnnoise.RNNoise
 
+	//muteFade atomic.Uint32
+
 	sessionId atomic.Int32
 
 	buffers
@@ -84,12 +87,8 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		return nil, err
 	}
 
-	if err = opusEncoder.SetMaxBandwidth(opus.Fullband); err != nil {
+	if err = opusEncoder.SetMaxBandwidth(opus.SuperWideband); err != nil {
 		log.Error("failed to set max bandwidth to opus encoder", logger.Err(err))
-		return nil, err
-	}
-	if err = opusEncoder.SetInBandFEC(true); err != nil {
-		log.Error("failed to set in band fec to opus encoder", logger.Err(err))
 		return nil, err
 	}
 
@@ -197,8 +196,8 @@ func NewAudioEngine(l *logger.Logger, as AudioSetup) (AudioEngine, error) {
 		return nil, err
 	}
 
-	micsInfo := make(map[string]DeviceInfo, 0)
-	headsInfo := make(map[string]DeviceInfo, 0)
+	micsInfo := make(map[string]media.Device, 0)
+	headsInfo := make(map[string]media.Device, 0)
 
 	var (
 		ch     uint32
@@ -415,9 +414,8 @@ func (ae *audioEngine) sendVoice() {
 
 			ae.mu.RLock()
 			netw := ae.netw
-			isConn := ae.connected.Load()
-
 			ae.mu.RUnlock()
+			isConn := ae.connected.Load()
 			if isConn && netw != nil && sessionId == voice.sessionId {
 
 				if err := ae.netw.SendVoiceData(voice.data); err != nil {

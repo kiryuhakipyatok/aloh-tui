@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"aloh-tui/internal/media"
 	"aloh-tui/pkg/logger"
 
 	"github.com/gen2brain/malgo"
@@ -18,7 +19,7 @@ func (ae *audioEngine) UpdateMicrophones() error {
 		return err
 	}
 
-	micsInfo := make(map[string]DeviceInfo, 0)
+	micsInfo := make(map[string]media.Device, 0)
 
 	for i, m := range microphones {
 		di, err := ae.malgoCtx.DeviceInfo(malgo.Capture, m.ID, malgo.Shared)
@@ -63,7 +64,7 @@ func (ae *audioEngine) UpdateHeadphones() error {
 		return err
 	}
 
-	headsInfo := make(map[string]DeviceInfo, 0)
+	headsInfo := make(map[string]media.Device, 0)
 
 	for i, m := range headphones {
 		di, err := ae.malgoCtx.DeviceInfo(malgo.Playback, m.ID, malgo.Shared)

@@ -32,6 +32,12 @@ func SetupCallbacks(cs CallbacksSetup) {
 	cs.User.Networking.VoiceCallback(func(id uuid.UUID, data []byte) {
 		cs.User.Engines.AudioEngine.PlayUserVoice(id, data)
 	})
+	cs.User.Networking.WebcamCallback(func(id uuid.UUID, data []byte) {
+		cs.User.Engines.VideoEngine.RenderUsersWebcam(id, data)
+	})
+	cs.User.Networking.ScreenCallback(func(id uuid.UUID, data []byte) {
+		cs.User.Engines.VideoEngine.RenderUsersScreen(id, data)
+	})
 	cs.User.Networking.PeerConnectedCallback(func(id uuid.UUID) {
 		t := time.Now().Format("15:04:05")
 		cs.PeerConnChan <- commands.PeerConnectedMsg{Id: id, Time: t}
@@ -163,15 +169,11 @@ func (m *Model) setupInputs() {
 		case 1:
 			ti.Placeholder = "new best friend tag, d to default"
 		case 2:
+			ti.CharLimit = 1
 			ti.Placeholder = "new notification tag, d to default"
 		case 3:
+			ti.CharLimit = 1
 			ti.Placeholder = "new ban tag, d to default"
-			// case 4:
-			// 	ti.CharLimit = 28
-			// 	ti.Placeholder = "new tagline"
-			// case 5:
-			// 	ti.CharLimit = 24
-			// 	ti.Placeholder = "new nickname"
 		}
 		m.appereanceInputs[i] = ti
 	}
@@ -200,9 +202,13 @@ func (m *Model) setupUsersLists() {
 	}
 
 	if m.user.Engines.AudioEngine != nil {
-		m.microphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.MICROPHONE, ls)
+		m.microphonesList = lists.SetupDevicesList(m.user.Engines, lists.MICROPHONE, ls)
 
-		m.headphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.HEADPHONES, ls)
+		m.headphonesList = lists.SetupDevicesList(m.user.Engines, lists.HEADPHONES, ls)
+	}
+
+	if m.user.Engines.VideoEngine != nil {
+		m.webcamsList = lists.SetupDevicesList(m.user.Engines, lists.WEBCAMS, ls)
 	}
 
 	m.friendsList = lists.SetupFriendsList(m.user, ls)
@@ -220,6 +226,7 @@ func (m *Model) setupUsersLists() {
 
 	m.audioList = lists.SetupSwitcherList(m.user, lists.AUDIO, ls)
 	m.accountList = lists.SetupAccountList(m.user, ls)
+	m.devicesList = lists.SetupDevicesTypeList(m.user, ls)
 }
 
 func (m *Model) setupFriendsColors() {
@@ -284,7 +291,7 @@ func (m *Model) setupAnims() {
 
 func setupUserColor(color string) lipgloss.Color {
 	var c string
-	if color == "" {
+	if color == "#random" {
 		c = randomcolor.GetRandomColorInHex()
 	} else {
 		c = color

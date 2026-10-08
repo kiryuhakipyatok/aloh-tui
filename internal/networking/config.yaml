@@ -3,11 +3,12 @@ app:
   version: "1.0.0"
   env: "local"
   receiveSDPSize: 100
+  packetSize: 100
   sendSDPSize: 100
   logPath: ""
 
 signaling:
-  address: "164.90.163.153"
+  address: "91.98.160.221"
   port: "1234"
   handshakeTimeout: 10s
   maxIdleTimeout: 60s
@@ -23,9 +24,9 @@ networking:
   maxIdleTimeout: 60s
   keepAlivePeriodTimeout: 10s
   nextProtos: ["aloh-networking"]
-  stunHost: "164.90.163.153"
+  stunHost: "91.98.160.221"
   stunPort: "3478"
-  turnHost: "164.90.163.153"
+  turnHost: "91.98.160.221"
   turnPort: "3478"
   newSDPTimeout: 5s
   sendInStreamTimeout: 5s

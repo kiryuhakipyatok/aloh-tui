@@ -3,8 +3,18 @@ package main
 import (
 	"aloh-tui/internal/app"
 	"aloh-tui/pkg/logger"
+	"embed"
+	_ "embed"
+	"log"
+	"net/http"
 	_ "net/http/pprof"
+	"os"
+
+	gapp "gioui.org/app"
 )
+
+//go:embed aloh.exe.manifest.xml
+var m embed.FS
 
 var (
 	//env     string = "dev"
@@ -12,5 +22,13 @@ var (
 )
 
 func main() {
-	app.Run(logger.DevEnv, version)
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+	go func() {
+		app.Run(logger.DevEnv, version)
+		os.Exit(1)
+	}()
+
+	gapp.Main()
 }

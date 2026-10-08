@@ -15,11 +15,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 
 		ae.captureReady.Store(true)
 
-		ae.mu.RLock()
-		netw := ae.netw
-		ae.mu.RUnlock()
-
-		if pInputSamples != nil && netw != nil && ae.connected.Load() && !ae.mutedMicro.Load() && !ae.muted.Load() {
+		if pInputSamples != nil && ae.connected.Load() && !ae.mutedMicro.Load() && !ae.muted.Load() {
 			cf := ae.captureDevice.CaptureFormat()
 			var nativeSamples int
 			switch cf {
@@ -90,20 +86,29 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 				chunk := ae.workMic[:frameLen]
 				copy(ae.pcmBuffer, chunk)
 
-				ae.mu.Lock()
-				if ae.aec.Load() {
-					if ae.playbackReady.Load() {
-						ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
-						ae.preprocessor.Run(ae.echolessBufferInt16s)
-						copy(ae.pcmBuffer, ae.echolessBufferInt16s)
-					} else {
-						ae.preprocessor.Run(ae.pcmBuffer)
-					}
+				//ae.mu.Lock()
+				if ae.isAECActive() {
+					ae.aecDiff.Add(-1)
+					ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
+					ae.preprocessor.Run(ae.echolessBufferInt16s)
+					copy(ae.pcmBuffer, ae.echolessBufferInt16s)
 				} else if ae.softDenoiced.Load() {
 					ae.preprocessor.Run(ae.pcmBuffer)
 				}
+				// if ae.aec.Load() {
+				// 	if ae.playbackReady.Load() {
+				// 		ae.log.Info(0, "aec capture len", len(ae.pcmBuffer))
+				// 		ae.echoCanceller.Capture(ae.pcmBuffer, ae.echolessBufferInt16s)
+				// 		ae.preprocessor.Run(ae.echolessBufferInt16s)
+				// 		copy(ae.pcmBuffer, ae.echolessBufferInt16s)
+				// 	} else {
+				// 		ae.preprocessor.Run(ae.pcmBuffer)
+				// 	}
+				// } else if ae.softDenoiced.Load() {
+				// 	ae.preprocessor.Run(ae.pcmBuffer)
+				// }
 
-				ae.mu.Unlock()
+				//	ae.mu.Unlock()
 
 				var voiceDetected bool
 
@@ -111,6 +116,7 @@ func (ae *audioEngine) newCaptureCallback() malgo.DeviceCallbacks {
 					casters.Int16ToFloat32(ae.pcmBuffer, ae.float32Buffer)
 
 					for i := 0; i+rnnoiseFrameSize <= len(ae.float32Buffer); i += rnnoiseFrameSize {
+
 						rnnFrame := ae.float32Buffer[i : i+rnnoiseFrameSize]
 						outChunk := ae.denoicedBuffer[i : i+rnnoiseFrameSize]
 						vad, err := ae.rnnoise.Denoise(outChunk, rnnFrame)
@@ -202,33 +208,47 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 			return
 		}
 
-		if pOutputSample != nil {
+		if pOutputSample != nil && !ae.muted.Load() {
 			ae.playbackReady.Store(true)
 			clear(pOutputSample)
 
 			nativeSamples := len(pOutputSample) / 2
-
+			//var wg sync.WaitGroup
 			for len(ae.playbackNativeBuffer) < nativeSamples {
 				for i := 0; i < frameLen; i++ {
 					ae.workMix[i] = 0
 				}
-				ae.mu.Lock()
-				for _, ua := range ae.usersAudio {
 
+				ae.mu.RLock()
+				usersAudio := ae.usersAudio
+				ae.mu.RUnlock()
+				for _, ua := range usersAudio {
+					ua.mu.Lock()
+					for i := 0; i < frameLen; i++ {
+						ua.workMix[i] = 0
+					}
+					ua.mu.Unlock()
+					if ua.muted.Load() {
+						continue
+					}
+					ua.mu.Lock()
+					
 					if len(ua.data) == 0 {
 						ua.framesCount++
-						if ua.framesCount <= 5 {
+						if ua.framesCount <= 20 {
 							plcBuffer := ae.int16BuffersPool.Get().([]int16)
 
 							n, err := ua.decoder.Decode(nil, plcBuffer)
 							if err == nil && n > 0 {
 								setupVolume(ua.volumeCoefficient, plcBuffer[:n])
-								casters.MixToInt16(ae.workMix, plcBuffer[:n])
+								casters.MixToInt16(ua.workMix, plcBuffer[:n])
 							}
 							ae.int16BuffersPool.Put(plcBuffer[:4096])
 						} else {
 							ua.isSpeaking.Store(false)
+
 							ua.playing = false
+
 						}
 					} else {
 						ua.framesCount = 0
@@ -239,6 +259,7 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 							ua.playing = true
 						} else {
 							ua.isSpeaking.Store(false)
+							ua.mu.Unlock()
 							continue
 						}
 					}
@@ -276,7 +297,7 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 
 					ua.rms = getRms(ua.samples)
 
-					casters.MixToInt16(ae.workMix, ua.samples)
+					casters.MixToInt16(ua.workMix, ua.samples)
 
 					if readLen < len(ua.data) {
 						copied := copy(ua.data, ua.data[readLen:])
@@ -285,8 +306,18 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 						ua.data = ua.data[:0]
 						ua.playing = false
 					}
+					ua.mu.Unlock()
+					//})
+
 				}
 
+				//wg.Wait()
+
+				for _, ua := range usersAudio {
+					casters.MixToInt16(ae.workMix, ua.workMix)
+				}
+
+				ae.mu.Lock()
 				if ae.notificationBytes != nil {
 					rem := len(ae.notificationBytes) - ae.notificationPos
 
@@ -305,11 +336,15 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 						ae.notificationPos = 0
 					}
 				}
+				if ae.isAECActive() {
 
-				if ae.aec.Load() && ae.captureReady.Load() {
-					ae.echoCanceller.Playback(ae.workMix[:frameLen])
+					if ae.aecDiff.Load() < 4 {
+
+						ae.echoCanceller.Playback(ae.workMix[:frameLen])
+						ae.aecDiff.Add(1)
+					}
+
 				}
-				ae.mu.Unlock()
 
 				if ae.playbackDevice.SampleRate() == sampleRate {
 					ae.playbackNativeBuffer = append(ae.playbackNativeBuffer, ae.workMix[:frameLen]...)
@@ -324,6 +359,8 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 						ae.playbackNativeBuffer = append(ae.playbackNativeBuffer, ae.resampledWorkMix[:out]...)
 					}
 				}
+
+				ae.mu.Unlock()
 
 			}
 
@@ -340,4 +377,13 @@ func (ae *audioEngine) newPlaybackCallback() malgo.DeviceCallbacks {
 	return malgo.DeviceCallbacks{
 		Data: data,
 	}
+}
+
+func (ae *audioEngine) isAECActive() bool {
+	return ae.aec.Load() &&
+		ae.connected.Load() &&
+		!ae.mutedMicro.Load() &&
+		!ae.muted.Load() &&
+		ae.captureReady.Load() &&
+		ae.playbackReady.Load()
 }

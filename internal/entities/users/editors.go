@@ -182,6 +182,16 @@ func (u *User) ChangeHeadphones(h string) error {
 	return nil
 }
 
+func (u *User) ChangeWebcam(w string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.Data.Devices.Webcam = w
+	if err := u.UpdateUserJSON(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (u *User) OnOffFilter(filter bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()

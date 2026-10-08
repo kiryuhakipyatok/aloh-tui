@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"aloh-tui/internal/media"
 	"aloh-tui/internal/media/audio/filter"
 	"aloh-tui/pkg/logger"
 	"sync"
@@ -46,6 +47,9 @@ type buffers struct {
 	resampledWorkMix     []int16
 	resampledWorkMic     []int16
 	monoCaptureBuffer    []int16
+
+	// plcBuffer  bytes.Buffer
+	// sendBuffer bytes.Buffer
 }
 
 type atmoics struct {
@@ -71,11 +75,11 @@ type devices struct {
 	captureDevice  *malgo.Device
 	playbackDevice *malgo.Device
 
-	Microphones map[string]DeviceInfo
-	Headphones  map[string]DeviceInfo
+	Microphones map[string]media.Device
+	Headphones  map[string]media.Device
 
-	CurrentMicrophone DeviceInfo
-	CurrentHeadphones DeviceInfo
+	CurrentMicrophone media.Device
+	CurrentHeadphones media.Device
 }
 
 type speexdspComps struct {
@@ -83,6 +87,8 @@ type speexdspComps struct {
 	preprocessor      *speexdsp.Preprocessor
 	captureResampler  *speexdsp.Resampler
 	playbackResampler *speexdsp.Resampler
+
+	aecDiff atomic.Int32
 }
 
 type callbacks struct {
@@ -128,6 +134,7 @@ type usersAudio struct {
 	isSpeaking           atomic.Bool
 	playing              bool
 	framesCount          uint
+	workMix              []int16
 	muted                atomic.Bool
 	volumeCoefficient    float32
 	decodedBuffer        []byte
@@ -139,4 +146,6 @@ type usersAudio struct {
 	softDenoised         atomic.Bool
 	personalHardDenoise  *rnnoise.RNNoise
 	hardDenoised         atomic.Bool
+	mu                   sync.Mutex
+	//muteFade             atomic.Uint32
 }

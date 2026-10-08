@@ -1,10 +1,14 @@
 package audio
 
-import "github.com/google/uuid"
+import (
+	"aloh-tui/internal/media"
+
+	"github.com/google/uuid"
+)
 
 type Fetchers interface {
-	FetchMicrophones() map[string]DeviceInfo
-	FetchHeadphones() map[string]DeviceInfo
+	FetchMicrophones() map[string]media.Device
+	FetchHeadphones() map[string]media.Device
 	FetchUsersMutes() map[uuid.UUID]struct{}
 	FetchSpeakingUsers() map[uuid.UUID]float64
 }
@@ -33,14 +37,14 @@ func (ae *audioEngine) FetchUsersMutes() map[uuid.UUID]struct{} {
 	return muters
 }
 
-func (ae *audioEngine) FetchMicrophones() map[string]DeviceInfo {
+func (ae *audioEngine) FetchMicrophones() map[string]media.Device {
 	ae.mu.RLock()
 	mics := ae.Microphones
 	ae.mu.RUnlock()
 	return mics
 }
 
-func (ae *audioEngine) FetchHeadphones() map[string]DeviceInfo {
+func (ae *audioEngine) FetchHeadphones() map[string]media.Device {
 	ae.mu.RLock()
 	heads := ae.Headphones
 	ae.mu.RUnlock()

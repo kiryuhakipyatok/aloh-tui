@@ -195,7 +195,6 @@ func (m Model) selectSetting() (Model, tea.Cmd) {
 func (m Model) selectAccountSetting() (Model, tea.Cmd) {
 	if i, ok := m.accountList.LipList.SelectedItem().(lists.AccountItem); ok {
 		m.prState = m.state
-		m.state = states.LOAD_STATE
 		switch i.Id {
 		case lists.NICKNAME_SETTINGS:
 			m.state = states.NICKNAME_STATE
@@ -205,6 +204,26 @@ func (m Model) selectAccountSetting() (Model, tea.Cmd) {
 			m.state = states.TAGLINE_STATE
 		case lists.COLOR_SETTINGS:
 			m.state = states.COLOR_STATE
+		default:
+			return m, nil
+		}
+		m.log.Info("states", m.prState, m.state)
+		return m.syncTabState()
+	}
+	return m, nil
+}
+
+func (m Model) selectDevicesSetting() (Model, tea.Cmd) {
+	if i, ok := m.devicesList.LipList.SelectedItem().(lists.DeviceTypeItem); ok {
+		m.prState = m.state
+		m.state = states.LOAD_STATE
+		switch i.Id {
+		case lists.HEADPHONES_SETTINGS:
+			m.state = states.HEADPHONES_SET_STATE
+		case lists.WEBCAM_SETTINGS:
+			m.state = states.WEBCAM_SET_STATE
+		case lists.MICROPHONE_SETTINGS:
+			m.state = states.MICROPHONE_SET_STATE
 		default:
 			return m, nil
 		}
@@ -317,8 +336,111 @@ func isEmptyString(s string) (string, bool) {
 
 func validatePassword(s string) error {
 	entropy := passwordvalidator.GetEntropy(s)
-	if err := passwordvalidator.Validate(s, 72); err != nil {
+	if err := passwordvalidator.Validate(s, 55); err != nil {
 		return errs.ErrInvalidPassword(entropy)
 	}
 	return nil
+}
+
+func (m Model) onUsersWebcam(msg tea.MouseMsg) (users.Identity, bool) {
+	var (
+		id     uuid.UUID
+		zoneId string
+	)
+
+	userIden := m.user.GetUserIdentity()
+	zoneId = fmt.Sprintf("webcam-%s", userIden.ID.String())
+	if m.zone.Get(zoneId).InBounds(msg) {
+		return userIden, true
+	}
+
+	userFrames := m.user.Engines.VideoEngine.GetUsersWebcamFramesTerminal()
+
+	for i := range userFrames {
+
+		zoneId = fmt.Sprintf("webcam-%s", i.String())
+
+		if m.zone.Get(zoneId).InBounds(msg) {
+			id = i
+		}
+
+	}
+
+	iden, err := m.user.GetFriendIdentityById(id)
+	if err != nil {
+		return iden, false
+	}
+
+	return iden, true
+}
+
+func (m Model) onUsersScreen(msg tea.MouseMsg) (users.Identity, bool) {
+	var (
+		id     uuid.UUID
+		zoneId string
+	)
+
+	userIden := m.user.GetUserIdentity()
+	zoneId = fmt.Sprintf("screen-%s", userIden.ID.String())
+	if m.zone.Get(zoneId).InBounds(msg) {
+		return userIden, true
+	}
+
+	userFrames := m.user.Engines.VideoEngine.GetUsersScreenFramesTerminal()
+
+	for i := range userFrames {
+
+		zoneId = fmt.Sprintf("screen-%s", i.String())
+
+		if m.zone.Get(zoneId).InBounds(msg) {
+			id = i
+		}
+
+	}
+
+	iden, err := m.user.GetFriendIdentityById(id)
+	if err != nil {
+		return iden, false
+	}
+
+	return iden, true
+}
+
+func (m Model) renderVideoFrames(frames []string) string {
+	lenF := len(frames)
+
+	if lenF <= 0 {
+		return ""
+	}
+
+	div := lenF / 2
+
+	if !((lenF-div)%2 == 0) {
+		div--
+	}
+
+	upFrames := make([]string, 0, lenF/2)
+	downFrames := make([]string, 0, (lenF/2)+1)
+
+	if div < 2 {
+		return lipgloss.JoinHorizontal(lipgloss.Center, frames...)
+	} else {
+		for i, f := range frames {
+			if i < div {
+				upFrames = append(upFrames, f)
+				continue
+			}
+			if i > div {
+				downFrames = append(downFrames, f)
+			}
+
+		}
+	}
+
+	upJoined := lipgloss.JoinHorizontal(lipgloss.Center, upFrames...)
+	downJoined := lipgloss.JoinHorizontal(lipgloss.Center, downFrames...)
+
+	full := lipgloss.JoinVertical(lipgloss.Center, upJoined, downJoined)
+
+	return full
 }

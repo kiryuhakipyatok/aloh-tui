@@ -1,0 +1,8 @@
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+<application xmlns="urn:schemas-microsoft-com:asm.v3">
+<windowsSettings>
+<dpiAware xmlns="http://microsoft.com">true/PM</dpiAware>
+<dpiAwareness xmlns="http://microsoft.com">PerMonitorV2</dpiAwareness>
+</windowsSettings>
+</application>
+</assembly>

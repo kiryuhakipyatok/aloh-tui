@@ -1,9 +1,10 @@
 package sshclient
 
 import (
-	"aloh-tui/pkg/errs"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 
 	"aloh-tui/pkg/logger"
 
@@ -13,7 +14,7 @@ import (
 )
 
 const (
-	host = "164.90.163.153"
+	host = "91.98.160.221"
 	port = "48713"
 
 	REGISTER = iota
@@ -60,25 +61,25 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 			payload  []byte
 			status   bool
 			authType string
-			errAuth  error
+			//errAuth  error
 		)
 
 		switch setup.Typee {
 		case LOGIN:
 			authType = "SSH-2.0-aloh-login"
-			errAuth = errs.ErrLogin()
+		//	errAuth = errs.ErrLogin()
 		case REGISTER:
 			authType = "SSH-2.0-aloh-register"
-			errAuth = errs.ErrRegister()
+		//	errAuth = errs.ErrRegister()
 		case DEFAULT:
 			authType = "SSH-2.0-aloh-default"
-			errAuth = errs.ErrAuth()
+			//errAuth = errs.ErrAuth()
 		default:
 			authType = "SSH-2.0-aloh-default"
-			errAuth = errs.ErrAuth()
+			//errAuth = errs.ErrAuth()
 		}
 
-		kp, err := InitKeys(setup.KeysPath)
+		kp, err := InitKeys(setup.KeysPath, setup.Typee)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -98,9 +99,9 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 			ClientVersion:   authType,
 		})
 		if err != nil {
-			if authErr(err.Error()) {
-				return nil, nil, errAuth
-			}
+			// if authErr(err.Error()) {
+			// 	return nil, nil, errAuth
+			// }
 			return nil, nil, err
 		}
 
@@ -155,7 +156,9 @@ func AuthSSHClient(ctx context.Context, l *logger.Logger, setup SSHClientSetup) 
 func (sc *sshClient) Close() {
 	sc.log.Info("closing ssh client")
 	if err := sc.eventSSHChannel.Close(); err != nil {
-		sc.log.Error("failed to close event channel", logger.Err(err))
+		if !errors.Is(err, io.EOF) {
+			sc.log.Error("failed to close event channel", logger.Err(err))
+		}
 	}
 	if err := sc.client.Close(); err != nil {
 		sc.log.Error("failed to close ssh client", logger.Err(err))

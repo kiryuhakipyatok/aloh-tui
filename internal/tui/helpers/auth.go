@@ -3,13 +3,12 @@ package helpers
 import (
 	"aloh-tui/internal/entities/users"
 	"aloh-tui/internal/media/audio"
+	"aloh-tui/internal/media/video"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
-	"aloh-tui/pkg/errs"
 	"aloh-tui/pkg/logger"
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,9 +33,9 @@ func SetupAuth(as AuthSetup) error {
 		Password:   as.Password,
 	})
 	if err != nil {
-		if !errors.Is(err, errs.ErrAuth()) {
-			return err
-		}
+		//	if !errors.Is(err, errs.ErrAuth()) {
+		return err
+		//}
 	} else {
 		var pd struct {
 			Identity     users.Identity    `json:"identity"`
@@ -82,13 +81,35 @@ func SetupAuth(as AuthSetup) error {
 		if err != nil {
 			return err
 		}
-		
-		if err := audioEngine.SetNetworking(networking); err != nil {
+
+		vs := video.VideoSetup{
+			Webcam: as.User.Data.Devices.Webcam,
+		}
+
+		videoEngine, err := video.NewVideoEngine(as.Log, vs)
+		if err != nil {
 			return err
 		}
 
+		curMic, ok := audioEngine.GetCurrentMicrophone().(audio.DeviceInfo)
+		if ok {
+			as.User.Data.Devices.Microphone = curMic.Name
+		}
+		curHeads, ok := audioEngine.GetCurrentHeadphones().(audio.DeviceInfo)
+		if ok {
+			as.User.Data.Devices.Headphones = curHeads.Name
+		}
+		curW, ok := videoEngine.GetCurrentWebcam().(video.DeviceInfo)
+		if ok {
+			as.User.Data.Devices.Webcam = curW.Name
+		}
+
+		audioEngine.SetNetworking(networking)
+		videoEngine.SetNetworking(networking)
+
 		as.User.SSHClient = client
 		as.User.Engines.AudioEngine = audioEngine
+		as.User.Engines.VideoEngine = videoEngine
 		as.User.Networking = networking
 
 		if err := as.User.UpdateUserJSON(); err != nil {

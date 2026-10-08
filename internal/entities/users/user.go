@@ -3,6 +3,7 @@ package users
 import (
 	"aloh-tui/internal/entities/setups"
 	"aloh-tui/internal/media/audio"
+	"aloh-tui/internal/media/video"
 	"aloh-tui/internal/networking"
 	"aloh-tui/internal/sshclient"
 	"sync"
@@ -38,9 +39,6 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 		Data: Data{
 			Setup: Setup{
 				Audio: Audio{
-					Denoises: Denoises{
-						SoftDenoise: true,
-					},
 					UsersSetup: make(map[string]setups.UsersSetup, 5),
 				},
 				Notifications: Notifications{
@@ -52,7 +50,8 @@ func NewUser(logFilePath, keysPath, dataFilePath string) *User {
 					FriendsTab:  "ALT+F",
 					ChatTab:     "ALT+C",
 					VoiceTab:    "ALT+G",
-					VideoTab:    "ALT+D",
+					WebcamTab:   "ALT+D",
+					ScreenTab:   "ALT+A",
 					ProfileTab:  "ALT+E",
 					SettingsTab: "ALT+S",
 					MicMute:     "ALT+V",
@@ -111,11 +110,13 @@ type Paths struct {
 
 type Engines struct {
 	AudioEngine audio.AudioEngine
+	VideoEngine video.VideoEngine
 }
 
 type Devices struct {
 	Microphone string `json:"microphone"`
 	Headphones string `json:"headphones"`
+	Webcam     string `json:"webcam"`
 }
 
 type Setup struct {
@@ -129,7 +130,8 @@ type Binds struct {
 	FriendsTab  string `json:"friends-tab"`
 	ChatTab     string `json:"chat-tab"`
 	VoiceTab    string `json:"voice-tab"`
-	VideoTab    string `json:"video-tab"`
+	WebcamTab   string `json:"webcam-tab"`
+	ScreenTab   string `json:"screen-tab"`
 	ProfileTab  string `json:"profile-tab"`
 	SettingsTab string `json:"settings-tab"`
 	MicMute     string `json:"mic-mute"`

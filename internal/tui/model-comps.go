@@ -20,6 +20,8 @@ type userState struct {
 	micMute      bool
 	hardDenoised bool
 	softDenoised bool
+	webcam       bool
+	screen       bool
 }
 
 type sizes struct {
@@ -74,15 +76,17 @@ type modelLists struct {
 
 	friendsList lists.FriendsList
 
-	settingsList      lists.SettingsList
 	notificationsList lists.SwitcherList
 	audioList         lists.SwitcherList
 	microphonesList   lists.DeviceList
 	headphonesList    lists.DeviceList
+	webcamsList       lists.DeviceList
 	apearenceList     lists.SwitcherList
 	friendsReqsList   lists.FriendsReqsList
 
-	accountList lists.SettingsList
+	accountList  lists.SettingsList
+	devicesList  lists.SettingsList
+	settingsList lists.SettingsList
 }
 
 type colors struct {
@@ -116,7 +120,6 @@ type curs struct {
 }
 
 type boolStates struct {
-	speaking  bool
 	ticked    bool
 	connected bool
 }
@@ -131,6 +134,9 @@ type other struct {
 	headerActiveStyle lipgloss.Style
 
 	zone *bz.Manager
+
+	//webcamUsersFrames map[uuid.UUID]userVideoFrame
+	userWebcamFrame string
 }
 
 type datas struct {

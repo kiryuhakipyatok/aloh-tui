@@ -43,7 +43,10 @@ const (
 func (m Model) syncTabState() (Model, tea.Cmd) {
 	cmds := []tea.Cmd{textinput.Blink}
 	m.curWindow = windows.DEF_WINDOW
-	m.prState = m.state
+	if m.activeTab != 6 {
+		m.prState = m.state
+	}
+
 	if !m.isLoggedIn() {
 		//if m.state != states.LOAD_STATE {
 		switch m.activeTab {
@@ -55,12 +58,17 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 		//}
 		m.focusInputs()
 	} else {
-
+		if m.activeTab != 3 && m.prState == states.WEBCAM_STATE {
+			m.user.Engines.VideoEngine.SwitchOnWebcamTab(false)
+		} else if m.activeTab != 4 && m.prState == states.SCREEN_STATE {
+			m.user.Engines.VideoEngine.SwitchOnScreenTab(false)
+		}
 		switch m.activeTab {
 		case 0:
 			// if m.connected {
 			// 	m.state = states.DEF_STATE
 			// } else {
+
 			switch m.sideState {
 			case states.LEFT_STATE:
 				m.state = states.CONN_STATE
@@ -89,8 +97,17 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 			} else {
 				m.state = states.DEF_STATE
 			}
+			lists.SetListVisible(&m.connectionsList.DefList, true)
 			delete(m.tabsNotifications, "voice")
+		case 3:
+			m.state = states.WEBCAM_STATE
+			m.user.Engines.VideoEngine.SwitchOnWebcamTab(true)
+			delete(m.tabsNotifications, "webcam")
 		case 4:
+			m.state = states.SCREEN_STATE
+			m.user.Engines.VideoEngine.SwitchOnScreenTab(true)
+			delete(m.tabsNotifications, "screen")
+		case 5:
 			m.state = states.PROFILE_STATE
 			delete(m.tabsNotifications, "profile")
 			switch m.sideState {
@@ -118,7 +135,7 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 				}
 			}
 
-		case 5:
+		case 6:
 			switch m.state {
 			case states.AUDIO_STATE:
 				switch m.sideState {
@@ -138,16 +155,45 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 					lists.SetListVisible(&m.notificationsList.DefList, false)
 					lists.SetListVisible(&m.settingsList.DefList, true)
 				}
-			case states.DEVICES_STATE:
+			case states.MICROPHONE_SET_STATE:
 				switch m.sideState {
 				case states.RIGHT_STATE:
 					lists.SetListVisible(&m.microphonesList.DefList, true)
-					lists.SetListVisible(&m.headphonesList.DefList, false)
+					lists.SetListVisible(&m.settingsList.DefList, false)
 				case states.LEFT_STATE:
 					lists.SetListVisible(&m.microphonesList.DefList, false)
-					lists.SetListVisible(&m.headphonesList.DefList, true)
+					lists.SetListVisible(&m.settingsList.DefList, true)
 				}
 				cmds = append(cmds, commands.SecTickCmd())
+			case states.HEADPHONES_SET_STATE:
+				switch m.sideState {
+				case states.RIGHT_STATE:
+					lists.SetListVisible(&m.headphonesList.DefList, true)
+					lists.SetListVisible(&m.settingsList.DefList, false)
+				case states.LEFT_STATE:
+					lists.SetListVisible(&m.headphonesList.DefList, false)
+					lists.SetListVisible(&m.settingsList.DefList, true)
+				}
+				cmds = append(cmds, commands.SecTickCmd())
+			case states.WEBCAM_SET_STATE:
+				switch m.sideState {
+				case states.RIGHT_STATE:
+					lists.SetListVisible(&m.webcamsList.DefList, true)
+					lists.SetListVisible(&m.settingsList.DefList, false)
+				case states.LEFT_STATE:
+					lists.SetListVisible(&m.webcamsList.DefList, false)
+					lists.SetListVisible(&m.settingsList.DefList, true)
+				}
+				cmds = append(cmds, commands.SecTickCmd())
+			case states.DEVICES_STATE:
+				switch m.sideState {
+				case states.RIGHT_STATE:
+					lists.SetListVisible(&m.devicesList.DefList, true)
+					lists.SetListVisible(&m.settingsList.DefList, false)
+				case states.LEFT_STATE:
+					lists.SetListVisible(&m.devicesList.DefList, false)
+					lists.SetListVisible(&m.settingsList.DefList, true)
+				}
 			case states.ACCOUNT_STATE:
 				switch m.sideState {
 				case states.RIGHT_STATE:
@@ -204,7 +250,6 @@ func (m Model) syncTabState() (Model, tea.Cmd) {
 		}
 
 	}
-
 	//m.focusInputs()
 	return m, tea.Batch(cmds...)
 }
@@ -234,7 +279,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m, cmd = m.syncTabState()
 					}
 					return m, cmd
-				} else if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
+				} else if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE && m.state != states.HELP_STATE {
 					if !m.inCurrentWindow(msg) {
 						m.cursor = 0
 					}
@@ -248,12 +293,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.activeTab = 1
 					} else if m.zone.Get("voiceT").InBounds(msg) || m.zone.Get("voiceW").InBounds(msg) {
 						m.activeTab = 2
-					} else if m.zone.Get("videoT").InBounds(msg) || m.zone.Get("videoW").InBounds(msg) {
+					} else if m.zone.Get("webcamT").InBounds(msg) || m.zone.Get("webcamW").InBounds(msg) {
 						m.activeTab = 3
-					} else if m.zone.Get("profileT").InBounds(msg) || m.zone.Get("profileW").InBounds(msg) {
+						iden, ok := m.onUsersWebcam(msg)
+						if ok {
+							// m.prState = m.state
+							// m.state = states.LOAD_STATE
+							if m.user.GetUserIdentity() == iden {
+								return m, commands.OnOffUserWindowWebcamCmd(m.user.Engines.VideoEngine)
+							}
+							return m, commands.OnOffWindowWebcamCmd(m.user.Engines.VideoEngine, iden)
+						}
+					} else if m.zone.Get("screenT").InBounds(msg) || m.zone.Get("screenW").InBounds(msg) {
 						m.activeTab = 4
-					} else if m.zone.Get("settingsT").InBounds(msg) || m.zone.Get("settingsW").InBounds(msg) {
+						iden, ok := m.onUsersScreen(msg)
+						if ok {
+							// m.prState = m.state
+							// m.state = states.LOAD_STATE
+							if m.user.GetUserIdentity() == iden {
+								return m, commands.OnOffUserWindowScreenCmd(m.user.Engines.VideoEngine)
+							}
+							return m, commands.OnOffWindowScreenCmd(m.user.Engines.VideoEngine, iden)
+						}
+					} else if m.zone.Get("profileT").InBounds(msg) || m.zone.Get("profileW").InBounds(msg) {
 						m.activeTab = 5
+					} else if m.zone.Get("settingsT").InBounds(msg) || m.zone.Get("settingsW").InBounds(msg) {
+						m.activeTab = 6
 					} else {
 						m.sideState = states.ZERO_STATE
 						m, cmd = m.syncTabState()
@@ -362,6 +427,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							i.PersonalHardDenoise, false))
 					cmds = append(cmds, seq)
 				}
+			case networking.WEBCAM_STATE:
+				state, err := networking.DataToState(msg.Event.Data)
+				if err != nil {
+					return m.Err(err)
+				}
+				us.webcam = state
+				m.user.Engines.VideoEngine.OnOffUsersWebcam(state, id)
+
+				if m.activeTab != 3 {
+					m.tabsNotifications["webcam"] = struct{}{}
+				}
+
+			case networking.SCREEN_STATE:
+				state, err := networking.DataToState(msg.Event.Data)
+				if err != nil {
+					return m.Err(err)
+				}
+				us.screen = state
+				m.user.Engines.VideoEngine.OnOffUsersScreen(state, id)
+				if m.activeTab != 4 {
+					m.tabsNotifications["screen"] = struct{}{}
+				}
+
+			case networking.WEBCAM_KEY_FRAME:
+				if m.connected {
+					m.log.Info("webcam key frame event")
+					cmds = append(cmds, commands.SendWebcamKeyFrameCmd(m.user.Engines.VideoEngine))
+				}
+
+			case networking.SCREEN_KEY_FRAME:
+				if m.connected {
+					m.log.Info("screen key frame event")
+					cmds = append(cmds, commands.SendScreenKeyFrameCmd(m.user.Engines.VideoEngine))
+				}
+
 			case networking.GENERAL:
 				generalData, err := networking.DataToGeneral(msg.Event.Data)
 				if err != nil {
@@ -398,7 +498,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		return m, commands.WaitForNetworkEventMessageCmd(m.netwEventsChan)
+		cmds = append(cmds, commands.WaitForNetworkEventMessageCmd(m.netwEventsChan))
 
 	case sshclient.Event:
 		var nickname string
@@ -408,7 +508,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				return m.Err(err)
 			}
-			if m.activeTab != 4 {
+			if m.activeTab != 5 {
 				m.tabsNotifications["profile"] = struct{}{}
 			}
 			cmds = append(cmds, commands.NewFriendReqCmd(m.user, iden))
@@ -431,7 +531,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.Err(err)
 			}
 
-			if m.activeTab != 4 {
+			if m.activeTab != 5 {
 				m.tabsNotifications["profile"] = struct{}{}
 			}
 			delete(m.online, iden.ID)
@@ -444,7 +544,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			id := iden.ID
 			if m.user.IsFriend(iden) {
-				if m.activeTab != 4 {
+				if m.activeTab != 5 {
 					m.tabsNotifications["profile"] = struct{}{}
 				}
 				delete(m.online, id)
@@ -730,8 +830,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.OnOffDenoiceMsg, commands.OnOffFilterMsg, commands.OnOffAECMsg, commands.UsersVolumeMsg,
-		commands.MuteUnmuteUserMsg, commands.NotificationMessage,
-		commands.ChangeDeviceMessage, commands.UserInfoMsg, commands.UsersDenoiseMsg:
+		commands.MuteUnmuteUserMsg, commands.NotificationMessage, commands.UserVideo, commands.KeyFrameMsg,
+		commands.ChangeDeviceMessage, commands.UserInfoMsg, commands.UsersDenoiseMsg, commands.OnOffVideoMsg:
 		var err error
 		switch mes := msg.(type) {
 		case commands.OnOffDenoiceMsg:
@@ -752,13 +852,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			err = mes.Err
 		case commands.UsersDenoiseMsg:
 			err = mes.Err
+		case commands.UserVideo:
+			err = mes.Err
+		case commands.OnOffVideoMsg:
+			err = mes.Err
+		case commands.KeyFrameMsg:
+			err = mes.Err
 		}
 
 		if err != nil {
 			m.err = err
 			m.state = states.ERR_STATE
 		} else {
-			if m.state == states.LOAD_STATE && (m.activeTab == 2 || m.activeTab == 4 || m.activeTab == 5) {
+			if m.state == states.LOAD_STATE {
 				m.state = m.prState
 			}
 			m.focusInputs()
@@ -795,11 +901,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 			m.state = states.ERR_STATE
 		} else if m.connected {
-			if m.user.Engines.AudioEngine != nil {
-				if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
-					return m.Err(err)
-				}
-			}
 
 			if m.activeTab == 2 && m.state == states.LOAD_STATE {
 				m.state = m.prState
@@ -813,7 +914,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages = []commands.ChatMessage{}
 			m.connections = []users.Identity{}
 			m.connecctionsNicks = []string{}
+			if m.user.Engines.AudioEngine != nil {
+				if err := m.user.Engines.AudioEngine.SetDisconnected(); err != nil {
+					m.err = err
+					m.state = states.ERR_STATE
+				}
+			}
+			if m.user.Engines.VideoEngine != nil {
+				m.user.Engines.VideoEngine.SetDisconnected()
+			}
 			clear(m.usersStates)
+			//clear(m.webcamUsersFrames)
 			m.user.Engines.AudioEngine.PlayNotification()
 			cmds = append(cmds, commands.UpdateCurrentConnectsCmd(m.user, m.connections))
 			//m.activeTab = 0
@@ -829,12 +940,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.user.Engines.AudioEngine != nil {
 				m.user.Engines.AudioEngine.Stop()
 			}
-			m.err = msg.Err
-			m.state = states.ERR_STATE
-			// if msg.Typee != sshclient.DEFAULT {
-			// 	m.user.Data.Personal = users.Personal{}
-			// }
+
+			if m.user.Engines.VideoEngine != nil {
+				m.user.Engines.VideoEngine.Stop()
+			}
+
+			m.user.Data.Identity = users.Identity{}
+			if m.prState == states.START_STATE && m.state == states.LOAD_STATE {
+				m.prState = m.state
+				m.state = states.REG_STATE
+				return m, nil
+			}
+
+			//if m.curWindow != windows.START_WINDOW{
+			return m.Err(msg.Err)
+			//	}
+
 		} else {
+
 			switch msg.Typee {
 			case sshclient.REGISTER:
 				m.state = states.DEF_STATE
@@ -881,7 +1004,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// 	m.headphonesList = lists.SetupDevicesList(m.user.Engines.AudioEngine, lists.HEADPHONES, ls)
 			// }
 			//friends := m.user.GetFriends()
-
+			m.cursor = 0
 			cmds = append(cmds,
 				commands.WaitForChatMessageCmd(m.msgChan),
 				commands.WaitForSSHEventMessageCmd(m.sshEventsChan),
@@ -891,10 +1014,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan), textinput.Blink)
 		}
 
+	// case commands.RawWebcamMsg:
+	// 	data := msg.Data
+	// 	id := msg.Id
+	// 	//webcamFrame := m.user.Engines.VideoEngine.RenderUsersVideoTerminal(id, data)
+
+	// 	// select {
+	// 	// case m.webcamMsgChan <- commands.WebcamMsg{Id: id, Frame: webcamFrame}:
+	// 	// default:
+	// 	// }
+	// 	cmds = append(cmds, commands.RenderUsersFrameCmd(m.user.Engines.VideoEngine, id, data),
+	// 		commands.WaitForRawWebcamMsgCmd(m.rawWebcamMsgChan))
+	// 	return m, tea.Batch(cmds...)
+
+	// case commands.WebcamMsg:
+	// 	wuf, ok := m.webcamUsersFrames[msg.Id]
+	// 	if ok {
+	// 		wuf.frame = msg.Frame
+	// 		m.webcamUsersFrames[msg.Id] = wuf
+	// 	}
+
+	// 	return m, commands.WaitForWebcamMsgCmd(m.webcamMsgChan)
+
 	case commands.RawChatMessage:
 		data := msg.Data
-		var textMsg string
-		textForDesktopNotification := textMsg
+		var (
+			textMsg                    string
+			textForDesktopNotification string
+		)
 		dataLen := len(data)
 		if dataLen > 3 && slices.Equal(data[:3], []byte{'i', 'm', 'g'}) {
 			img, _, err := image.Decode(bytes.NewReader(data[3:]))
@@ -930,6 +1077,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			textMsg = fmt.Sprintf("\n%s", textMsg)
 		} else {
 			textMsg = string(msg.Data)
+			textForDesktopNotification = textMsg
 		}
 
 		iden, err := getIdentityInConnections(m.connections, msg.Id)
@@ -1048,6 +1196,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.user.Engines.AudioEngine != nil {
 				m.user.Engines.AudioEngine.SetConnected()
 			}
+			if m.user.Engines.VideoEngine != nil {
+				m.user.Engines.VideoEngine.SetConnected()
+			}
 		}
 		if m.activeTab != 2 {
 			m.tabsNotifications["voice"] = struct{}{}
@@ -1096,7 +1247,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return ansi.Strip(n) == nickname
 		})
 
-		if len(m.connections) == 0 && m.connected {
+		if len(m.connections) <= 0 && m.connected {
 
 			m.connected = false
 			m.connections = []users.Identity{}
@@ -1113,10 +1264,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = states.ERR_STATE
 				}
 			}
+			if m.user.Engines.VideoEngine != nil {
+				m.user.Engines.VideoEngine.SetDisconnected()
+			}
 
 		}
-
-		cmds = append(cmds, commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan))
 
 		//if !m.user.IsBlocked(iden) {
 
@@ -1124,24 +1276,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tabsNotifications["voice"] = struct{}{}
 		}
 		delete(m.usersStates, id)
+		//delete(m.webcamUsersFrames, id)
 		//	id := iden.ID
-		coloredNickname := lipgloss.NewStyle().Foreground(m.usersColors[id].MainColor).Render(nickname)
 
-		if err := m.user.Engines.AudioEngine.RemoveFromUsersAudio(id); err != nil {
-			m.err = err
-			m.state = states.ERR_STATE
+		if m.connected {
+
+			if err := m.user.Engines.AudioEngine.RemoveFromUsersAudio(id); err != nil {
+				m.err = err
+				m.state = states.ERR_STATE
+			}
+
+			m.user.Engines.VideoEngine.OnOffUsersScreen(false, id)
+			m.user.Engines.VideoEngine.OnOffUsersWebcam(false, id)
+			coloredNickname := lipgloss.NewStyle().Foreground(m.usersColors[id].MainColor).Render(nickname)
+			m.messages = append(m.messages, commands.ChatMessage{
+				Identity: users.Identity{
+					Nickname: "system",
+				}, Time: msg.Time, Text: coloredNickname + " disconnected!"})
 		}
-		m.messages = append(m.messages, commands.ChatMessage{
-			Identity: users.Identity{
-				Nickname: "system",
-			}, Time: msg.Time, Text: coloredNickname + " disconnected!"})
-		cmds = append(cmds, m.connectionsList.UpdateConnectionsList(m.user, m.connections, m.usersColors),
+		m.log.Info("peer disconnected", id)
+		cmds = append(cmds, commands.WaitForPeerDisconnectionCmd(m.peerDisconnectionsChan), m.connectionsList.UpdateConnectionsList(m.user, m.connections, m.usersColors),
 			commands.PlayNotificationCmd(m.user.Engines.AudioEngine), commands.UpdateCurrentConnectsCmd(m.user, m.connections))
 		//}
 
 	case spinner.TickMsg:
 		if (m.isLoggedIn() && m.state == states.LOAD_STATE &&
-			(m.activeTab == 0 || m.activeTab == 4 || m.activeTab == 5)) ||
+			(m.activeTab == 0 || (m.activeTab >= 3 && m.activeTab <= 6))) ||
 			(!m.isLoggedIn() && m.state == states.LOAD_STATE) {
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
@@ -1149,9 +1309,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.TickMsg:
 		if m.state != states.LOAD_STATE {
-			if m.user.Engines.AudioEngine != nil && m.activeTab == 5 && m.state == states.DEVICES_STATE {
-				updatesDevices := tea.Sequence(commands.UpdateMicrophonesCmd(m.user), commands.UpdateHeadphonesCmd(m.user))
-				cmds = append(cmds, updatesDevices, commands.SecTickCmd())
+			if m.user.Engines.AudioEngine != nil && m.activeTab == 6 &&
+				m.prState == states.DEVICES_STATE {
+				var cmd tea.Cmd
+				switch m.state {
+				case states.HEADPHONES_SET_STATE:
+					cmd = commands.UpdateHeadphonesCmd(m.user)
+				case states.WEBCAM_SET_STATE:
+					cmd = commands.UpdateWebcamsCmd(m.user)
+				case states.MICROPHONE_SET_STATE:
+					commands.UpdateMicrophonesCmd(m.user)
+				}
+				cmds = append(cmds, cmd, commands.SecTickCmd())
 			}
 
 		}
@@ -1278,6 +1447,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "alt+у", "alt+У", "alt+e", "alt+E":
 			if m.isLoggedIn() {
+				m.activeTab = 5
+				m, cmd = m.syncTabState()
+			}
+
+		case "alt+ф", "alt+Ф", "alt+a", "alt+A":
+			if m.isLoggedIn() {
 				m.activeTab = 4
 				m, cmd = m.syncTabState()
 			}
@@ -1348,7 +1523,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.state == states.ERR_STATE {
 				return m, nil
 			}
-			if m.isLoggedIn() && m.activeTab == 4 && m.friendsReqsList.LipList.Index() >= 0 {
+			if m.isLoggedIn() && m.activeTab == 5 && m.friendsReqsList.LipList.Index() >= 0 {
 				if i, ok := m.friendsReqsList.LipList.SelectedItem().(lists.FriendReqItem); ok {
 					nick := ansi.Strip(i.Identity.Nickname)
 					i.Identity.Nickname = nick
@@ -1405,7 +1580,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.state == states.ERR_STATE {
 				return m, nil
 			}
-			if m.isLoggedIn() && (m.activeTab == 0 || m.activeTab == 4 || m.activeTab == 5) {
+			if m.isLoggedIn() && (m.activeTab == 0 || m.activeTab == 5 || m.activeTab == 6) {
 
 				if m.sideState == states.RIGHT_STATE {
 					m.cursor = 0
@@ -1419,7 +1594,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.state == states.ERR_STATE {
 				return m, nil
 			}
-			if m.isLoggedIn() && (m.activeTab == 0 || m.activeTab == 4 || m.activeTab == 5) {
+			if m.isLoggedIn() && (m.activeTab == 0 || m.activeTab == 5 || m.activeTab == 6) {
 				if m.sideState == states.LEFT_STATE && m.state != states.SETTINGS_STATE {
 					m.cursor = 0
 					m.sideState = states.RIGHT_STATE
@@ -1432,7 +1607,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				maxTabs := 2
 				if m.isLoggedIn() {
-					maxTabs = 6
+					maxTabs = 7
 				}
 				if m.activeTab+1 >= maxTabs {
 					m.activeTab = 0
@@ -1454,11 +1629,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "right":
+
 			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
 				m.cursor = 0
 				maxTabs := 2
 				if m.isLoggedIn() {
-					maxTabs = 6
+					maxTabs = 7
 				}
 				if m.activeTab+1 >= maxTabs {
 					m.activeTab = 0
@@ -1470,16 +1646,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sideState = states.LEFT_STATE
 				}
 				m, cmd = m.syncTabState()
-				m.log.Info("states after right", m.state, m.prState)
+
 				return m, cmd
 			}
 
 		case "shift+tab", "left":
+
 			if m.curWindow == windows.DEF_WINDOW && m.state != states.LOAD_STATE {
 				m.cursor = 0
 				maxTabs := 2
 				if m.isLoggedIn() {
-					maxTabs = 6
+					maxTabs = 7
 				}
 				if m.activeTab-1 < 0 {
 					m.activeTab = maxTabs - 1
@@ -1491,14 +1668,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sideState = states.LEFT_STATE
 				}
 				m, cmd = m.syncTabState()
-				m.log.Info("states after left", m.state, m.prState)
+
 				return m, cmd
 			}
 
 		case "esc":
+
 			switch m.state {
 			case states.ERR_STATE:
-				m.log.Info("states before esc", m.state, m.prState)
+
 				m.err = nil
 				m.curWindow = windows.DEF_WINDOW
 				if m.prState == states.LOAD_STATE {
@@ -1515,17 +1693,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = m.prState
 				}
 			default:
-				if m.activeTab != 5 {
+				if m.activeTab != 6 {
 					m.state = m.prState
-				} else if m.prState == states.ACCOUNT_STATE {
+				} else if m.prState == states.ACCOUNT_STATE || m.prState == states.DEVICES_STATE {
 					m.state = m.prState
 					m.prState = states.SETTINGS_STATE
-				} else {
+				} else if m.activeTab == 6 {
 					m.state = states.SETTINGS_STATE
 				}
 				m, cmd = m.syncTabState()
 			}
-			m.log.Info("states after esc", m.state, m.prState)
+
 			return m, cmd
 
 		case "up":
@@ -1546,12 +1724,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.cursor--
 						changed = true
 					}
-				case 5:
+				case 6:
 					if m.sideState == states.RIGHT_STATE {
 						m.cursor--
 						changed = true
 					}
-				case 4:
+				case 5:
 					if m.cursor == len(m.appereanceInputs) {
 						if m.apearenceList.LipList.Index() <= 0 {
 							m.cursor--
@@ -1594,7 +1772,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.cursor++
 						changed = true
 					}
-				case 5:
+				case 6:
 					var c bool
 					if m.sideState == states.RIGHT_STATE {
 						switch m.state {
@@ -1612,7 +1790,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.cursor++
 						changed = true
 					}
-				case 4:
+				case 5:
 					if m.cursor < len(m.appereanceInputs) {
 						// if m.cursor == len(m.appereanceInputs)-1 {
 						// 	changed = true
@@ -1644,16 +1822,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusInputs()
 				return m, cmd
 			}
-
-			// if m.state == states.ERR_STATE {
-			// 	m.err = nil
-			// 	m.curWindow = windows.DEF_WINDOW
-			// 	if m.prState == states.LOAD_STATE {
-			// 		m = m.syncTabState()
-			// 	} else {
-			// 		m.state = m.prState
-			// 	}
-			// }
 
 			if !m.isLoggedIn() {
 				switch m.activeTab {
@@ -1789,7 +1957,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.prState = m.state
 							m.state = states.LOAD_STATE
 							cmds = append(cmds, commands.BlockUserCmd(m.user, iden), m.spinner.Tick)
-						case 4:
+						case 5:
 							nick, ok = isEmptyString(m.friendsInputs[m.cursor].Value())
 							if ok {
 								break
@@ -1833,7 +2001,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							size.Y = ch
 						}
 						imageWidget := termimg.NewImageWidgetFromImage(img)
-						imageWidget.SetProtocol(termimg.Auto)
+						imageWidget.SetProtocol(termimg.Halfblocks)
 
 						toSend = utils.SetThreeFirstByte([]byte{'i', 'm', 'g'}, m.imageBuffer)
 
@@ -1865,7 +2033,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.state = states.LOAD_STATE
 						cmds = append(cmds, commands.LeaveCmd(m.user.Networking))
 					}
+				case 3:
+					if m.connected {
+						m.prState = m.state
+						m.state = states.LOAD_STATE
+						cmds = append(cmds, commands.OnOffWebcamCmd(m.user), m.spinner.Tick)
+					}
 				case 4:
+					if m.connected {
+						m.prState = m.state
+						m.state = states.LOAD_STATE
+						cmds = append(cmds, commands.OnOffScreenCmd(m.user), m.spinner.Tick)
+					}
+				case 5:
 					switch m.sideState {
 					case states.LEFT_STATE:
 						if i, ok := m.friendsReqsList.LipList.SelectedItem().(lists.FriendReqItem); ok {
@@ -1924,6 +2104,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.appereanceInputs[3].Reset()
 						case 4:
 							if i, ok := m.apearenceList.LipList.SelectedItem().(lists.SwitcherItem); ok {
+								
 								m.prState = m.state
 								m.state = states.LOAD_STATE
 								switch i.Id {
@@ -1942,14 +2123,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 
-				case 5:
+				case 6:
 					switch m.sideState {
 					case states.RIGHT_STATE:
 						switch m.state {
-						case states.DEVICES_STATE:
-							m.prState = m.state
-							m.state = states.LOAD_STATE
+						case states.HEADPHONES_SET_STATE:
+							if i, ok := m.headphonesList.LipList.SelectedItem().(lists.DeviceItem); ok {
+								m.prState = m.state
+								m.state = states.LOAD_STATE
+								cmds = append(cmds, commands.ChangeHeadphonesCmd(m.user, i.Name),
+									m.headphonesList.UpdateDevicesItemList(i.Name))
+							}
+						case states.WEBCAM_SET_STATE:
+							if i, ok := m.webcamsList.LipList.SelectedItem().(lists.DeviceItem); ok {
+								m.prState = m.state
+								m.state = states.LOAD_STATE
+								cmds = append(cmds, commands.ChangeWebcamCmd(m.user, i.Name),
+									m.webcamsList.UpdateDevicesItemList(i.Name))
+							}
+						case states.MICROPHONE_SET_STATE:
 							if i, ok := m.microphonesList.LipList.SelectedItem().(lists.DeviceItem); ok {
+								m.prState = m.state
+								m.state = states.LOAD_STATE
 								cmds = append(cmds, commands.ChangeMicrophoneCmd(m.user, i.Name),
 									m.microphonesList.UpdateDevicesItemList(i.Name))
 							}
@@ -1985,6 +2180,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						case states.ACCOUNT_STATE:
 							return m.selectAccountSetting()
+						case states.DEVICES_STATE:
+							return m.selectDevicesSetting()
 						case states.NICKNAME_STATE:
 							newNickname, ok := isEmptyString(m.nicknameInputs[0].Value())
 							if ok {
@@ -2054,17 +2251,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							return m.selectSetting()
 						case states.ACCOUNT_STATE:
 							return m.selectSetting()
+						case states.DEVICES_STATE:
+							return m.selectSetting()
 						case states.AUDIO_STATE:
 							return m.selectSetting()
 						case states.NOTIFICATIONS_STATE:
 							return m.selectSetting()
-						case states.DEVICES_STATE:
-							if i, ok := m.headphonesList.LipList.SelectedItem().(lists.DeviceItem); ok {
-								m.prState = m.state
-								m.state = states.LOAD_STATE
-								cmds = append(cmds, commands.ChangeHeadphonesCmd(m.user, i.Name),
-									m.headphonesList.UpdateDevicesItemList(i.Name))
-							}
 						}
 					}
 
@@ -2111,7 +2303,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.connectionsList.LipList, cmd = m.connectionsList.LipList.Update(msg)
 					cmds = append(cmds, cmd)
 				}
-			case 4:
+			case 5:
 				switch m.sideState {
 				case states.RIGHT_STATE:
 					if m.cursor < len(m.appereanceInputs) {
@@ -2129,7 +2321,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmds = append(cmds, cmd)
 				}
 
-			case 5:
+			case 6:
 				switch m.sideState {
 				case states.RIGHT_STATE:
 					switch m.state {
@@ -2139,11 +2331,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case states.NOTIFICATIONS_STATE:
 						m.notificationsList.LipList, cmd = m.notificationsList.LipList.Update(msg)
 						cmds = append(cmds, cmd)
-					case states.DEVICES_STATE:
+					case states.MICROPHONE_SET_STATE:
 						m.microphonesList.LipList, cmd = m.microphonesList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.HEADPHONES_SET_STATE:
+						m.headphonesList.LipList, cmd = m.headphonesList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.WEBCAM_SET_STATE:
+						m.webcamsList.LipList, cmd = m.webcamsList.LipList.Update(msg)
 						cmds = append(cmds, cmd)
 					case states.ACCOUNT_STATE:
 						m.accountList.LipList, cmd = m.accountList.LipList.Update(msg)
+						cmds = append(cmds, cmd)
+					case states.DEVICES_STATE:
+						m.devicesList.LipList, cmd = m.devicesList.LipList.Update(msg)
 						cmds = append(cmds, cmd)
 					case states.NICKNAME_STATE:
 						for i := range m.nicknameInputs {
@@ -2175,9 +2376,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						cmds = append(cmds, cmd)
 					case states.NOTIFICATIONS_STATE:
 						m.settingsList.LipList, cmd = m.settingsList.LipList.Update(msg)
-						cmds = append(cmds, cmd)
-					case states.DEVICES_STATE:
-						m.headphonesList.LipList, cmd = m.headphonesList.LipList.Update(msg)
 						cmds = append(cmds, cmd)
 					}
 				}
