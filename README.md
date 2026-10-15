@@ -113,8 +113,8 @@
 | **Rendering** | [Lipgloss](https://github.com/charmbracelet/lipgloss) v1.1.0 + [Bubblezone](https://github.com/lrstanley/bubblezone) |
 | **Audio** | [malgo](https://github.com/gen2brain/malgo) for device I/O, Opus for encoding, RNNoise & SpeexDSP for noise suppression |
 | **Video** | [pion/mediadevices](https://github.com/pion/mediadevices) for capture, OpenH264 for H.264 encoding/decoding |
-| **Networking** | Custom `aloh-networking` (ICE/QUIC-based P2P), `aloh-signalling` |
-| **Authentication** | SSH-based auth via `aloh-ssh`, Ed25519 key pairs |
+| **Networking** | Custom [aloh-networking](https://github.com/kiryuhakipyatok/aloh-networking) (ICE/QUIC-based P2P), [aloh-signalling](https://github.com/kiryuhakipyatok/aloh-signalling) |
+| **Authentication** | SSH-based auth via [aloh-ssh](https://github.com/kiryuhakipyatok/aloh-ssh), Ed25519 key pairs |
 | **Terminal Images** | [go-termimg](https://github.com/blacktop/go-termimg) for rendering webcam/screen frames |
 | **Clipboard** | [golang.design/x/clipboard](https://github.com/golang-design/clipboard) for image paste |
 | **Password Validation** | `go-password-validator` |
