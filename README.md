@@ -4,6 +4,8 @@
 
 **aloh TUI** is a feature-rich terminal user interface (TUI) application for real-time voice chat, video streaming (webcam & screen sharing), instant messaging, and social networking. It uses SSH-based authentication for identity management and ICE/QUIC for peer-to-peer media streaming.
 
+A core concept of the platform is its peer-as-a-channel architecture: simply launching the app turns a user into an instantly joinable communication node. The system is fundamentally privacy-driven and ephemeral—all chats, calls, and media are permanently wiped as soon as all participants disconnect, and only the absolute minimum amount of user data is stored on the central SSH server.
+
 ---
 
 ## Table of Contents
