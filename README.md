@@ -35,8 +35,8 @@
 
 | Feature | Description |
 | :--- | :--- |
-| **Voice Chat** | Real-time Opus-encoded voice chat with RNNoise + SpeexDSP noise suppression, echo cancellation, and per-user volume control |
-| **Webcam** | Live webcam streaming in the terminal using H.264/OpenH264 encoding via custom fork `pion/mediadevices` |
+| **Voice Chat** | Real-time Opus-encoded voice chat with echo cancellation, per-user volume control, and RNNoise + SpeexDSP noise suppression (toggleable both locally and per-user). |
+| **Webcam** | Live webcam streaming in the terminal using OpenH264 encoding via custom fork pion/mediadevices, with the ability to open video in a dedicated GUI window.|
 | **Screen Sharing** | Full desktop capture shared directly to other peers |
 | **Instant Messaging** | Text chat with image paste support (clipboard integration) |
 | **Friend System** | Add friends, send/accept/deny requests, and block/unblock users |
